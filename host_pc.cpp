@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <time.h>
+#include <string>
 #include "mem.h"
 #include "cpucore.h"
 #include "host_pc.h"
@@ -98,8 +99,10 @@ void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
 
 uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, void *buffer)
 {
+  char fnamebuf[30];
+  sprintf(fnamebuf, "disks\\%s", filename);
   uint32_t res = 0;
-  FILE *f = fopen(filename, "rb");
+  FILE *f = fopen(fnamebuf, "rb");
   if( f )
     {
       if( fseek(f, offset, SEEK_SET)==0 )
@@ -114,9 +117,11 @@ uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, voi
 
 uint32_t host_write_file(const char *filename, uint32_t offset, uint32_t len, void *buffer)
 {
+  char fnamebuf[30];
+  sprintf(fnamebuf, "disks\\%s", filename);
   uint32_t res = 0;
-  FILE *f = fopen(filename, "r+b");
-  if( !f ) f = fopen(filename, "w+b");
+  FILE *f = fopen(fnamebuf, "r+b");
+  if( !f ) f = fopen(fnamebuf, "w+b");
 
   if( f )
     {
