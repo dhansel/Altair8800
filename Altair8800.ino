@@ -1306,8 +1306,64 @@ byte altair_in(byte addr)
   byte data = 0;
 
   host_set_status_led_INP();
+
+  // check the most common cases fist:
+  //  - reading 2-SIO control register (i.e. waiting for serial input)
+  //  - reading front panel switches
   switch( addr )
     {
+    case 0020:
+      {
+        // read control register of first serial device of 88-2SIO
+        if( capture_device==CAPTURE_2SIO1 && capture_fid>0 && (capture_fid==0xff || filesys_is_read(capture_fid)) )
+          {
+            if( capture_fid==0xff )
+              {
+                // we're playing back a basic example, those are always 0-terminated
+                // and capture_fid==0xff would not hold if we had
+                // reached the end
+                data |= 0x01;
+              }
+            else
+              {
+                if( !filesys_eof(capture_fid) )
+                  data |= 0x01;
+              }
+          }
+        else if( Serial.available() )
+          data |= 0x01;
+
+        if( capture_device==CAPTURE_2SIO1 && capture_fid>0 && capture_fid<0xff && filesys_is_write(capture_fid) )
+          {
+            if( !filesys_eof(capture_fid) )
+              data |= 0x02;
+          }
+        else if( Serial.availableForWrite() )
+          data |= 0x02;
+
+        break;
+      }
+
+    case 0377:
+      {
+        // read SENSE switches
+#if STANDALONE>0
+        data = dswitch / 256;
+#else
+        static unsigned long debounceTimeout = 0;
+        static byte debounceVal = 0;
+        if( millis()>debounceTimeout )
+          {
+            data = host_read_sense_switches();
+            debounceVal = data;
+            debounceTimeout = millis() + 20;
+          }
+        else
+          data = debounceVal;
+#endif
+        break;
+      }
+
     case 0000:
       {
         // read control register of 88-SIO
@@ -1381,38 +1437,6 @@ byte altair_in(byte addr)
         break;
       }
 
-    case 0020:
-      {
-        // read control register of first serial device of 88-2SIO
-        if( capture_device==CAPTURE_2SIO1 && capture_fid>0 && (capture_fid==0xff || filesys_is_read(capture_fid)) )
-          {
-            if( capture_fid==0xff )
-              {
-                // we're playing back a basic example, those are always 0-terminated
-                // and capture_fid==0xff would not hold if we had
-                // reached the end
-                data |= 0x01;
-              }
-            else
-              {
-                if( !filesys_eof(capture_fid) )
-                  data |= 0x01;
-              }
-          }
-        else if( Serial.available() )
-          data |= 0x01;
-
-        if( capture_device==CAPTURE_2SIO1 && capture_fid>0 && capture_fid<0xff && filesys_is_write(capture_fid) )
-          {
-            if( !filesys_eof(capture_fid) )
-              data |= 0x02;
-          }
-        else if( Serial.availableForWrite() )
-          data |= 0x02;
-
-        break;
-      }
-
     case 0021:
       {
         // read data from first serial device of 88-2SIO
@@ -1471,26 +1495,6 @@ byte altair_in(byte addr)
         reg_2SIO_status = 0;
         break;
       }
-
-    case 0377:
-      {
-        // read SENSE switches
-#if STANDALONE>0
-        data = dswitch / 256;
-#else
-        static unsigned long debounceTimeout = 0;
-        static byte debounceVal = 0;
-        if( millis()>debounceTimeout )
-          {
-            data = host_read_sense_switches();
-            debounceVal = data;
-            debounceTimeout = millis() + 20;
-          }
-        else
-          data = debounceVal;
-#endif
-        break;
-      }
     }
 
   if( host_read_status_led_WAIT() )
@@ -1503,7 +1507,7 @@ byte altair_in(byte addr)
   return data;
 }
 
-     
+
 void setup() 
 {
   int i;
