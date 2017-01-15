@@ -16,6 +16,9 @@
 
 void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len);
 
+uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, void *buffer);
+uint32_t host_write_file(const char *filename, uint32_t offset, uint32_t len, void *buffer);
+
 void host_write_data(const void *data, uint32_t addr, uint32_t len);
 void host_read_data(void *data,  uint32_t addr, uint32_t len);
 void host_move_data(uint32_t to, uint32_t from, uint32_t len);

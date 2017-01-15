@@ -6,7 +6,9 @@
 #include "mem.h"
 #include "host_mega.h"
 
-#define DEBUG
+#if NUM_DRIVES>0
+#error Arduino MEGA port does not support disk drives. Set NUM_DRIVES to 0 in config.h
+#endif
 
 /*
   Runs emulation at about 0.5 Mhz clock speed (about 1/4 speed of original Altair8800)
@@ -101,7 +103,15 @@ void host_read_data(void *data, uint32_t addr, uint32_t len)
 
 void host_move_data(uint32_t to, uint32_t from, uint32_t len)
 {
-  for(uint32_t i=0; i<len; i++) EEPROM.write(to+i, EEPROM.read(from+i));
+  uint32_t i;
+  if( from<to )
+    {
+      for(i=0; i<len; i++) EEPROM.write(to+len-i-1, EEPROM.read(from+len-i-1));
+    }
+  else
+    {
+      for(i=0; i<len; i++) EEPROM.write(to+i, EEPROM.read(from+i));
+    }
 }
 
 

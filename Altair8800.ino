@@ -8,6 +8,7 @@
 #include "disassembler.h"
 #include "numsys.h"
 #include "filesys.h"
+#include "drive.h"
 #include "prog_ps2.h"
 #include "prog_basic.h"
 #include "prog_examples.h"
@@ -42,14 +43,19 @@ void read_inputs_serial();
 void process_inputs();
 bool tape_basic_check_timeout();
 
+
 #define DBG_FILEOPS_LEVEL 2
 
 #if DBG_FILEOPS_LEVEL>0
-#define DBG_FILEOPS(lvl, s)       if(DBG_FILEOPS_LEVEL>=lvl) {Serial.print('['); Serial.print(F(s)); Serial.println(']');} else while(0)
+#define DBG_FILEOPS(lvl, s) if(DBG_FILEOPS_LEVEL>=lvl) {Serial.print('['); Serial.print(F(s)); Serial.println(']');} else while(0)
 #define DBG_FILEOPS2(lvl, s1, s2) if(DBG_FILEOPS_LEVEL>=lvl) { Serial.print('['); Serial.print(F(s1)); Serial.print(s2); Serial.println(']');} else while(0)
+#define DBG_FILEOPS3(lvl, s1, s2, s3) if(DBG_FILEOPS_LEVEL>=lvl) { Serial.print('['); Serial.print(F(s1)); Serial.print(s2); Serial.print(s3); Serial.println(']');} else while(0)
+#define DBG_FILEOPS4(lvl, s1, s2, s3, s4) if(DBG_FILEOPS_LEVEL>=lvl) { Serial.print('['); Serial.print(F(s1)); Serial.print(s2); Serial.print(s3); Serial.print(s4); Serial.println(']');} else while(0)
 #else
-#define DBG_FILEOPS(lvl, s)       while(0)
+#define DBG_FILEOPS(lvl, s) while(0)
 #define DBG_FILEOPS2(lvl, s1, s2) while(0)
+#define DBG_FILEOPS3(lvl, s1, s2, s3) while(0)
+#define DBG_FILEOPS4(lvl, s1, s2, s3, s4) while(0)
 #endif
 
 #define CAPTURE_SIO     1
@@ -249,6 +255,17 @@ void process_inputs()
               altair_set_outputs(regPC, MREAD(regPC));
             break;
           }
+
+        case 0x0d:
+          {
+            regPC = prog_tools_copy_diskboot(Mem);
+            host_set_data_leds(MREAD(regPC));
+            host_clr_status_led_WAIT();
+            //altair_set_outputs(regPC, MREAD(regPC));
+            // disk boot rom starts at 0xff00 so RAM goes up to 0xfeff
+            mem_set_ram_limit(0xfeff);
+            break;
+          }
 #endif
 
         case 0x08:
@@ -314,7 +331,23 @@ void process_inputs()
       host_clr_status_led_WAIT();
     }
 
-  if( cswitch & BIT(SW_AUX2UP) )
+  if( (cswitch & BIT(SW_AUX2DOWN)) && (dswitch&0x1000) )
+    {
+      if( (dswitch & 0xff)==0 )
+        drive_dir();
+      else if( drive_mount((dswitch >> 8) & 0x0f, dswitch & 0xff) )
+        DBG_FILEOPS4(2, "mounted disk ", dswitch&0xff, " in drive ", (dswitch>>8) & 0x0f);
+      else
+        DBG_FILEOPS4(1, "error mounting disk ", dswitch&0xff, " in drive ", (dswitch>>8) & 0x0f);
+    }
+  else if( (cswitch & BIT(SW_AUX2UP)) && (dswitch&0x1000) )
+    {
+      if( drive_unmount((dswitch >> 8) & 0x0f) )
+        DBG_FILEOPS2(2, "unmounted drive ", (dswitch>>8) & 0x0f);
+      else
+        DBG_FILEOPS2(1, "error unmounting drive ", (dswitch>>8) & 0x0f);
+    }
+  else if( cswitch & BIT(SW_AUX2UP) )
     {
       print_panel_serial();
       tape_basic_check_timeout();
@@ -853,6 +886,9 @@ void reset(bool resetPC)
       capture_fid = 0;
       tape_basic_fid = 0;
       update_hlda_led();
+
+      // unmount all drives
+      drive_reset();
     }
 
 #if STANDALONE>0
@@ -1237,6 +1273,14 @@ void altair_out(byte addr, byte data)
         break;
       }
 
+    case 0010:
+    case 0011:
+    case 0012:
+      {
+        drive_out(addr, data);
+        break;
+      }
+
     case 0020:
       {
         // write to control register of first serial device of 88-2SIO
@@ -1437,6 +1481,14 @@ byte altair_in(byte addr)
         break;
       }
 
+    case 0010:
+    case 0011:
+    case 0012:
+      {
+        data = drive_in(addr);
+        break;
+      }
+
     case 0021:
       {
         // read data from first serial device of 88-2SIO
@@ -1507,7 +1559,7 @@ byte altair_in(byte addr)
   return data;
 }
 
-
+     
 void setup() 
 {
   int i;
@@ -1526,6 +1578,7 @@ void setup()
   mem_setup();
   host_setup();
   filesys_setup();
+  drive_setup();
 
   host_set_status_led_WAIT();
 

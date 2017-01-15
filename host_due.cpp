@@ -8,6 +8,9 @@
 #include "mem.h"
 #include "cpucore.h"
 
+#include <SPI.h>
+#include <SD.h>
+
 /*
   NOTE:
   Change -Os to -O3 (to switch optimization from size to performance) in:
@@ -315,6 +318,9 @@ void interrupt_isr()
 
 //------------------------------------------------------------------------------------------------------
 
+static bool use_sd = false;
+uint32_t due_storagesize = 0xFFFF;
+
 
 // The Due has 512k FLASH memory (addresses 0x00000-0x7ffff).
 // We use 64k (0x10000 bytes) for storage
@@ -325,10 +331,28 @@ void interrupt_isr()
 //    saving memory pages.
 #define FLASH_STORAGE_OFFSET 0x30000
 DueFlashStorage dueFlashStorage;
-byte moveBuffer[256];
+
+#define MOVE_BUFFER_SIZE 1024
+byte moveBuffer[MOVE_BUFFER_SIZE];
 
 
-void host_write_data(const void *data, uint32_t addr, uint32_t len)
+static bool host_seek_file_write(File f, uint32_t addr)
+{
+  f.seek(addr);
+  if( f.position()<addr )
+    {
+      memset(moveBuffer, 0, MOVE_BUFFER_SIZE);
+      while( f.size()+MOVE_BUFFER_SIZE <= addr )
+        f.write(moveBuffer, MOVE_BUFFER_SIZE);
+      if( f.size() < addr )
+        f.write(moveBuffer, addr-f.size());
+    }
+
+  return f.position()==addr;
+}
+
+
+static void host_write_data_flash(const void *data, uint32_t addr, uint32_t len)
 {
   uint32_t offset = addr & 3;
   if( offset != 0)
@@ -346,28 +370,100 @@ void host_write_data(const void *data, uint32_t addr, uint32_t len)
 }
 
 
-void host_read_data(void *data, uint32_t addr, uint32_t len)
+static void host_read_data_flash(void *data, uint32_t addr, uint32_t len)
 {
   memcpy(data, dueFlashStorage.readAddress(FLASH_STORAGE_OFFSET + addr), len);
+}
+
+
+static File storagefile;
+
+static bool host_init_data_sd(const char *filename)
+{
+  storagefile = SD.open(filename, FILE_WRITE);
+  return storagefile ? true : false;
+}
+
+
+static void host_write_data_sd(const void *data, uint32_t addr, uint32_t len)
+{
+  if( storagefile )
+    {
+      bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
+      if( host_seek_file_write(storagefile, addr) )
+        {
+          storagefile.write((byte *) data, len);
+          storagefile.flush();
+        }
+      if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
+    }
+}
+
+
+static void host_read_data_sd(void *data, uint32_t addr, uint32_t len)
+{
+  if( storagefile )
+    {
+      bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
+      if( storagefile.seek(addr) )
+        {
+          storagefile.read((byte *) data, len);
+          storagefile.flush();
+        }
+      if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
+    }
+}
+
+
+void host_write_data(const void *data, uint32_t addr, uint32_t len)
+{
+  if( use_sd )
+    host_write_data_sd(data, addr, len);
+  else
+    host_write_data_flash(data, addr, len);
+}
+
+void host_read_data(void *data, uint32_t addr, uint32_t len)
+{
+  if( use_sd )
+    host_read_data_sd(data, addr, len);
+  else
+    host_read_data_flash(data, addr, len);
 }
 
 
 void host_move_data(uint32_t to, uint32_t from, uint32_t len)
 {
   uint32_t i;
-  for(i=0; i+256<len; i+=256)
+  if( from < to )
     {
-      host_read_data(moveBuffer, from+i, 256);
-      host_write_data(moveBuffer, to+i, 256);
-    }
+      for(i=0; i+MOVE_BUFFER_SIZE<len; i+=MOVE_BUFFER_SIZE)
+        {
+          host_read_data(moveBuffer, from+len-i-MOVE_BUFFER_SIZE, MOVE_BUFFER_SIZE);
+          host_write_data(moveBuffer, to+len-i-MOVE_BUFFER_SIZE, MOVE_BUFFER_SIZE);
+        }
 
-  if( i<len )
+      if( i<len )
+        {
+          host_read_data(moveBuffer, from, len-i);
+          host_write_data(moveBuffer, to, len-i);
+        }
+    }
+  else
     {
-      host_read_data(moveBuffer, from+i, len-i);
-      host_write_data(moveBuffer, to+i, len-i);
+      for(i=0; i+MOVE_BUFFER_SIZE<len; i+=MOVE_BUFFER_SIZE)
+        {
+          host_read_data(moveBuffer, from+i, MOVE_BUFFER_SIZE);
+          host_write_data(moveBuffer, to+i, MOVE_BUFFER_SIZE);
+        }
+
+      if( i<len )
+        {
+          host_read_data(moveBuffer, from+i, len-i);
+          host_write_data(moveBuffer, to+i, len-i);
+        }
     }
 }
-
 
 void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
 {
@@ -489,7 +585,63 @@ void host_setup()
   trng_enable(TRNG);
   trng_read_output_data(TRNG);
 
+  // check if SD card available (send "chip select" signal to HLDA status light)
+  bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
+  if( SD.begin(22) && host_init_data_sd("STORAGE.DAT") )
+    {
+      use_sd = true;
+      due_storagesize = 512*1024;
+    }
+  else
+    due_storagesize = 0xFFFF;
+
+  // restore HLDA status light to what it was before
+  if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
+
   host_due_stop_request = 0;
 }
+
+
+uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, void *buffer)
+{
+  uint32_t res = 0;
+
+  if( use_sd )
+    {
+      bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
+      File f = SD.open(filename, FILE_READ);
+      if( f )
+        {
+          if( f.seek(offset) && f.position()==offset )
+            res = f.read((uint8_t *) buffer, len);
+          f.close();
+        }
+      if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
+    }
+
+  return res;
+}
+
+
+uint32_t host_write_file(const char *filename, uint32_t offset, uint32_t len, void *buffer)
+{
+  uint32_t res = 0;
+
+  if( use_sd )
+    {
+      bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
+      File f = SD.open(filename, FILE_WRITE);
+      if( f )
+        {
+          if( host_seek_file_write(f, offset) )
+            res = f.write((uint8_t *) buffer, len);
+          f.close();
+        }
+      if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
+    }
+
+  return res;
+}
+
 
 #endif

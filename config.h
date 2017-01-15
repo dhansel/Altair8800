@@ -32,6 +32,11 @@
 #define USE_IRQ 1
 
 
+// Enables support for disk drives. Each drive uses about 160 bytes
+// of memory. Set to 0 to completely disable drive support.
+#define NUM_DRIVES 4
+
+
 // If enabled, Address switch state will be set by issuing the '/'
 // serial command.  Actual switches will be ignored.
 // Useful when operating while not connected to the front panel hardware.

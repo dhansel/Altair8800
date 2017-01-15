@@ -1,8 +1,8 @@
 INCLUDE=Arduino
 OBJ=obj
 
-Altair8800.exe: $(OBJ) $(OBJ)/Altair8800.o $(OBJ)/cpucore_v1.o $(OBJ)/cpucore_v2.o $(OBJ)/mem.o $(OBJ)/profile.o $(OBJ)/breakpoint.o $(OBJ)/numsys.o $(OBJ)/filesys.o $(OBJ)/disassembler.o $(OBJ)/prog_basic.o $(OBJ)/prog_ps2.o $(OBJ)/prog_examples.o $(OBJ)/prog_tools.o $(OBJ)/prog_games.o $(OBJ)/host_pc.o $(OBJ)/Arduino.o
-	g++ $(OBJ)/Altair8800.o $(OBJ)/cpucore_v1.o $(OBJ)/cpucore_v2.o $(OBJ)/mem.o $(OBJ)/profile.o $(OBJ)/breakpoint.o $(OBJ)/numsys.o $(OBJ)/filesys.o $(OBJ)/disassembler.o $(OBJ)/prog_basic.o $(OBJ)/prog_ps2.o $(OBJ)/prog_examples.o $(OBJ)/prog_tools.o $(OBJ)/prog_games.o $(OBJ)/host_pc.o $(OBJ)/Arduino.o -o Altair8800.exe
+Altair8800.exe: $(OBJ) $(OBJ)/Altair8800.o $(OBJ)/cpucore_v1.o $(OBJ)/cpucore_v2.o $(OBJ)/mem.o $(OBJ)/profile.o $(OBJ)/breakpoint.o $(OBJ)/numsys.o $(OBJ)/filesys.o $(OBJ)/drive.o $(OBJ)/disassembler.o $(OBJ)/prog_basic.o $(OBJ)/prog_ps2.o $(OBJ)/prog_examples.o $(OBJ)/prog_tools.o $(OBJ)/prog_games.o $(OBJ)/host_pc.o $(OBJ)/Arduino.o
+	g++ $(OBJ)/Altair8800.o $(OBJ)/cpucore_v1.o $(OBJ)/cpucore_v2.o $(OBJ)/mem.o $(OBJ)/profile.o $(OBJ)/breakpoint.o $(OBJ)/numsys.o $(OBJ)/filesys.o $(OBJ)/drive.o $(OBJ)/disassembler.o $(OBJ)/prog_basic.o $(OBJ)/prog_ps2.o $(OBJ)/prog_examples.o $(OBJ)/prog_tools.o $(OBJ)/prog_games.o $(OBJ)/host_pc.o $(OBJ)/Arduino.o -o Altair8800.exe
 
 $(OBJ)/mem.o: mem.cpp mem.h config.h
 	g++ mem.cpp -c -o $(OBJ)/mem.o -I $(INCLUDE)
@@ -24,6 +24,9 @@ $(OBJ)/numsys.o: numsys.cpp numsys.h config.h
 
 $(OBJ)/filesys.o: filesys.cpp filesys.h config.h
 	g++ filesys.cpp -c -o $(OBJ)/filesys.o -I $(INCLUDE)
+
+$(OBJ)/drive.o: drive.cpp drive.h config.h
+	g++ drive.cpp -c -o $(OBJ)/drive.o -I $(INCLUDE)
 
 $(OBJ)/disassembler.o: disassembler.cpp disassembler.h config.h
 	g++ disassembler.cpp -c -o $(OBJ)/disassembler.o -I $(INCLUDE)

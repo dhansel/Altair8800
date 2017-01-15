@@ -10,11 +10,22 @@
 #define Serial Serial1
 #endif
 
-// Due: 96k SRAM, use 64k for emulated RAM
+
+/* 
+Due has 96k SRAM, we can use 64k for emulated RAM.
+However, ALTAIR 4k BASIC will hang if 64K of memory are installed
+(the check for available memory gets into an infinite loop).
+ALTAIR DOS will always report INSUFFICIENT MEMORY (for the same
+sort of issue).
+Solution: Have 64k minus one byte of memory. That will stop the
+          memory check from overflow and provide maximum memory.
+*/
 #define MEMSIZE 0x10000
 
-#define HOST_STORAGESIZE 0x10000
+#define HOST_STORAGESIZE due_storagesize
 #define HOST_BUFFERSIZE  0x100
+
+extern uint32_t due_storagesize;
 
 // ------------------------------------------ switches
 

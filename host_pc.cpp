@@ -96,4 +96,38 @@ void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
 }
 
 
+uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, void *buffer)
+{
+  uint32_t res = 0;
+  FILE *f = fopen(filename, "rb");
+  if( f )
+    {
+      if( fseek(f, offset, SEEK_SET)==0 )
+        res = fread(buffer, 1, len, f);
+      fclose(f);
+    }
+
+  //printf("host_read_file('%s', %04x, %04x, %p)=%04x\n", filename, offset, len, buffer, res);
+  return res;
+}
+
+
+uint32_t host_write_file(const char *filename, uint32_t offset, uint32_t len, void *buffer)
+{
+  uint32_t res = 0;
+  FILE *f = fopen(filename, "r+b");
+  if( !f ) f = fopen(filename, "w+b");
+
+  if( f )
+    {
+      if( fseek(f, offset, SEEK_SET)==0 )
+        res = fwrite(buffer, 1, len, f);
+      fclose(f);
+    }
+
+  //printf("host_write_file('%s', %04x, %04x, %p)=%04x\n", filename, offset, len, buffer, res);
+  return res;
+}
+
+
 #endif
