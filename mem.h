@@ -7,7 +7,7 @@
 #include "breakpoint.h"
 
 extern byte Mem[MEMSIZE];
-extern word mem_have_rom_basic;
+extern word mem_ram_limit;
 
 #if USE_PROTECT>0
 
@@ -25,14 +25,15 @@ void mem_unprotect(uint16_t a);
 #endif
 
 #if MEMSIZE < 0x10000
-#define MREAD(a)    ((a)>=0xC000 && mem_have_rom_basic ? prog_basic_read_16k(a) : ((a) < MEMSIZE ? Mem[a] : 0x00))
-#define MWRITE(a,v) {if( (a) < MEMSIZE && !MEM_IS_PROTECTED(a) ) Mem[a]=v;}
+// we set the RAM limit to 0xBFFF when installing the extended BASIC ROM
+#define MREAD(a)    ((a)>=0xC000 && mem_ram_limit==0xBFFF ? prog_basic_read_16k(a) : ((a) < MEMSIZE ? Mem[a] : 0x00))
+#define MWRITE(a,v) {if( (a)<=mem_ram_limit && !MEM_IS_PROTECTED(a) ) Mem[a]=v;}
 #else
 // If we have 64k memory then we just copy ROM basic to the upper 16k and write-protect
 // that area.  Faster to check the address on writing than reading since there are far more
 // reads than writes. Also we can skip memory bounds checking because addresses are 16 bit.
 #define MREAD(a)    (Mem[a])
-#define MWRITE(a,v) {if( ((a)<0xC000 || !mem_have_rom_basic) && !MEM_IS_PROTECTED(a) ) Mem[a]=v; }
+#define MWRITE(a,v) {if( (a)<=mem_ram_limit && !MEM_IS_PROTECTED(a) ) Mem[a]=v;}
 #endif
 
 // WARNING: arguments to MEM_READ and MEM_WRITE macros should not have side effects
@@ -43,6 +44,9 @@ void mem_unprotect(uint16_t a);
 byte MEM_READ_STEP(uint16_t a);
 void MEM_WRITE_STEP(uint16_t a, byte v);
 
+// set the highest address to be treated as RAM (everything above is ROM)
+void mem_set_ram_limit(uint16_t a);
+void mem_clr_ram_limit();
 void mem_setup();
 
 #endif

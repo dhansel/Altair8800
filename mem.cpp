@@ -2,7 +2,7 @@
 #include "mem.h"
 #include "host.h"
 
-word mem_have_rom_basic = false;
+word mem_ram_limit = 0xFFFF;
 
 byte Mem[MEMSIZE];
 
@@ -59,6 +59,17 @@ void mem_unprotect(uint16_t a)
 
 #endif
 
+void mem_set_ram_limit(uint16_t a)
+{
+  mem_ram_limit = a;
+}
+
+
+void mem_clr_ram_limit()
+{
+  mem_ram_limit = MEMSIZE-1;
+}
+
 
 void mem_setup()
 {
@@ -66,4 +77,5 @@ void mem_setup()
   for(int i=0; i<32; i++) protected_flags[i]=0x00;
   protected_flag = 0;
 #endif
+  mem_clr_ram_limit();
 }

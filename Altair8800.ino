@@ -206,6 +206,10 @@ void process_inputs()
             regPC = prog_basic_copy_4k(Mem);
             host_set_data_leds(MREAD(regPC));
             host_clr_status_led_WAIT();
+
+            // 4k BASIC will get into an infinite loop if a full 64k RAM are
+            // available => purposely reduce the RAM size by 1 byte
+            mem_set_ram_limit(0xfffe);
             break;
           }
 
@@ -298,7 +302,9 @@ void process_inputs()
     } 
   else if( cswitch & BIT(SW_AUX1UP) )
     {
-      mem_have_rom_basic = true;
+      // ROM BASIC starts at 0xC000 so RAM goes up to 0xBFFF
+      mem_set_ram_limit(0xbfff);
+
       regPC = 0xc000;
       p_regPC = ~regPC;
 #if MEMSIZE>=0x10000
@@ -838,7 +844,7 @@ void reset(bool resetPC)
     {
       // erase memory
       //for(int i=0; i<MEMSIZE; i++) Mem[i] = 0;
-      mem_have_rom_basic = false;
+      mem_clr_ram_limit();
       have_ps2 = false;
 
       // close all open files

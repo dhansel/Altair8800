@@ -1371,15 +1371,6 @@ load program...
 uint16_t prog_basic_copy_4k(byte *dst)
 {
   host_copy_flash_to_ram(dst, basic4k, 0x1000);
-
-#if MEMSIZE>=0x10000
-  // if we have 64k ram, the automatic memory detection in 4k BASIC will
-  // fail, resulting in an infinite loop => patch BASIC to skip memory detection
-  dst[0xDCB] = 0xFE;
-  dst[0xDCC] = 0xFF;
-  dst[0xDD2] = 0xC3;
-#endif  
-  
   return 0x0;
 }
 
