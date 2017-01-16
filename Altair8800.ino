@@ -163,12 +163,13 @@ void process_inputs()
 #if !defined(__AVR_ATmega2560__)
             Serial.println(F("00000110) MITS Programming System II (A15 up, A11 up, A9 up)"));
             Serial.println(F("00000111) ALTAIR Turnkey Monitor"));
+            Serial.println(F("00001000) Disk boot ROM"));
 #endif
-            Serial.println(F("00001000) Music ('Daisy')"));
-            Serial.println(F("00001001) CPU Diagnostic"));
-            Serial.println(F("00001010) CPU Exerciser"));
-            Serial.println(F("00001011) Status lights test"));
-            Serial.println(F("00001100) Serial echo using IRQ"));
+            Serial.println(F("00001001) Music ('Daisy')"));
+            Serial.println(F("00001010) CPU Diagnostic"));
+            Serial.println(F("00001011) CPU Exerciser"));
+            Serial.println(F("00001100) Status lights test"));
+            Serial.println(F("00001101) Serial echo using IRQ"));
             Serial.println(F("01000000) [manage file system]"));
             Serial.println(F("10000000) [load memory page]"));
             Serial.println(F("10000001) [save memory page]"));
@@ -256,19 +257,17 @@ void process_inputs()
             break;
           }
 
-        case 0x0d:
+        case 0x08:
           {
             regPC = prog_tools_copy_diskboot(Mem);
             host_set_data_leds(MREAD(regPC));
             host_clr_status_led_WAIT();
-            //altair_set_outputs(regPC, MREAD(regPC));
             // disk boot rom starts at 0xff00 so RAM goes up to 0xfeff
             mem_set_ram_limit(0xfeff);
             break;
           }
 #endif
-
-        case 0x08:
+        case 0x09:
           {
             regPC = prog_games_copy_daisy(Mem);
             host_set_data_leds(MREAD(regPC));
@@ -276,7 +275,7 @@ void process_inputs()
             break;
           }
 
-        case 0x09:
+        case 0x0a:
           {
             regPC = prog_tools_copy_diag(Mem);
             host_set_data_leds(MREAD(regPC));
@@ -284,7 +283,7 @@ void process_inputs()
             break;
           }
 
-        case 0x0a:
+        case 0x0b:
           {
             regPC = prog_tools_copy_exerciser(Mem);
             host_set_data_leds(MREAD(regPC));
@@ -292,7 +291,7 @@ void process_inputs()
             break;
           }
 
-        case 0x0b:
+        case 0x0c:
           {
             regPC = prog_tools_copy_statustest(Mem);
             altair_set_outputs(regPC, MREAD(regPC));
@@ -301,7 +300,7 @@ void process_inputs()
             break;
           }
 
-        case 0x0c:
+        case 0x0d:
           {
             regPC = prog_tools_copy_serialirqtest(Mem);
             altair_set_outputs(regPC, MREAD(regPC));
@@ -331,7 +330,7 @@ void process_inputs()
       host_clr_status_led_WAIT();
     }
 
-  if( (cswitch & BIT(SW_AUX2DOWN)) && (dswitch&0x1000) )
+  if( (cswitch & BIT(SW_AUX2DOWN)) && (dswitch&0xF000)==0x1000 )
     {
       if( (dswitch & 0xff)==0 )
         drive_dir();
@@ -340,7 +339,7 @@ void process_inputs()
       else
         DBG_FILEOPS4(1, "error mounting disk ", dswitch&0xff, " in drive ", (dswitch>>8) & 0x0f);
     }
-  else if( (cswitch & BIT(SW_AUX2UP)) && (dswitch&0x1000) )
+  else if( (cswitch & BIT(SW_AUX2UP)) && (dswitch&0xF000)==0x1000 )
     {
       if( drive_unmount((dswitch >> 8) & 0x0f) )
         DBG_FILEOPS2(2, "unmounted drive ", (dswitch>>8) & 0x0f);
@@ -367,11 +366,11 @@ void process_inputs()
       else
         {
           capture_device = 0;
-          if( (dswitch & 0xE000) == 0x8000 )
+          if( (dswitch & 0xF000) == 0x8000 )
             { capture_device = CAPTURE_2SIO1; DBG_FILEOPS(3, "capturing from 88-2SIO"); }
-          else if( (dswitch & 0xE000) == 0x4000 )
+          else if( (dswitch & 0xF000) == 0x4000 )
             { capture_device = CAPTURE_TAPE; DBG_FILEOPS(3, "capturing from TAPE"); }
-          if( (dswitch & 0xE000) == 0x2000 )
+          if( (dswitch & 0xF000) == 0x2000 )
             { capture_device = CAPTURE_SIO; DBG_FILEOPS(3, "capturing from 88-SIO"); }
           
           if( capture_device!=0 )
@@ -419,11 +418,11 @@ void process_inputs()
       else
         {
           capture_device = 0;
-          if( (dswitch & 0xE000) == 0x8000 )
+          if( (dswitch & 0xF000) == 0x8000 )
             { capture_device = CAPTURE_2SIO1; DBG_FILEOPS(3, "replaying to 88-2SIO"); }
-          else if( (dswitch & 0xE000) == 0x4000 )
+          else if( (dswitch & 0xF000) == 0x4000 )
             { capture_device = CAPTURE_TAPE; DBG_FILEOPS(3, "replaying to TAPE"); }
-          if( (dswitch & 0xE000) == 0x2000 )
+          if( (dswitch & 0xF000) == 0x2000 )
             { capture_device = CAPTURE_SIO; DBG_FILEOPS(3, "replaying to 88-SIO"); }
           
           if( capture_device>0 )
@@ -434,7 +433,7 @@ void process_inputs()
               else
                 DBG_FILEOPS2(2, "unable to replay captured data (file not found), file ", int(dswitch&0xff));
             }
-          else if( (dswitch & 0xE000)==0 )
+          else if( (dswitch & 0xF000)==0 )
             {
               if( prog_examples_read_start((dswitch&0xff)) )
                 {
