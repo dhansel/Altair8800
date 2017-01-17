@@ -18,27 +18,30 @@
 
   ---- front panel connections by function:
 
+  For pins that are not labeled on the board with their digital number
+  the board label is given in []
+
   Function switches:
      RUN          => D20 (PIOB12)
      STOP         => D21 (PIOB13)
-     STEP         => A0
-     SLOW         => A1
-     EXAMINE      => A2
-     EXAMINE NEXT => A3
-     DEPOSIT      => A4
-     DEPOSIT NEXT => A5
-     RESET        => 52 (PIOB21)
-     CLR          => 53 (PIOB14)
-     PROTECT      => A6
-     UNPROTECT    => A7
+     STEP         => D54 [A0] (PIOA16)
+     SLOW         => D55 [A1] (PIOA24)
+     EXAMINE      => D56 [A2] (PIOA23)
+     EXAMINE NEXT => D57 [A3] (PIOA22)
+     DEPOSIT      => D58 [A4] (PIOA6)
+     DEPOSIT NEXT => D59 [A5] (PIOA4)
+     RESET        => D52 (PIOB21)
+     CLR          => D53 (PIOB14)
+     PROTECT      => D60 [A6] (PIOA3)
+     UNPROTECT    => D61 [A7] (PIOA2)
      AUX1 UP      => D30 (PIOD9)
      AUX1 DOWN    => D31 (PIOA7)
      AUX2 UP      => D32 (PIOD10)
      AUX2 DOWN    => D33 (PIOC1)
 
    Address switches:
-     SW0...7      => A8, A9, A10, A11         (2-to-1 multiplexed via DAC0)
-     SW8...15     => 19,18,17,16,23,24,42,43  (PIOA, bits 10-15,19,20)
+     SW0...7      => D62 [A8], D63 [A9], D64 [A10], D65 [A11], D66 [DAC0], D67 [DAC1], D68 [CANRX], D69 [CANTX]
+     SW8...15     => D17,D16,D23,D24,D70[SDA1],D71[SCL1],D42,D43  (PIOA, bits 12-15,17-20)
 
    Bus LEDs:
      A0..7        => 34, 35, ..., 41          (PIOC, bits 2-9)
@@ -62,9 +65,8 @@
 
   ---- front panel connections by Arduino pin:
 
-  Digital:
     D0  => Serial0 RX (in)
-    D1  => Serial0 TX (in)
+    D1  => Serial0 TX (out)
     D2  => INT        (out)
     D3  => WO         (out)
     D4  => STACK      (out)
@@ -121,48 +123,63 @@
     D52 => RESET      (in)
     D53 => CLR        (in)
 
-  The following two are not officially digital I/O pins but can be used
-  for input. We need to use them since we have to use D18/D19 for Serial I/O
-  which in turn is neceesary because we can't connect a serial device to
-  the TX0/RX0 pins (0/1) because RX0 is directly connected to the USB 
-  serial converter, making it impossible to receive data from the RX0 pin.
-   SDA1 => SW12       (in)
-   SCL1 => SW13       (in)
+    The following are not labeled as digital pins on the board
+    (i.e. not labeled Dxx) but can be used as digital pins.
+    The board label for the pins is shown in parentheses.
 
-  Analog:    
-    A0   => STEP
-    A1   => SLOW
-    A2   => EXAMINE
-    A3   => EXAMINE NEXT
-    A4   => DEPOSIT
-    A5   => DEPOSIT NEXT
-    A6   => PROTECT
-    A7   => UNPROTECT
+    D54 (A0)    => STEP         (in)
+    D55 (A1)    => SLOW         (in)
+    D56 (A2)    => EXAMINE      (in)
+    D57 (A3)    => EXAMINE NEXT (in)
+    D58 (A4)    => DEPOSIT      (in)
+    D59 (A5)    => DEPOSIT NEXT (in)
+    D60 (A6)    => PROTECT      (in)
+    D61 (A7)    => UNPROTECT    (in)
+    D62 (A8)    => SW0          (in)
+    D63 (A9)    => SW1          (in)
+    D64 (A10)   => SW2          (in)
+    D65 (A11)   => SW3          (in)
+    D66 (DAC0)  => SW4          (in)
+    D67 (DAC1)  => SW5          (in)
+    D68 (CANRX) => SW6          (in)
+    D69 (CANTX) => SW7          (in)
 
-    A8   => SW0/4
-    A9   => SW1/5
-    A10  => SW2/6
-    A11  => SW3/7
-    DAC0 => multiplex selector for SW0-3/4-7
+    D70 (SDA1)  => SW12         (in)
+    D71 (SCL1)  => SW13         (in)
 
-
-  ---- front panel connections by Processor register (digital only):
+  ---- front panel connections by Processor register:
  
   PIOA:
-    7 => AUX1 DOWN (in)
-   12 => SW8       (in)     
-   13 => SW9       (in)     
-   14 => SW10      (in)     
-   15 => SW11      (in)     
-   17 => SW12      (in)
-   18 => SW13      (in)
-   19 => SW14      (in)
-   20 => SW15      (in)
+    0 => SW7          (in)
+    1 => SW6          (in)
+    2 => UNPROTECT    (in)     
+    3 => PROTECT      (in)     
+    4 => DEPOSIT NEXT (in)     
+    6 => DEPOSIT      (in)     
+    7 => AUX1 DOWN    (in)
+   12 => SW8          (in)     
+   13 => SW9          (in)     
+   14 => SW10         (in)     
+   15 => SW11         (in)
+   16 => STEP         (in)     
+   17 => SW12         (in)
+   18 => SW13         (in)
+   19 => SW14         (in)
+   20 => SW15         (in)
+   22 => EXAMINE NEXT (in)     
+   23 => EXAMINE      (in)     
+   24 => SLOW         (in)     
 
   PIOB:
    12 => RUN       (in)
    13 => STOP      (in)
    14 => CLR       (in)
+   15 => SW4       (in)
+   16 => SW5       (in)
+   17 => SW0       (in)
+   18 => SW1       (in)
+   19 => SW2       (in)
+   20 => SW3       (in)
    21 => RESET     (in)
    25 => INT       (out)
    26 => HLDA      (out)
@@ -207,7 +224,6 @@
     8 => INTE      (out)
     9 => AUX1 UP   (in)
    10 => AUX2 UP   (in)
-
 */
 
 
@@ -256,18 +272,14 @@ uint16_t host_read_addr_leds()
 uint16_t host_read_addr_switches()
 {
   uint16_t v = 0;
-  if( analogRead( 8)>2048 ) v |= 0x02;
-  if( analogRead( 9)>2048 ) v |= 0x08;
-  if( analogRead(10)>2048 ) v |= 0x20;
-  if( analogRead(11)>2048 ) v |= 0x80;
-  analogWrite(DAC0, 4095);
-  delayMicroseconds(10);
-  if( analogRead( 8)>2048 ) v |= 0x01;
-  if( analogRead( 9)>2048 ) v |= 0x04;
-  if( analogRead(10)>2048 ) v |= 0x10;
-  if( analogRead(11)>2048 ) v |= 0x40;
-  analogWrite(DAC0, 0);
-
+  if( !digitalRead(62) ) v |= 0x01;
+  if( !digitalRead(63) ) v |= 0x02;
+  if( !digitalRead(64) ) v |= 0x04;
+  if( !digitalRead(65) ) v |= 0x08;
+  if( !digitalRead(66) ) v |= 0x10;
+  if( !digitalRead(67) ) v |= 0x20;
+  if( !digitalRead(68) ) v |= 0x40;
+  if( !digitalRead(69) ) v |= 0x80;
   return v | (host_read_sense_switches() * 256);
 }
 
@@ -280,25 +292,22 @@ bool host_read_function_switch(byte inputNum)
   // not time critical
   switch( inputNum )
     {
-    case SW_RUN       : return !digitalRead(20);   // RUN          => D20 (PIOB12)
-    case SW_STOP      : return !digitalRead(21);   // STOP         => D21 (PIOB13)
-    case SW_RESET     : return !digitalRead(52);   // RESET        => 52 (PIOB21)
-    case SW_CLR       : return !digitalRead(53);   // CLR          => 53 (PIOB14)
-    case SW_AUX1UP    : return !digitalRead(30);   // AUX1 UP      => 30 (PIOD9)
-    case SW_AUX1DOWN  : return !digitalRead(31);   // AUX1 DOWN    => 31 (PIOA7)
-    case SW_AUX2UP    : return !digitalRead(32);   // AUX2 UP      => 32 (PIOD10)
-    case SW_AUX2DOWN  : return !digitalRead(33);   // AUX2 DOWN    => 33 (PIOC1)
-#if STANDALONE==0
-    // analog inputs will be random if not connected
-    case SW_STEP      : return analogRead(0)<2048; // STEP         => A0
-    case SW_SLOW      : return analogRead(1)<2048; // SLOW         => A1
-    case SW_EXAMINE   : return analogRead(2)<2048; // EXAMINE      => A2
-    case SW_EXNEXT    : return analogRead(3)<2048; // EXAMINE NEXT => A3
-    case SW_DEPOSIT   : return analogRead(4)<2048; // DEPOSIT      => A4
-    case SW_DEPNEXT   : return analogRead(5)<2048; // DEPOSIT NEXT => A5
-    case SW_PROTECT   : return analogRead(6)<2048; // PROTECT      => A6
-    case SW_UNPROTECT : return analogRead(7)<2048; // UNPROTECT    => A7
-#endif
+    case SW_RUN       : return !digitalRead(20);
+    case SW_STOP      : return !digitalRead(21);
+    case SW_RESET     : return !digitalRead(52);
+    case SW_CLR       : return !digitalRead(53);
+    case SW_AUX1UP    : return !digitalRead(30);
+    case SW_AUX1DOWN  : return !digitalRead(31);
+    case SW_AUX2UP    : return !digitalRead(32);
+    case SW_AUX2DOWN  : return !digitalRead(33);
+    case SW_STEP      : return !digitalRead(54);
+    case SW_SLOW      : return !digitalRead(55);
+    case SW_EXAMINE   : return !digitalRead(56);
+    case SW_EXNEXT    : return !digitalRead(57);
+    case SW_DEPOSIT   : return !digitalRead(58);
+    case SW_DEPNEXT   : return !digitalRead(59);
+    case SW_PROTECT   : return !digitalRead(60);
+    case SW_UNPROTECT : return !digitalRead(61);
     default: return false;
     }
 }
@@ -527,7 +536,25 @@ signed char isinput[] =
     0, // D50 => A9
     0, // D51 => A8
     1, // D52 => RESET
-    1  // D53 => CLR
+    1, // D53 => CLR
+    1, // D54 (A0)    => STEP
+    1, // D55 (A1)    => SLOW
+    1, // D56 (A2)    => EXAMINE
+    1, // D57 (A3)    => EXAMINE NEXT
+    1, // D58 (A4)    => DEPOSIT
+    1, // D59 (A5)    => DEPOSIT NEXT
+    1, // D60 (A6)    => PROTECT
+    1, // D61 (A7)    => UNPROTECT
+    1, // D62 (A8)    => SW0
+    1, // D63 (A9)    => SW1
+    1, // D64 (A10)   => SW2
+    1, // D65 (A11)   => SW3
+    1, // D66 (DAC0)  => SW4
+    1, // D67 (DAC1)  => SW5
+    1, // D68 (CANRX) => SW6
+    1, // D69 (CANTX) => SW7
+    1, // D70 (SCL1)  => SW13
+    1, // D71 (SDA1)  => SW12
   };
 
 
@@ -551,7 +578,7 @@ uint32_t host_get_random()
 void host_setup()
 {
   // define digital input/output pin direction
-  for(int i=0; i<54; i++) 
+  for(int i=0; i<72; i++)
     if( isinput[i]>=0 )
       pinMode(i, isinput[i] ? INPUT_PULLUP : OUTPUT);
 
@@ -574,11 +601,6 @@ void host_setup()
   // set mask for bits that will be written to via REG_PIOX_OSDR
   REG_PIOC_OWDR = 0xFFF00C03;  // address bus (16 bit)
   REG_PIOD_OWDR = 0xFFFFFF00;  // data bus (8 bit)
-
-  // set up analog inputs
-  analogReadResolution(12);
-  analogWriteResolution(12);
-  analogWrite(DAC0, 0);
 
   // init random number generator
   pmc_enable_periph_clk(ID_TRNG);

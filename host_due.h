@@ -32,8 +32,8 @@ extern uint32_t due_storagesize;
 
 inline byte host_read_sense_switches()
 {
-  // SW8...15  => PIOA, bits 12-15,17-20
-  word w = REG_PIOA_PDSR;
+  // SW8...15  => PIOA, bits 12-15,17-20 (negative logic)
+  word w = ~REG_PIOA_PDSR;
   return ((w & 0xF000) / (1<<12)) | ((w & 0x1E0000) / (1<<13));
 }
 
