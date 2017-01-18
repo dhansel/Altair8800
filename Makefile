@@ -60,13 +60,3 @@ $(OBJ):
 
 clean:
 	rm -rf $(OBJ) Altair8800.exe
-
-backup:
-	scp -r *.cpp *.h Altair8800.ino Makefile Arduino root@192.168.2.27:/media/a6d03f2a-7557-41e6-9e61-1628327f82aa/David/backup/Laptop520/projects/Arduino/Altair8800
-
-restore:
-	scp root@192.168.2.27:/media/a6d03f2a-7557-41e6-9e61-1628327f82aa/David/backup/Laptop520/projects/Arduino/Altair8800/*.cpp .
-	scp root@192.168.2.27:/media/a6d03f2a-7557-41e6-9e61-1628327f82aa/David/backup/Laptop520/projects/Arduino/Altair8800/*.h .
-	scp root@192.168.2.27:/media/a6d03f2a-7557-41e6-9e61-1628327f82aa/David/backup/Laptop520/projects/Arduino/Altair8800/Altair8800.ino .
-	scp root@192.168.2.27:/media/a6d03f2a-7557-41e6-9e61-1628327f82aa/David/backup/Laptop520/projects/Arduino/Altair8800/Makefile .
-	scp -r root@192.168.2.27:/media/a6d03f2a-7557-41e6-9e61-1628327f82aa/David/backup/Laptop520/projects/Arduino/Altair8800/Arduino .
