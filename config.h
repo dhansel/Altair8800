@@ -26,7 +26,7 @@
 // on the Due since the Mega is too slow anyways and the throttling 
 // checks would only reduce performance further.
 // if USE_THROTTLE is enabled, USE_PROFILING must be enabled too.
-#define USE_THROTTLE 0
+#define USE_THROTTLE 1
 
 
 // Enables function of the PROTECT/UNPROTECT switches.
@@ -36,13 +36,13 @@
 
 // Enables support for disk drives. Each drive uses about 160 bytes
 // of memory. Set to 0 to completely disable drive support.
-#define NUM_DRIVES 0
+#define NUM_DRIVES 4
 
 
 // If enabled, Address switch state will be set by issuing the '/'
 // serial command.  Actual switches will be ignored.
 // Useful when operating while not connected to the front panel hardware.
-#define STANDALONE 1
+#define STANDALONE 0
 
 
 // Two slightly different versions of the CPU core implementation are
