@@ -14,6 +14,12 @@
 #error requires Arduino Mega2560, Arduino Due or Windows PC
 #endif
 
+
+bool     host_read_function_switch(byte i);
+bool     host_read_function_switch_debounced(byte i);
+bool     host_read_function_switch_edge(byte i);
+uint16_t host_read_function_switches_edge();
+
 void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len);
 
 uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, void *buffer);

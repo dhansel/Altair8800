@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <time.h>
 #include <string>
+#include "Altair8800.h"
 #include "mem.h"
 #include "cpucore.h"
 #include "host_pc.h"
@@ -46,6 +47,51 @@ void host_setup()
 uint32_t host_get_random()
 {
   return (uint32_t) rand();
+}
+
+
+bool host_read_function_switch(byte i)
+{
+  return false;
+}
+
+
+bool host_read_function_switch_debounced(byte i)
+{
+  return false;
+}
+
+
+bool host_read_function_switch_edge(int i)
+{
+  return false;
+}
+
+
+uint16_t host_read_function_switches_edge()
+{
+  return 0;
+}
+
+
+void host_check_interrupts()
+{
+  static unsigned long prevCtrlC = 0;
+  if( Serial.available() )
+    {
+      byte c = Serial.read();
+      if( c == 3 )
+        {
+          // CTRL-C was pressed.  If we receive two CTRL-C in short order
+          // then we terminate the emulator.
+          if( millis()>prevCtrlC+250 )
+            prevCtrlC = millis();
+          else
+            exit(0);
+        }
+      
+      altair_receive_serial_data(c);
+    }
 }
 
 

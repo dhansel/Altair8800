@@ -49,18 +49,18 @@
      D0..8        => 25,26,27,28,14,15,29,11  (PIOD, bits 0-7)
 
    Status LEDs:
-     INT          => 2  (PIOB25)
-     WO           => 3  (PIOC28)
-     STACK        => 4  (PIOC26)
-     HLTA         => 5  (PIOC25)
-     OUT          => 6  (PIOC24)
-     M1           => 7  (PIOC23)
-     INP          => 8  (PIOC22)
-     MEMR         => 9  (PIOC21)
-     INTE         => 12 (PIOD8)
-     PROT         => 13 (PIOB27)
-     WAIT         => 10 (PIOC29)
-     HLDA         => 22 (PIOB26)
+     INT          => D2  (PIOB25)
+     WO           => D3  (PIOC28)
+     STACK        => D4  (PIOC26)
+     HLTA         => D5  (PIOC25)
+     OUT          => D6  (PIOC24)
+     M1           => D7  (PIOC23)
+     INP          => D8  (PIOC22)
+     MEMR         => D9  (PIOC21)
+     INTE         => D12 (PIOD8)
+     PROT         => D13 (PIOB27)
+     WAIT         => D10 (PIOC29)
+     HLDA         => D22 (PIOB26)
 
 
   ---- front panel connections by Arduino pin:
@@ -287,58 +287,64 @@ uint16_t host_read_addr_switches()
 //------------------------------------------------------------------------------------------------------
 
 
-bool host_read_function_switch(byte inputNum)
+volatile static bool serial_timer_running = false;
+
+void TC7_Handler()
 {
-  // not time critical
-  switch( inputNum )
-    {
-    case SW_RUN       : return !digitalRead(20);
-    case SW_STOP      : return !digitalRead(21);
-    case SW_RESET     : return !digitalRead(52);
-    case SW_CLR       : return !digitalRead(53);
-    case SW_AUX1UP    : return !digitalRead(30);
-    case SW_AUX1DOWN  : return !digitalRead(31);
-    case SW_AUX2UP    : return !digitalRead(32);
-    case SW_AUX2DOWN  : return !digitalRead(33);
-    case SW_STEP      : return !digitalRead(54);
-    case SW_SLOW      : return !digitalRead(55);
-    case SW_EXAMINE   : return !digitalRead(56);
-    case SW_EXNEXT    : return !digitalRead(57);
-    case SW_DEPOSIT   : return !digitalRead(58);
-    case SW_DEPNEXT   : return !digitalRead(59);
-    case SW_PROTECT   : return !digitalRead(60);
-    case SW_UNPROTECT : return !digitalRead(61);
-    default: return false;
-    }
+  TC_GetStatus(TC2, 1);
+  if( Serial.available() )
+    altair_receive_serial_data(Serial.read());
+  else 
+    { TC_Stop(TC2, 1); serial_timer_running = false; }
 }
 
 
-//------------------------------------------------------------------------------------------------------
-
-
-volatile word host_due_stop_request = false;
-
-void interrupt_isr()
+void serial_interrupt()
 {
-  host_due_stop_request = 1;
+  if( !serial_timer_running )
+    { serial_timer_running = true; TC_Start(TC2, 1); }
 }
 
+
+// period_us is the timer period in microseconds (i.e. the time span after the timer goes off) 
+void timer_setup(uint32_t period_us)
+{
+  // turn on the timer clock in the power management controller
+  pmc_set_writeprotect(false);     // disable write protection for pmc registers
+  pmc_enable_periph_clk(ID_TC7);   // enable peripheral clock TC7
+
+  // we want wavesel 01 with RC
+  TC_Configure(TC2,1, TC_CMR_WAVE | TC_CMR_WAVSEL_UP_RC | TC_CMR_TCCLKS_TIMER_CLOCK3); 
+
+  // enable timer interrupts on the timer
+  TC2->TC_CHANNEL[1].TC_IER=TC_IER_CPCS;   // IER = interrupt enable register
+  TC2->TC_CHANNEL[1].TC_IDR=~TC_IER_CPCS;  // IDR = interrupt disable register
+
+  // Enable the interrupt in the nested vector interrupt controller
+  // TC4_IRQn where 4 is the timer number * timer channels (3) + the channel number (=(1*3)+1) for timer1 channel1
+  NVIC_EnableIRQ(TC7_IRQn);
+
+  // set the timer period. CLOCK3 is 2.65 MHz so if we set the
+  // timer to 2625000/period_us then timer will go off after period_us microseconds
+  TC_SetRC(TC2, 1, 2625000 / period_us);
+  serial_timer_running = false;
+}
 
 
 //------------------------------------------------------------------------------------------------------
 
 static bool use_sd = false;
-uint32_t due_storagesize = 0xFFFF;
+uint32_t due_storagesize = 0xC000;
 
 
 // The Due has 512k FLASH memory (addresses 0x00000-0x7ffff).
-// We use 64k (0x10000 bytes) for storage
+// We use 48k (0xC000 bytes) for storage
 // DueFlashStorage address 0 is the first address of the second memory bank,
-// i.e. 0x40000. We add 0x30000 so we use at 0x70000-0x7ffff
+// i.e. 0x40000. We add 0x3C000 so we use at 0x74000-0x7ffff
 // => MUST make sure that our total program size (shown in Arduine IDE after compiling)
-//    is less than 4508751 (0x6ffff)! Otherwise we would overwrite our own program when
+//    is less than 475135 (0x73fff)! Otherwise we would overwrite our own program when
 //    saving memory pages.
-#define FLASH_STORAGE_OFFSET 0x30000
+#define FLASH_STORAGE_OFFSET 0x34000
 DueFlashStorage dueFlashStorage;
 
 #define MOVE_BUFFER_SIZE 1024
@@ -479,7 +485,119 @@ void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
   memcpy(dst, src, len);
 }
 
+
 // --------------------------------------------------------------------------------------------------
+
+
+volatile static uint16_t switches_pulse = 0;
+volatile static uint16_t switches_debounced = 0;
+static uint32_t debounceTime[16];
+static const byte function_switch_pin[16] = {20,21,54,55,56,57,58,59,52,53,60,61,30,31,32,33};
+static const uint16_t function_switch_irq[16] = {0, INT_SW_STOP, 0, 0, 0, 0, 0, 0, INT_SW_RESET, INT_SW_CLR, 
+                                                 0, 0, 0, 0, INT_SW_AUX2UP, INT_SW_AUX2DOWN};
+
+
+bool host_read_function_switch(byte i)
+{
+  return !digitalRead(function_switch_pin[i]);
+}
+
+
+bool host_read_function_switch_debounced(byte i)
+{
+  return (switches_debounced & (1<<i)) ? true : false;
+}
+
+
+bool host_read_function_switch_edge(byte i)
+{
+  uint16_t bitval = 1<<i;
+  bool b = switches_pulse & bitval ? true : false;
+  if( b ) switches_pulse &= ~bitval;
+  return b;
+}
+
+
+uint16_t host_read_function_switches_edge()
+{
+  uint16_t res = switches_pulse;
+  switches_pulse &= ~res;
+  return res;
+}
+
+
+static void switch_interrupt(int i)
+{
+  if( millis()>debounceTime[i] )
+    {
+      uint16_t bitval = 1<<i;
+
+      bool d1 = !digitalRead(function_switch_pin[i]);
+      bool d2 = (switches_debounced & bitval) ? true : false;
+
+      if( d1 && !d2 ) 
+        {
+          switches_debounced |= bitval;
+          switches_pulse |= bitval;
+          if( function_switch_irq[i]>0 ) altair_interrupt(function_switch_irq[i]);
+          debounceTime[i] = millis() + 100;
+        }
+      else if( !d1 && d2 ) 
+        {
+          switches_debounced &= ~bitval;
+          switches_pulse &= ~bitval;
+          debounceTime[i] = millis() + 100;
+        }
+    }
+}
+
+
+static void switch_interrupt_0()  { switch_interrupt(0);  }
+static void switch_interrupt_1()  { switch_interrupt(1);  }
+static void switch_interrupt_2()  { switch_interrupt(2);  }
+static void switch_interrupt_3()  { switch_interrupt(3);  }
+static void switch_interrupt_4()  { switch_interrupt(4);  }
+static void switch_interrupt_5()  { switch_interrupt(5);  }
+static void switch_interrupt_6()  { switch_interrupt(6);  }
+static void switch_interrupt_7()  { switch_interrupt(7);  }
+static void switch_interrupt_8()  { switch_interrupt(8);  }
+static void switch_interrupt_9()  { switch_interrupt(9);  }
+static void switch_interrupt_10() { switch_interrupt(10); }
+static void switch_interrupt_11() { switch_interrupt(11); }
+static void switch_interrupt_12() { switch_interrupt(12); }
+static void switch_interrupt_13() { switch_interrupt(13); }
+static void switch_interrupt_14() { switch_interrupt(14); }
+static void switch_interrupt_15() { switch_interrupt(15); }
+
+
+static void switches_setup()
+{
+  attachInterrupt(function_switch_pin[ 0], switch_interrupt_0,  CHANGE);
+  attachInterrupt(function_switch_pin[ 1], switch_interrupt_1,  CHANGE);
+  attachInterrupt(function_switch_pin[ 2], switch_interrupt_2,  CHANGE);
+  attachInterrupt(function_switch_pin[ 3], switch_interrupt_3,  CHANGE);
+  attachInterrupt(function_switch_pin[ 4], switch_interrupt_4,  CHANGE);
+  attachInterrupt(function_switch_pin[ 5], switch_interrupt_5,  CHANGE);
+  attachInterrupt(function_switch_pin[ 6], switch_interrupt_6,  CHANGE);
+  attachInterrupt(function_switch_pin[ 7], switch_interrupt_7,  CHANGE);
+  attachInterrupt(function_switch_pin[ 8], switch_interrupt_8,  CHANGE);
+  attachInterrupt(function_switch_pin[ 9], switch_interrupt_9,  CHANGE);
+  attachInterrupt(function_switch_pin[10], switch_interrupt_10, CHANGE);
+  attachInterrupt(function_switch_pin[11], switch_interrupt_11, CHANGE);
+  attachInterrupt(function_switch_pin[12], switch_interrupt_12, CHANGE);
+  attachInterrupt(function_switch_pin[13], switch_interrupt_13, CHANGE);
+  attachInterrupt(function_switch_pin[14], switch_interrupt_14, CHANGE);
+  attachInterrupt(function_switch_pin[15], switch_interrupt_15, CHANGE);
+
+  delay(1);
+  for(int i=0; i<16; i++) debounceTime[i]=0;
+  switches_debounced = 0;
+  switches_pulse     = 0;
+}
+
+
+// --------------------------------------------------------
+
 
 signed char isinput[] = 
   {
@@ -558,16 +676,6 @@ signed char isinput[] =
   };
 
 
-#if USE_IRQ>0
-volatile word host_due_serial_irq = false;
-void serial_isr()
-{
-  if( host_read_status_led_INTE() && (reg_2SIO_ctrl & 0x80) && (reg_2SIO_status==0) )
-    host_due_serial_irq = 1;
-}
-#endif
-
-
 uint32_t host_get_random()
 {
   delayMicroseconds(1);
@@ -587,16 +695,15 @@ void host_setup()
   pinMode(19, INPUT_PULLUP);
   
   // attach interrupts
-  attachInterrupt(digitalPinToInterrupt(21), interrupt_isr, FALLING); // STOP
-  attachInterrupt(digitalPinToInterrupt(52), interrupt_isr, FALLING); // RESET
-  attachInterrupt(digitalPinToInterrupt(53), interrupt_isr, FALLING); // CLR
-  attachInterrupt(digitalPinToInterrupt(32), interrupt_isr, FALLING); // AUX2 UP
-  attachInterrupt(digitalPinToInterrupt(33), interrupt_isr, FALLING); // AUX2 DOWN
+  switches_setup();
+
+  // at 9600 baud with 1 stop bit it takes 1/9600*(8+1)=0.0009375 seconds to
+  // receive one character, so a byte should have been received 1ms (1000 microseconds)
+  // after we get an interrupt signaling activity on the serial line
+  timer_setup(1000);
 
   // interrupt to see activity on serial RX pin
-#if USE_IRQ>0
-  attachInterrupt(digitalPinToInterrupt(19), serial_isr, RISING);
-#endif
+  attachInterrupt(digitalPinToInterrupt(19), serial_interrupt, RISING);
 
   // set mask for bits that will be written to via REG_PIOX_OSDR
   REG_PIOC_OWDR = 0xFFF00C03;  // address bus (16 bit)
@@ -619,8 +726,6 @@ void host_setup()
 
   // restore HLDA status light to what it was before
   if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
-
-  host_due_stop_request = 0;
 }
 
 

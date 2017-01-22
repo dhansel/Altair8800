@@ -20,14 +20,23 @@ static const byte halfCarryTableSub[] = { 1, 0, 0, 0, 1, 1, 1, 0 };
 #define setHalfCarryBitAdd(opd1, opd2, res) setHalfCarryBit(halfCarryTableAdd[((((opd1) & 0x08) / 2) | (((opd2) & 0x08) / 4) | (((res) & 0x08) / 8)) & 0x07])
 #define setHalfCarryBitSub(opd1, opd2, res) setHalfCarryBit(halfCarryTableSub[((((opd1) & 0x08) / 2) | (((opd2) & 0x08) / 4) | (((res) & 0x08) / 8)) & 0x07])
 
+static const byte parity_table[256] = 
+  {1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 
+   0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 
+   0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 
+   1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 
+   0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 
+   1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 
+   1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 
+   0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1};
+
 
 inline void setStatusBits(byte value)
 {
   byte b;
-  static const byte bit_table[16] = {0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4};
-  b = regS & ~(PS_ZERO|PS_SIGN|PS_PARITY);
 
-  if( !((bit_table[value&0x0f]+bit_table[value/16]) & 1) ) b |= PS_PARITY;
+  b = regS & ~(PS_ZERO|PS_SIGN|PS_PARITY);
+  if( parity_table[value] ) b |= PS_PARITY;
   if( value==0 ) b |= PS_ZERO;
   b |= (value & PS_SIGN);
 
@@ -53,6 +62,7 @@ inline uint16_t MEM_READ_WORD(uint16_t addr)
       host_set_addr_leds(addr);
       l = MREAD(addr);
       addr++;
+      host_set_addr_leds(addr);
       h = MREAD(addr);
       host_set_data_leds(h);
       return l | (h * 256);
@@ -76,6 +86,7 @@ inline uint16_t MEM_WRITE_WORD(uint16_t addr, uint16_t v)
       b = v & 255;
       MWRITE(addr, b);
       addr++;
+      host_set_addr_leds(addr);
       b = v / 256;
       MWRITE(addr, b);
       host_set_data_leds(b);
@@ -125,6 +136,7 @@ void popStackSlow(byte *valueH, byte *valueL)
       host_set_addr_leds(regSP);                \
       MWRITE(regSP, valueH);                    \
       regSP--;                                  \
+      host_set_addr_leds(regSP);                \
       MWRITE(regSP, valueL);                    \
       host_clr_status_led_STACK();              \
     }                                           \
@@ -138,6 +150,7 @@ void popStackSlow(byte *valueH, byte *valueL)
       host_set_addr_leds(regSP);                     \
       valueL = MREAD(regSP);                         \
       regSP++;                                       \
+      host_set_addr_leds(regSP);                     \
       valueH = host_set_data_leds(MREAD(regSP));     \
       regSP++;                                       \
       host_clr_status_led_STACK();                   \

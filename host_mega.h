@@ -5,28 +5,17 @@
 #include <avr/pgmspace.h>
 
 // Mega2650: 8k SRAM, use 6k for emulated RAM
-#define MEMSIZE 4096+2048
+#define MEMSIZE (4096+2048)
 
 #define HOST_STORAGESIZE 4096 // have 4k EEPROM
 #define HOST_BUFFERSIZE  0    // have little SRAM so don't buffer
+
+#define PROF_DISPLAY_INTERVAL 100000
 
 #define host_set_addr_leds(v)  (PORTA=((v) & 0xff), PORTC=((v) / 256))
 #define host_read_addr_leds(v) (PORTA | (PORTC * 256))
 #define host_set_data_leds(v)  PORTL=(v)
 #define host_read_data_leds()  PORTL
-
-extern byte host_mega_stop_request;
-#define host_stop_request_check()   (host_mega_stop_request ? host_mega_stop_request : ((PIND&0x0D)<0x0D || (PINE&0x30)<0x30))  /* STOP, RESET, CLR, AUX2 up or AUX2 down */
-#define host_stop_request_clear()   host_mega_stop_request = 0
-#define host_stop_request_set(w)    host_mega_stop_request = w;
-
-#if USE_IRQ>0
-#define host_serial_irq_check()       (host_read_status_led_INTE() && (reg_2SIO_ctrl & 0x80) && (reg_2SIO_status==0) && Serial.available())
-#define host_serial_irq_clear()       while(0)
-#else
-#define host_serial_irq_check()       false
-#define host_serial_irq_clear()       while(0)
-#endif
 
 #define host_set_status_led_INT()     PORTB |=  0x01
 #define host_set_status_led_WO()      PORTB &= ~0x02
@@ -57,6 +46,7 @@ extern byte host_mega_stop_request;
 #define host_read_status_led_WAIT() status_wait
 #define host_read_status_led_M1()   PORTB&0x20
 #define host_read_status_led_INTE() PORTD&0x80
+#define host_read_status_led_HLTA() PORTB&0x08
 
 #define host_set_status_leds_READMEM()       PORTB |=  0x82
 #define host_set_status_leds_READMEM_M1()    PORTB |=  0xA2; 
@@ -87,5 +77,6 @@ inline byte host_mega_read_switches(byte highlow)
 
 bool host_read_function_switch(byte inputNum);
 
+#define host_check_interrupts() { if( Serial.available() ) altair_receive_serial_data(Serial.read()); }
 
 #endif

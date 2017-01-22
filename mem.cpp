@@ -61,7 +61,10 @@ void mem_unprotect(uint16_t a)
 
 void mem_set_ram_limit(uint16_t a)
 {
-  mem_ram_limit = a;
+  if( a < MEMSIZE )
+    mem_ram_limit = a;
+  else
+    mem_ram_limit = MEMSIZE-1;
 }
 
 

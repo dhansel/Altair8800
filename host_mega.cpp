@@ -10,6 +10,11 @@
 #error Arduino MEGA port does not support disk drives. Set NUM_DRIVES to 0 in config.h
 #endif
 
+#if USE_THROTTLE>0
+#error Throttling neither supported nor necessary for Arduino MEGA. Set USE_THROTTLE to 0 in config.h
+#endif
+
+
 /*
   Runs emulation at about 0.5 Mhz clock speed (about 1/4 speed of original Altair8800)
 
@@ -68,18 +73,6 @@ uint16_t host_read_status_leds()
 //------------------------------------------------------------------------------------------------------
 
 
-static const byte input_switch_pins[16] = {20, 21, 4, 5, 6, 7, 8, 9, 18, 19, 16, 17, 14, 15, 3, 2};
-
-bool host_read_function_switch(byte inputNum)
-{
-  // digitalRead returns 0 if switch is on
-  return !digitalRead(input_switch_pins[inputNum]);
-}
-
-
-//------------------------------------------------------------------------------------------------------
-
-
 void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
 {
   for(uint32_t i=0; i<len; i++) 
@@ -120,13 +113,109 @@ void host_move_data(uint32_t to, uint32_t from, uint32_t len)
 
 uint32_t host_get_random()
 {
-  return (uint32_t) random(-2147483647,2147483648);
+  return (((uint32_t) random(0,65535)) * 65536l | random(0,65535));
 }
 
 
 // --------------------------------------------------------------------------------------------------
 
-extern byte host_mega_stop_request = 0;
+volatile static uint16_t switches_pulse = 0;
+volatile static uint16_t switches_debounced = 0;
+static uint32_t debounceTime[16];
+static const byte function_switch_pin[16] = {20, 21, 4, 5, 6, 7, 8, 9, 18, 19, 16, 17, 14, 15, 3, 2};
+static const uint16_t function_switch_irq[16] = {0, INT_SW_STOP, 0, 0, 0, 0, 0, 0, INT_SW_RESET, INT_SW_CLR, 
+                                                 0, 0, 0, 0, INT_SW_AUX2UP, INT_SW_AUX2DOWN};
+
+
+static void switch_check(byte i)
+{
+  if( millis()>debounceTime[i] )
+    {
+      uint16_t bitval = 1<<i;
+      bool d1 = !digitalRead(function_switch_pin[i]);
+      bool d2 = (switches_debounced & bitval) ? true : false;
+
+      if( d1 && !d2 ) 
+        {
+          switches_debounced |= bitval;
+          switches_pulse     |= bitval;
+          if( function_switch_irq[i] ) altair_interrupt(function_switch_irq[i]);
+          debounceTime[i] = millis() + 100;
+        }
+      else if( !d1 && d2 ) 
+        {
+          switches_debounced &= ~bitval;
+          switches_pulse     &= ~bitval;
+          debounceTime[i] = millis() + 100;
+        }
+    }
+}
+
+
+bool host_read_function_switch(byte i)
+{
+  return !digitalRead(function_switch_pin[i]);
+}
+
+
+bool host_read_function_switch_debounced(byte i)
+{
+  if( function_switch_irq[i]==0 ) switch_check(i);
+  return (switches_debounced & (1<<i)) ? true : false;
+}
+
+
+bool host_read_function_switch_edge(byte i)
+{
+  if( function_switch_irq[i]==0 ) switch_check(i);
+  uint16_t bitval = 1<<i;
+  bool b = switches_pulse & bitval ? true : false;
+  if( b ) switches_pulse &= ~bitval;
+  return b;
+}
+
+
+uint16_t host_read_function_switches_edge()
+{
+  for(byte i=0; i<16; i++) 
+    if( function_switch_irq[i]==0 ) 
+      switch_check(i);
+
+  uint16_t res = switches_pulse;
+  switches_pulse &= ~res;
+  return res;
+}
+
+
+static void switch_interrupt(int i)
+{
+  switch_check(i);
+}  
+
+
+static void switch_interrupt1() { switch_interrupt(SW_STOP);     }
+static void switch_interrupt2() { switch_interrupt(SW_RESET);    }
+static void switch_interrupt3() { switch_interrupt(SW_CLR);      }
+static void switch_interrupt4() { switch_interrupt(SW_AUX2UP);   }
+static void switch_interrupt5() { switch_interrupt(SW_AUX2DOWN); }
+
+
+static void switches_setup()
+{
+  attachInterrupt(digitalPinToInterrupt(function_switch_pin[SW_STOP]),     switch_interrupt1, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(function_switch_pin[SW_RESET]),    switch_interrupt2, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(function_switch_pin[SW_CLR]),      switch_interrupt3, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(function_switch_pin[SW_AUX2UP]),   switch_interrupt4, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(function_switch_pin[SW_AUX2DOWN]), switch_interrupt5, CHANGE);
+
+  delay(1);
+  for(byte i=0; i<16; i++) debounceTime[i]=0;
+  switches_debounced = 0;
+  switches_pulse     = 0;
+}
+
+
+// --------------------------------------------------------------------------------------------------
 
 void host_setup()
 {
@@ -139,8 +228,13 @@ void host_setup()
   for(i=10; i<14; i++) pinMode(i, OUTPUT);
   for(i=22; i<54; i++) pinMode(i, OUTPUT);
 
-  //TODO: Find good way to initialize random number generator
-  randomSeed(micros());
+  switches_setup();
+
+  // TODO: Find a way to initialize random number generator. Unfortunately 
+  //       this is hard since all analog pins are connected and therefore the 
+  //       usual analogRead(0) method always returns either 0 or 1023, depending
+  //       on the setting of SW0
+  randomSeed(analogRead(0));
 }
 
 #endif

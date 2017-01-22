@@ -63,6 +63,21 @@ void prof_print_details()
 #endif
 
 
+static void prof_reset()
+{
+#if USE_THROTTLE>0
+  // if using throttling then we call prof_check only every 10000
+  // instructions, so scale the counter accordingly
+  prof_counter = PROF_DISPLAY_INTERVAL / 10000;
+#else
+  prof_counter = PROF_DISPLAY_INTERVAL;
+#endif
+  
+  prof_cycle_counter = 0;
+  prof_timer = millis();
+}
+
+
 void prof_print()
 {
   unsigned long d = millis() - prof_timer;
@@ -76,9 +91,7 @@ void prof_print()
   Serial.print(F(" MHz = "));
   Serial.print(int(mhz/0.02+.5));
   Serial.println(F("%"));
-  prof_cycle_counter = 0;
-  prof_timer = millis();
-  prof_counter = PROF_DISPLAY_INTERVAL;
+  prof_reset();
 
 #if USE_PROFILING_DETAIL>0
   if( ++prof_detail_counter == 10 )
@@ -95,13 +108,14 @@ void prof_toggle()
   profiling = !profiling;
   Serial.print(F("\nProfiling is "));
   Serial.print(profiling ? F("ON\n") : F("off\n"));
-  prof_cycle_counter = 0;
-  prof_counter = PROF_DISPLAY_INTERVAL;
-#if USE_PROFILING_DETAIL>0
-  prof_reset_details();
-#endif
-  prof_timer = millis();
+  prof_reset();
 }
 
+#else
+
+#if USE_THROTTLE>0
+#error USE_THROTTLE requires USE_PROFILING
+#endif
 
 #endif
+

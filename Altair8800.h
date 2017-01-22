@@ -33,15 +33,27 @@
 #define ST_HLDA    0x0400
 #define ST_WAIT    0x0800
 
+#define INT_SW_STOP     0x8000
+#define INT_SW_RESET    0x4000
+#define INT_SW_CLR      0x2000
+#define INT_SW_AUX2UP   0x1000
+#define INT_SW_AUX2DOWN 0x0800
+#define INT_SW          0xff00
+
+#define INT_SERIAL      0x0001
+
 extern word status_wait;
 extern word status_inte;
-extern byte reg_2SIO_ctrl, reg_2SIO_status;
 
 byte altair_in(byte addr);
 void altair_out(byte addr, byte val);
 void altair_hlt();
+void altair_interrupt(uint16_t i);
 bool altair_isreset();
 void altair_wait_step();
 void altair_set_outputs(uint16_t a, byte v);
+void altair_receive_serial_data(byte b);
+bool altair_serial_available();
+int  altair_serial_read();
 
 #endif

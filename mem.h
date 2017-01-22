@@ -25,11 +25,11 @@ void mem_unprotect(uint16_t a);
 #endif
 
 #if MEMSIZE < 0x10000
-// we set the RAM limit to 0xBFFF when installing the extended BASIC ROM
-#define MREAD(a)    ((a)>=0xC000 && mem_ram_limit==0xBFFF ? prog_basic_read_16k(a) : ((a) < MEMSIZE ? Mem[a] : 0x00))
+// if we have less than 64k of RAM then always map ROM basic to 0xC000-0xFFFF
+#define MREAD(a)    ((a)>=0xC000 ? prog_basic_read_16k(a) : ((a) < MEMSIZE ? Mem[a] : 0x00))
 #define MWRITE(a,v) {if( (a)<=mem_ram_limit && !MEM_IS_PROTECTED(a) ) Mem[a]=v;}
 #else
-// If we have 64k memory then we just copy ROM basic to the upper 16k and write-protect
+// If we have 64k of RAM then we just copy ROM basic to the upper 16k and write-protect
 // that area.  Faster to check the address on writing than reading since there are far more
 // reads than writes. Also we can skip memory bounds checking because addresses are 16 bit.
 #define MREAD(a)    (Mem[a])

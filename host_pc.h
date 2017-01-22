@@ -5,11 +5,14 @@
 #define HOST_STORAGESIZE 0x80000 /* 512k */
 #define HOST_BUFFERSIZE  0x400   /* 1k */
 
-#define PROF_DISPLAY_INTERVAL 50000000
-
 // PC host is always standalone
 #undef  STANDALONE
 #define STANDALONE 1
+
+// never throttle on PC host (easier for testing)
+#undef  USE_THROTTLE
+#define USE_THROTTLE 0
+#define PROF_DISPLAY_INTERVAL 10000000
 
 #undef  MAX_BREAKPOINTS
 #define MAX_BREAKPOINTS 10
@@ -19,9 +22,8 @@ extern uint16_t status_leds;
 extern uint16_t addr_leds;
 extern byte stop_request;
 
-#define host_read_sense_switches()           0
-#define host_read_addr_switches()            0
-#define host_read_function_switch(switchNum) false
+#define host_read_sense_switches()             0
+#define host_read_addr_switches()              0
 
 #define host_set_status_led_INT()     status_leds |= ST_INT
 #define host_set_status_led_WO()      status_leds &= ~ST_WO
@@ -51,6 +53,7 @@ extern byte stop_request;
 
 #define host_read_status_led_WAIT()   status_wait
 #define host_read_status_led_M1()     (status_leds & ST_M1)
+#define host_read_status_led_HLTA()   (status_leds & ST_HLTA)
 #define host_read_status_led_INTE()   status_inte
 
 // reading from memory (MEMR on, WO on)
@@ -74,13 +77,6 @@ extern byte stop_request;
 #define host_set_data_leds(v) data_leds = v
 #define host_read_data_leds() data_leds
 
-#define host_stop_request_check()     stop_request
-#define host_stop_request_clear()     stop_request = 0
-#define host_stop_request_set(w)      stop_request = w
-
-#define host_serial_irq_check()       (host_read_status_led_INTE() && (reg_2SIO_ctrl & 0x80) && (reg_2SIO_status==0) && Serial.available())
-#define host_serial_irq_clear()       while(0)
-
-void host_init();
+void host_check_interrupts();
 
 #endif

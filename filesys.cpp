@@ -1,6 +1,7 @@
 #include "filesys.h"
 #include "host.h"
 #include "numsys.h"
+#include "Altair8800.h"
 
 
 struct DirEntryStruct
@@ -527,8 +528,8 @@ void filesys_manage()
       filesys_print_dir();
       Serial.print(F("\n\nCommand (dFrx): "));
       
-      while( !Serial.available() );
-      switch( Serial.read() )
+      while( !altair_serial_available() ) delay(50);
+      switch( altair_serial_read() )
         {
         case 27:
         case 'x': 
@@ -544,8 +545,8 @@ void filesys_manage()
             Serial.print(F("\nReally delete file with id "));
             numsys_print_byte(i);
             Serial.print(F(" (y/n)? "));
-            while( !Serial.available() );
-            if( Serial.read()=='y' )
+            while( !altair_serial_available() );
+            if( altair_serial_read()=='y' )
               filesys_delete(i);
             break;
           }
@@ -600,8 +601,8 @@ void filesys_manage()
         case 'F': 
           {
             Serial.print(F("\nReally re-format and lose all data (y/n)? "));
-            while( !Serial.available() );
-            if( Serial.read()=='y' )
+            while( !altair_serial_available() );
+            if( altair_serial_read()=='y' )
               dir_set_num_entries(0);
             break;
           }

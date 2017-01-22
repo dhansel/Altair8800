@@ -25,6 +25,7 @@ Solution: Have 64k minus one byte of memory. That will stop the
 #define HOST_STORAGESIZE due_storagesize
 #define HOST_BUFFERSIZE  0x100
 
+
 extern uint32_t due_storagesize;
 
 // ------------------------------------------ switches
@@ -38,8 +39,6 @@ inline byte host_read_sense_switches()
 }
 
 uint16_t host_read_addr_switches();
-
-bool host_read_function_switch(byte switchNum);
 
 
 // ------------------------------------------ status LEDs
@@ -74,7 +73,8 @@ bool host_read_function_switch(byte switchNum);
 #define host_clr_status_led_HLDA()    REG_PIOB_CODR = 1<<26
 
 #define host_read_status_led_WAIT()   status_wait
-#define host_read_status_led_M1()     REG_PIOC_PDSR & (1<<23)
+#define host_read_status_led_M1()     (REG_PIOC_PDSR & (1<<23))
+#define host_read_status_led_HLTA()   (REG_PIOC_PDSR & (1<<25))
 #define host_read_status_led_INTE()   status_inte
 
 // reading from memory (MEMR on, WO on)
@@ -114,24 +114,9 @@ uint16_t host_read_addr_leds();
 byte host_read_data_leds();
 
 
-// ---------------------------------------------------- check for serial interrupt
+// ---------------------------------------------------- interrupts
 
-#if USE_IRQ>0
-extern volatile word host_due_serial_irq;
-#define host_serial_irq_check()   (host_due_serial_irq && Serial.available())
-#define host_serial_irq_clear()   host_due_serial_irq = false
-#else
-#define host_serial_irq_check()   false
-#define host_serial_irq_clear()   while(0)
-#endif
-
-// ---------------------------------------------------- check for stop request
-
-
-extern volatile word host_due_stop_request;
-#define host_stop_request_check() host_due_stop_request
-#define host_stop_request_clear() host_due_stop_request = 0
-#define host_stop_request_set(w)  host_due_stop_request = w
-
+// On the Due we are using real interrupts so nothing needs o be done here
+#define host_check_interrupts() while(0)
 
 #endif

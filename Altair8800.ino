@@ -16,25 +16,22 @@
 #include "prog_tools.h"
 
 
-#define DEBOUNCE_TIMEOUT 100
-
 #define BIT(n) (1<<(n))
 
-uint16_t      cswitch = 0, cswitch_currentstate = 0;
-uint16_t      dswitch = 0;
-uint16_t      debounceState;
-unsigned long debounceTime[16];
+uint16_t cswitch = 0;
+uint16_t dswitch = 0;
 
 uint16_t p_regPC = 0xFFFF;
 byte serial_panel = false, serial_debug = false, serial_input = false; 
 byte capture_device = 0, capture_fid = 0, tape_basic_fid = 0;
 uint32_t tape_basic_last_op = 0;
 
-word check_stop_ctr  = 0;
 word status_wait = false;
 word status_inte = false;
 bool have_ps2    = false;
-byte reg_2SIO_ctrl = 0, reg_2SIO_status = 0;
+byte altair_2SIO_ctrl = 0, altair_2SIO_status = 0;
+volatile int16_t  altair_2SIO_data  = -1;
+volatile uint16_t altair_interrupts = 0;
 
 void print_panel_serial();
 void print_dbg_info();
@@ -58,6 +55,12 @@ bool tape_basic_check_timeout();
 #define DBG_FILEOPS4(lvl, s1, s2, s3, s4) while(0)
 #endif
 
+#define ST_2SIO_RDRF    0x01 /* receive register full (character received) */
+#define ST_2SIO_TDRE    0x02 /* send register empty (ready for next byte) */
+#define ST_2SIO_OVRN    0x20 /* data overrun (received character when previous not read) */
+#define ST_2SIO_OVRN2   0x40 /* used in the simulator to signal that OVRN is upcoming */
+#define ST_2SIO_INT     0x80 /* interrupt signaled */
+
 #define CAPTURE_SIO     1
 #define CAPTURE_2SIO1   2
 #define CAPTURE_TAPE    3
@@ -76,6 +79,28 @@ void altair_set_outputs(uint16_t a, byte v)
 }
 
 
+void altair_wait_reset()
+{
+  // set bus/data LEDs on, status LEDs off
+  altair_set_outputs(0xffff, 0xff);
+  host_clr_status_led_INT();
+  host_set_status_led_WO();
+  host_clr_status_led_STACK();
+  host_clr_status_led_HLTA();
+  host_clr_status_led_OUT();
+  host_clr_status_led_M1();
+  host_clr_status_led_INP();
+  host_clr_status_led_MEMR();
+  host_clr_status_led_INTE();
+  host_clr_status_led_PROT();
+
+  // wait while RESET switch is held
+  while( host_read_function_switch_debounced(SW_RESET) );
+
+  cswitch |= BIT(SW_RESET);
+}
+
+
 void update_hlda_led()
 {
   if( capture_fid>0 )
@@ -87,6 +112,7 @@ void update_hlda_led()
 
 void read_inputs()
 {
+  cswitch = 0;
   read_inputs_panel();
   read_inputs_serial();
   print_panel_serial();
@@ -96,6 +122,8 @@ void read_inputs()
 
 void process_inputs()
 {  
+  //if( cswitch!=0 ){Serial.print("cswitch="); Serial.println(cswitch); }
+
   if( cswitch & (BIT(SW_DEPOSIT) | BIT(SW_DEPNEXT)) )
     {
       if( cswitch & BIT(SW_DEPNEXT) ) regPC++;
@@ -295,7 +323,6 @@ void process_inputs()
           {
             regPC = prog_tools_copy_statustest(Mem);
             altair_set_outputs(regPC, MREAD(regPC));
-            host_set_status_led_WAIT();
             p_regPC = ~regPC;
             break;
           }
@@ -304,7 +331,6 @@ void process_inputs()
           {
             regPC = prog_tools_copy_serialirqtest(Mem);
             altair_set_outputs(regPC, MREAD(regPC));
-            host_set_status_led_WAIT();
             p_regPC = ~regPC;
             break;
           }
@@ -451,6 +477,11 @@ void process_inputs()
       update_hlda_led();
     }
 
+  if( cswitch & BIT(SW_RESET) )
+    {
+      altair_wait_reset();
+    }
+
   if( cswitch & BIT(SW_CLR) )
     {
       if( capture_fid>0 )
@@ -491,79 +522,17 @@ void altair_wait_step()
 }
 
 
-void read_momentary_input_panel(byte inputNum)
-{
-  uint16_t inputBit, v;
-
-  // read pin state, inverting result (internal pullup)
-  inputBit = 1 << inputNum;
-  v = host_read_function_switch(inputNum) ? inputBit : 0;
-
-  // debounce
-  if( millis()>debounceTime[inputNum] )
-    {
-      if( v != (debounceState & inputBit) )
-        {
-          debounceState = v ? (debounceState | inputBit) : (debounceState & ~inputBit);
-          debounceTime[inputNum] = millis() + DEBOUNCE_TIMEOUT;
-        }
-    }
-  else
-    v = debounceState & inputBit;
-
-  // edge trigger
-  cswitch &= ~inputBit;
-  if( inputBit == BIT(SW_SLOW) )
-    {
-      // "Slow" switch is not just a trigger
-      cswitch |= v;
-    }
-  else if( inputBit == BIT(SW_RESET) )
-    {
-      // "Reset" switch triggers on high-low flank
-      // and sets all outputs high as long as it is held up
-      if( v )
-        {
-          altair_set_outputs(0xffff, 0xff);
-          host_clr_status_led_INT();
-          host_set_status_led_WO();
-          host_clr_status_led_STACK();
-          host_clr_status_led_HLTA();
-          host_clr_status_led_OUT();
-          host_clr_status_led_M1();
-          host_clr_status_led_INP();
-          host_clr_status_led_MEMR();
-          host_clr_status_led_INTE();
-          host_clr_status_led_PROT();
-          //host_clr_status_led_HLDA();
-          while( millis()<debounceTime[inputNum] || host_read_function_switch(inputNum) );
-          debounceState &= ~inputBit;
-          debounceTime[inputNum] = millis() + DEBOUNCE_TIMEOUT;
-          altair_set_outputs(0x0000, 0x00);
-          host_set_status_led_WAIT();
-          cswitch |= BIT(SW_RESET);
-        }
-      else
-        cswitch &= ~BIT(SW_RESET);
-    }
-  else if( v && !(cswitch_currentstate & v) )
-    {
-      cswitch |= v;
-      cswitch_currentstate |= v;
-    }
-  else
-    cswitch_currentstate = (cswitch_currentstate & ~inputBit) ^ v;
-}
-
-
 void read_inputs_panel()
 {
-  cswitch = 0;
-  byte i;
-  for(i=0; i<16; i++) 
-    read_momentary_input_panel(i);
+  // we react on positive edges on the function switches...
+  cswitch = host_read_function_switches_edge();
+
+  // ...except for the SLOW switch which is active as long as it is held down
+  if( host_read_function_switch_debounced(SW_SLOW) ) cswitch |= BIT(SW_SLOW);
 
 #if STANDALONE==0
+  // address switches on Mega are connected to analog inputs which are free
+  // floating and therefore random when not connected
   dswitch = host_read_addr_switches();
 #endif
 }
@@ -576,7 +545,7 @@ void read_inputs_serial()
   if( !serial_input )
     return;
 
-  int data = Serial.read();
+  int data = altair_serial_read();
   if( data<0 )
     return;
 #if STANDALONE>0
@@ -633,8 +602,8 @@ void read_inputs_serial()
           Serial.print(F(": "));
           addr += disassemble(Mem, addr);
           Serial.println();
-          while( !Serial.available() ) delay(100);
-          go = (Serial.read() == 0x20);
+          while( !altair_serial_available() ) delay(100);
+          go = (altair_serial_read() == 0x20);
         }
       p_regPC = ~regPC;
       print_dbg_info();
@@ -659,9 +628,9 @@ void read_inputs_serial()
               Serial.write(MREAD(addr+i)<32 || MREAD(addr+i)>126 ? '.' : MREAD(addr+i));
             }
           Serial.println();
-          while( !Serial.available() ) delay(100);
+          while( !altair_serial_available() ) delay(100);
           addr += 16;
-          go = (Serial.read() == 0x20);
+          go = (altair_serial_read() == 0x20);
         }
       p_regPC = ~regPC;
       print_dbg_info();
@@ -865,8 +834,8 @@ void reset(bool resetPC)
       p_regPC    = 0xffff;
     }
 
-  reg_2SIO_ctrl   = 0;
-  reg_2SIO_status = 0;
+  altair_2SIO_ctrl   = 0;
+  altair_2SIO_status = 0;
 
 #if STANDALONE>0
   if( cswitch & BIT(SW_STOP) )
@@ -900,105 +869,141 @@ void reset(bool resetPC)
   //serial_panel = b & 0x40 ? true : false;
   serial_input = b & 0x20 ? true : false;
 #endif
+
+  altair_interrupts = 0;
 }
 
 
-void check_stop()
+void altair_interrupt(uint16_t i)
 {
-  // only read inputs if STOP or RESET are on or ESC was sent via serial
-  if( host_stop_request_check() || (serial_input && Serial.available() && (Serial.peek()==27)) )
+  altair_interrupts |= i;
+}
+
+
+void switch_interrupt_handler()
+{
+  if( altair_interrupts & INT_SW_STOP )
     {
-      if( serial_input && Serial.available() )
-        {
-          read_inputs_serial();
-        }
-      else if( host_stop_request_check()==128 )
-        {
-          // Stop request was caused by an ESC that was read in the altair_in function
-          cswitch = BIT(SW_STOP);
-        }
-      else if( host_read_function_switch(SW_RESET) )
-        {
-          while( !(cswitch & BIT(SW_RESET)) )
-            read_inputs_panel(); 
-        }
+      altair_interrupts &= ~INT_SW_STOP;
+      host_clr_status_led_MEMR();
+      host_clr_status_led_WO();
+      host_set_status_led_WAIT();
+      if( !serial_debug ) 
+        {}
+      else if( serial_panel )
+        Serial.print(F("\033[2J\033[14B\n------ STOP ------\n\n"));
       else
-        {
-          int i;
-          
-          for(i=0; i<16; i++)
-            if( (cswitch_currentstate & BIT(i)) && (millis()>debounceTime[i]) )
-              cswitch_currentstate &= ~BIT(i);
-          
-          read_inputs_panel();
-          
-          for(i=0; i<16; i++)
-            if( (cswitch_currentstate & BIT(i)) )
-              debounceTime[i] = millis()+500;
-        }
-
-      host_stop_request_clear();
-
-      if( cswitch & BIT(SW_RESET) )
-        {
-          reset(true);
-          host_clr_status_led_WAIT();
-          cswitch &= ~BIT(SW_RESET);
-        }
-      else if( cswitch & BIT(SW_STOP) )
-        {
-          host_clr_status_led_MEMR();
-          host_clr_status_led_WO();
-          host_set_status_led_WAIT();
-          if( !serial_debug ) 
-            {}
-          else if( serial_panel )
-            Serial.print(F("\033[2J\033[14B\n------ STOP ------\n\n"));
-          else
-            Serial.print(F("\n\n------ STOP ------\n\n"));
-
-          p_regPC = ~regPC;
-        }
-      else
-        process_inputs();
+        Serial.print(F("\n\n------ STOP ------\n\n"));
+      p_regPC = ~regPC;
+    }
+  else if( altair_interrupts & INT_SW_RESET )
+    {
+      altair_wait_reset();
+      reset(true);
+    }
+  else
+    {
+      cswitch = 0;
+      if( altair_interrupts & INT_SW_CLR )      { cswitch |= BIT(SW_CLR); altair_interrupts &= ~INT_SW_CLR; }
+      if( altair_interrupts & INT_SW_AUX2UP )   { cswitch |= BIT(SW_AUX2UP); altair_interrupts &= ~INT_SW_AUX2UP; }
+      if( altair_interrupts & INT_SW_AUX2DOWN ) { cswitch |= BIT(SW_AUX2DOWN); altair_interrupts &= ~INT_SW_AUX2DOWN; }
+#if STANDALONE==0
+      dswitch = host_read_addr_switches();
+#endif
+      process_inputs();
     }
 }
 
 
-byte serial_irq_handler()
+// called by the host if serial data received
+void altair_receive_serial_data(byte b)
 {
-  byte opcode = 0xff;
-  host_serial_irq_clear();
-  reg_2SIO_status = 1;
-  
-  // interrupt => get opcode from IRQ_handler
-  host_set_status_led_M1();
+  if( b==27 && serial_input && !host_read_status_led_WAIT() )
+    {
+      // if we have serial input enabled then the the ESC key works as STOP
+      altair_interrupt(INT_SW_STOP);
+    }
+  else
+    {
+      // store received data (the 2SIO board can only buffer one byte)
+      if( altair_2SIO_status & ST_2SIO_RDRF )
+        {
+          // overrun occurred
+          // according to 2SIO (and 6850 UART) documentation, the overrun is not
+          // signaled until the previous (properly received) byte has been read.
+          // so we set a flag here to signal that as soon as the current byte is
+          // read we have to signal the overrun condition.
+          altair_2SIO_status |= ST_2SIO_OVRN2;
+        }
+      else
+        {
+          altair_2SIO_data = b;
+          altair_2SIO_status |= ST_2SIO_RDRF;
+        }
 
+      // trigger interrupt if interrupts are enabled
+      if( host_read_status_led_INTE() && (altair_2SIO_ctrl & 0x80) && (altair_2SIO_status & ST_2SIO_INT)==0 )
+        {
+          altair_2SIO_status |= ST_2SIO_INT;
+          altair_interrupt(INT_SERIAL);
+        }
+    }
+}
+
+
+bool altair_serial_available()
+{
+  host_check_interrupts();
+  return (altair_2SIO_status & ST_2SIO_RDRF)!=0;
+}
+
+
+int altair_serial_read()
+{
+  if( altair_serial_available() )
+    {
+      altair_2SIO_status &= ~(ST_2SIO_INT | ST_2SIO_RDRF | ST_2SIO_OVRN);
+      if( altair_2SIO_status & ST_2SIO_OVRN2 ) 
+        { 
+          // there was an overrun condition and the last properly received byte 
+          // has just been read => signal OVRN now
+          altair_2SIO_status |= ST_2SIO_OVRN;
+          altair_2SIO_status &= ST_2SIO_OVRN2;
+        }
+      return altair_2SIO_data;
+    }
+  else
+    return -1;
+}
+
+
+static byte altair_interrupt_handler()
+{
+  byte opcode = 0;
+
+  host_set_status_led_M1();
   host_clr_status_led_INTE();
   host_set_status_led_INT();
   host_clr_status_led_MEMR();
-
-  if( host_read_status_led_WAIT() )
+  
+  if( altair_interrupts & INT_SERIAL )
     {
-      altair_set_outputs(regPC, opcode);
-      if( serial_debug ) { Serial.print(F("\nInterrupt! opcode=")); numsys_print_byte(opcode); Serial.println(); }
+      opcode = 0xff;
+      altair_interrupts &= ~INT_SERIAL;
+    }
 
-      if( serial_input )
-        {
-          // unfortunately the character(s) sent over serial would just be consumed
-          // by our serial_input() routine (and could possibly execute a command there)
-          // so the best we can do is to just need to flush them now :(
-          while( Serial.available() ) Serial.read();
-        }
-      
+  if( opcode!=0 && host_read_status_led_WAIT() )
+    {
+      if( serial_debug ) { Serial.print(F("\nInterrupt! opcode=")); numsys_print_byte(opcode); Serial.println(); }
+      altair_set_outputs(regPC, opcode);
       altair_wait_step();
     }
   else
     host_set_data_leds(opcode);
-
-  host_serial_irq_clear();
+  
   host_clr_status_led_INT();
   host_clr_status_led_M1();
+
   return opcode;
 }
 
@@ -1011,44 +1016,39 @@ bool altair_isreset()
 
 void altair_hlt()
 {
+  host_set_status_led_HLTA();
+
   if( !host_read_status_led_WAIT() )
     {
       host_set_addr_leds(0xffff);
       host_set_data_leds(0xff);
-      host_set_status_led_HLTA();
       host_set_status_led_MEMR();
       host_set_status_led_WAIT();
-      while( !host_read_function_switch(SW_RESET) && (Serial.peek()!=27) && !host_serial_irq_check() );
-
-      if( host_read_function_switch(SW_RESET) )
+      altair_interrupts = 0;
+      while( (altair_interrupts & (~INT_SW|INT_SW_RESET))==0 ) host_check_interrupts();
+      if( altair_interrupts & INT_SW_RESET )
         {
           cswitch = 0;
           while( !(cswitch & BIT(SW_RESET)) ) read_inputs_panel();
-          host_set_status_led_WAIT();
         }
-      else if( Serial.peek()==27 ) 
-        read_inputs_serial();
-
-      host_clr_status_led_HLTA();
-      if( host_serial_irq_check() ) host_clr_status_led_WAIT();
+      else if( altair_interrupts & INT_SERIAL )
+        host_clr_status_led_WAIT();
     }
   else
     {
-      host_set_status_led_HLTA();
       host_set_status_led_MEMR();
       altair_set_outputs(0xffff, 0xff);
-      
-      cswitch = 0;
-      while( (cswitch&BIT(SW_RESET))==0 && !host_serial_irq_check() )
+
+      altair_interrupts = 0;
+      while( (altair_interrupts & (~INT_SW|INT_SW_RESET))==0 )
         {
           read_inputs_panel();
-          //read_inputs_serial();
           print_panel_serial();
+          host_check_interrupts();
         }
-
-      host_clr_status_led_HLTA();
     }
 
+  host_clr_status_led_HLTA();
   PROF_ADD_CYCLES(7);
 }
 
@@ -1114,7 +1114,7 @@ byte tape_read_next_byte()
 
       while( go )
         {
-          if( host_stop_request_check() )
+          if( altair_interrupts & INT_SW_STOP )
             break;
           else if( tape_basic_fid>0 )
             {
@@ -1229,6 +1229,7 @@ void altair_out(byte addr, byte data)
 {
   host_set_status_led_OUT();
   host_set_status_led_WO();
+  host_set_addr_leds(addr|addr*256);
   host_set_data_leds(0xff);
 
   switch( addr )
@@ -1284,13 +1285,24 @@ void altair_out(byte addr, byte data)
       {
         // write to control register of first serial device of 88-2SIO
 
-        if( !(reg_2SIO_ctrl & 0x80) && (data & 0x80) )
+        if( !(altair_2SIO_ctrl & 0x80) && (data & 0x80) )
           DBG_FILEOPS(4, "ENABLING interrupts on 2SIO");
-        else if( (reg_2SIO_ctrl & 0x80) && !(data & 0x80) )
+        else if( (altair_2SIO_ctrl & 0x80) && !(data & 0x80) )
           DBG_FILEOPS(4, "disabling interrupts on 2SIO");
 
-        reg_2SIO_ctrl   = data;
-        reg_2SIO_status = 0;
+        // write to control register of 88-2SIO
+        if( (data & 0x03)==0x03 )
+          {
+            // master reset
+            altair_2SIO_ctrl   = 0;
+            altair_2SIO_status = 0;
+          }
+        else
+          {
+            altair_2SIO_ctrl   = data;
+            altair_2SIO_status &= ~ST_2SIO_INT;
+          }
+
         break;
       }
       
@@ -1349,6 +1361,7 @@ byte altair_in(byte addr)
   byte data = 0;
 
   host_set_status_led_INP();
+  host_set_addr_leds(addr | addr*256);
 
   // check the most common cases fist:
   //  - reading 2-SIO control register (i.e. waiting for serial input)
@@ -1365,24 +1378,24 @@ byte altair_in(byte addr)
                 // we're playing back a basic example, those are always 0-terminated
                 // and capture_fid==0xff would not hold if we had
                 // reached the end
-                data |= 0x01;
+                data |= ST_2SIO_RDRF;
               }
             else
               {
                 if( !filesys_eof(capture_fid) )
-                  data |= 0x01;
+                  data |= ST_2SIO_RDRF;
               }
           }
-        else if( Serial.available() )
-          data |= 0x01;
+        else 
+          data |= altair_2SIO_status & (ST_2SIO_RDRF | ST_2SIO_OVRN | ST_2SIO_INT);
 
         if( capture_device==CAPTURE_2SIO1 && capture_fid>0 && capture_fid<0xff && filesys_is_write(capture_fid) )
           {
             if( !filesys_eof(capture_fid) )
-              data |= 0x02;
+              data |= ST_2SIO_TDRE;
           }
         else if( Serial.availableForWrite() )
-          data |= 0x02;
+          data |= ST_2SIO_TDRE;
 
         break;
       }
@@ -1516,11 +1529,8 @@ byte altair_in(byte addr)
           }
         else
           {
-            if( Serial.available() ) 
-              {
-                data = Serial.read();
-                if( data==27 && serial_input ) host_stop_request_set(128);
-              }
+            if( altair_2SIO_status & ST_2SIO_RDRF )
+              data = altair_serial_read();
 
             if( regPC == 0x038A || regPC == 0x0726 )
               {
@@ -1543,7 +1553,6 @@ byte altair_in(byte addr)
           }
         fflush(stdout);
         
-        reg_2SIO_status = 0;
         break;
       }
     }
@@ -1553,6 +1562,8 @@ byte altair_in(byte addr)
       altair_set_outputs(addr| addr*256, data);
       altair_wait_step();
     }
+  else
+    host_set_data_leds(data);
 
   host_clr_status_led_INP();
   return data;
@@ -1571,8 +1582,7 @@ void setup()
   Serial.setTimeout(10000);
 
   cswitch = 0;
-  debounceState = 0;
-  for(i=0; i<16; i++) debounceTime[i] = 0;
+  dswitch = 0;
 
   mem_setup();
   host_setup();
@@ -1597,7 +1607,7 @@ void setup()
       regH  = host_get_random();
       regL  = host_get_random();
 
-      for(uint32_t i=0; i<MEMSIZE/4; i++)
+      for(word i=0; i<MEMSIZE/4; i++)
         ((uint32_t *) Mem)[i] = host_get_random();
     }
 
@@ -1611,42 +1621,95 @@ void loop()
 {
   byte opcode;
 
-  check_stop_ctr = 10000;
-  while( !host_read_status_led_WAIT() )
+  // if we are NOT in WAIT mode then enter the main simulation loop
+  if( !host_read_status_led_WAIT() )
     {
-      // put PC on address bus LEDs
-      host_set_addr_leds(regPC);
+      // clear all switch-related interrupts before starting loop
+      altair_interrupts &= ~INT_SW;
 
-      if( host_serial_irq_check() )
-        opcode = serial_irq_handler();
-      else
+#if USE_THROTTLE>0
+      uint32_t throttle_cycle_ctr = prof_cycle_counter;
+      uint32_t throttle_ctr       = 10000;
+      uint32_t throttle_micros    = micros();
+      uint32_t throttle_delay     = 20;
+#endif
+      while( true )
         {
-          // no interrupt => read opcode, put it on data bus LEDs and advance PC
-          p_regPC = regPC;
-          host_set_status_leds_READMEM_M1();
+          // put PC on address bus LEDs
           host_set_addr_leds(regPC);
-          opcode = MREAD(regPC);
-          host_set_data_leds(opcode);
-          regPC++;
-          host_clr_status_led_M1();
+
+          // check for events that can't be handled by real interrupts
+          // on the host (e.g. serial input on Mega)
+          host_check_interrupts();
+
+          if( altair_interrupts )
+            {
+              // interrupt detected
+              if( altair_interrupts & INT_SW )
+                {
+                  // switch-related interrupt (simulation handling)
+                  switch_interrupt_handler();
+                  if( host_read_status_led_WAIT() ) 
+                    break;    // exit simulation lop
+                  else
+                    continue; // start over
+                }
+              else
+                {
+                  // ALTAIR interrupt
+                  opcode = altair_interrupt_handler();
+                }
+            }
+          else
+            {
+              // no interrupt => read opcode, put it on data bus LEDs and advance PC
+              p_regPC = regPC;
+              host_set_status_leds_READMEM_M1();
+              host_set_addr_leds(regPC);
+              opcode = MREAD(regPC);
+              host_set_data_leds(opcode);
+              regPC++;
+              host_clr_status_led_M1();
+            }
+
+          // take a CPU step
+          PROF_COUNT_OPCODE(opcode);
+          CPU_EXEC(opcode);
+
+          // check for breakpoint hit
+          breakpoint_check(regPC);
+
+#if USE_THROTTLE>0
+          // delay execution according to current delay
+          // (need the NOP, otherwise the compiler will optimize the loop away)
+          for(uint32_t i=0; i<throttle_delay; i++) asm("NOP");
+
+          // adjust throttle_delay every 10000 instructions
+          if( --throttle_ctr==0 )
+            {
+              uint32_t ratio = (100 * (prof_cycle_counter-throttle_cycle_ctr)) / (micros()-throttle_micros);
+              if( ratio>200 )
+                throttle_delay++;
+              else if( ratio<200 && throttle_delay>0 )
+                throttle_delay--;
+
+              // check/show profiling to the user
+              prof_check();
+
+              // reset throttling counters for next cycle
+              throttle_ctr       = 10000;
+              throttle_micros    = micros();
+              throttle_cycle_ctr = prof_cycle_counter;
+            }
+#else
+          // profile
+          prof_check();
+#endif
         }
 
-      // take a CPU step
-      PROF_COUNT_OPCODE(opcode);
-      CPU_EXEC(opcode);
-
-      // check for breakpoint hit
-      breakpoint_check(regPC);
-
-      // profile
-      prof_check();
-      
-      // check for stop request
-      if( --check_stop_ctr==0 )
-        {
-          check_stop();
-          check_stop_ctr = 10000;
-        }
+      // flush any characters stuck in the serial buffer 
+      // (so we don't accidentally execute commands after stopping)
+      while( altair_serial_available() ) altair_serial_read();
     }
 
   if( cswitch & BIT(SW_RESET) )
@@ -1659,9 +1722,11 @@ void loop()
   p_regPC = regPC;
 
   host_set_status_led_M1();
-
-  if( host_serial_irq_check() )
-    opcode = serial_irq_handler();
+  
+  // only check for interrupts not related to front-panel switches (e.g. serial)
+  host_check_interrupts();
+  if( altair_interrupts & ~INT_SW )
+    opcode = altair_interrupt_handler();
   else
     { opcode = MEM_READ(regPC); regPC++; }
 
