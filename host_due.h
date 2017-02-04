@@ -1,15 +1,6 @@
 #ifndef HOST_DUE_H
 #define HOST_DUE_H
 
-#if STANDALONE==0
-// if we're not in standalone mode, use Serial1 so we can connect
-// a non-USB serial device to the serial pins.  Note that this is
-// not possible for Serial0 (i.e. Serial) on the Due since the RX0
-// pin is directly connected to the USB interface chip and can NOT
-// be used at all (other Arduinos do allow that pin to be used)
-#define Serial Serial1
-#endif
-
 
 /* 
 Due has 96k SRAM, we can use 64k for emulated RAM.
@@ -25,8 +16,37 @@ Solution: Have 64k minus one byte of memory. That will stop the
 #define HOST_STORAGESIZE due_storagesize
 #define HOST_BUFFERSIZE  0x100
 
-
 extern uint32_t due_storagesize;
+
+// ------------------------------------------ serial interface
+
+class SwitchSerialClass : public Stream
+{
+  public:
+    SwitchSerialClass();
+    virtual void begin(unsigned long);
+    virtual void end();
+    virtual int available(void);
+    virtual int availableForWrite(void);
+    virtual int peek(void);
+    virtual int read(void);
+    virtual void flush(void);
+    virtual size_t write(uint8_t);
+    using Print::write; // pull in write(str) and write(buf, size) from Print
+    virtual operator bool();
+
+    void    select(uint8_t n) { m_selected = n; }
+    uint8_t getSelected() { return m_selected; }
+
+ private:
+    uint8_t m_selected;
+};
+
+extern SwitchSerialClass SwitchSerial;
+#define Serial SwitchSerial
+
+bool host_serial_available_for_write(byte iface);
+void host_serial_write(byte iface, byte data);
 
 // ------------------------------------------ switches
 

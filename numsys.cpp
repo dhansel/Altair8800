@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "numsys.h"
 #include "mem.h"
+#include "serial.h"
 
 static byte numsys = NUMSYS_HEX;
 
@@ -93,7 +94,7 @@ uint16_t numsys_read_word()
   while( c!=13 && c!=10 && c!=32 && c!=9 && c!='-' && c!=':' )
     {
       c=-1;
-      while(c<0) c = Serial.read();
+      while(c<0) c = serial_read();
 
       if( numsys==NUMSYS_HEX && (b=hexToDec(c))!=255 )
         {

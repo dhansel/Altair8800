@@ -52,8 +52,5 @@ void altair_interrupt(uint16_t i);
 bool altair_isreset();
 void altair_wait_step();
 void altair_set_outputs(uint16_t a, byte v);
-void altair_receive_serial_data(byte b);
-bool altair_serial_available();
-int  altair_serial_read();
 
 #endif

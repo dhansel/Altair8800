@@ -3,6 +3,7 @@
 #include "cpucore.h"
 #include "host.h"
 #include "mem.h"
+#include "serial.h"
 #include "profile.h"
 #include "breakpoint.h"
 #include "disassembler.h"
@@ -11,7 +12,6 @@
 #include "drive.h"
 #include "prog_ps2.h"
 #include "prog_basic.h"
-#include "prog_examples.h"
 #include "prog_games.h"
 #include "prog_tools.h"
 
@@ -22,60 +22,31 @@ uint16_t cswitch = 0;
 uint16_t dswitch = 0;
 
 uint16_t p_regPC = 0xFFFF;
-byte serial_panel = false, serial_debug = false, serial_input = false; 
-byte capture_device = 0, capture_fid = 0, tape_basic_fid = 0;
-uint32_t tape_basic_last_op = 0;
+
+volatile uint16_t altair_interrupts = 0;
 
 word status_wait = false;
 word status_inte = false;
 bool have_ps2    = false;
-byte altair_2SIO_ctrl = 0, altair_2SIO_status = 0;
-volatile int16_t  altair_2SIO_data  = -1;
-volatile uint16_t altair_interrupts = 0;
 
-void print_panel_serial();
+void print_panel_serial(bool force = false);
 void print_dbg_info();
 void read_inputs_panel();
 void read_inputs_serial();
 void process_inputs();
-bool tape_basic_check_timeout();
 
-
-#define DBG_FILEOPS_LEVEL 2
-
-#if DBG_FILEOPS_LEVEL>0
-#define DBG_FILEOPS(lvl, s) if(DBG_FILEOPS_LEVEL>=lvl) {Serial.print('['); Serial.print(F(s)); Serial.println(']');} else while(0)
-#define DBG_FILEOPS2(lvl, s1, s2) if(DBG_FILEOPS_LEVEL>=lvl) { Serial.print('['); Serial.print(F(s1)); Serial.print(s2); Serial.println(']');} else while(0)
-#define DBG_FILEOPS3(lvl, s1, s2, s3) if(DBG_FILEOPS_LEVEL>=lvl) { Serial.print('['); Serial.print(F(s1)); Serial.print(s2); Serial.print(s3); Serial.println(']');} else while(0)
-#define DBG_FILEOPS4(lvl, s1, s2, s3, s4) if(DBG_FILEOPS_LEVEL>=lvl) { Serial.print('['); Serial.print(F(s1)); Serial.print(s2); Serial.print(s3); Serial.print(s4); Serial.println(']');} else while(0)
-#else
-#define DBG_FILEOPS(lvl, s) while(0)
-#define DBG_FILEOPS2(lvl, s1, s2) while(0)
-#define DBG_FILEOPS3(lvl, s1, s2, s3) while(0)
-#define DBG_FILEOPS4(lvl, s1, s2, s3, s4) while(0)
-#endif
-
-#define ST_2SIO_RDRF    0x01 /* receive register full (character received) */
-#define ST_2SIO_TDRE    0x02 /* send register empty (ready for next byte) */
-#define ST_2SIO_OVRN    0x20 /* data overrun (received character when previous not read) */
-#define ST_2SIO_OVRN2   0x40 /* used in the simulator to signal that OVRN is upcoming */
-#define ST_2SIO_INT     0x80 /* interrupt signaled */
-
-#define CAPTURE_SIO     1
-#define CAPTURE_2SIO1   2
-#define CAPTURE_TAPE    3
 
 void altair_set_outputs(uint16_t a, byte v)
 {
   host_set_addr_leds(a);
   host_set_data_leds(v);
-  print_panel_serial();
   if( MEM_IS_PROTECTED(a) )
     host_set_status_led_PROT();
   else
     host_clr_status_led_PROT();
-
+  
   if( host_read_status_led_M1() ) print_dbg_info();
+  print_panel_serial();
 }
 
 
@@ -101,15 +72,6 @@ void altair_wait_reset()
 }
 
 
-void update_hlda_led()
-{
-  if( capture_fid>0 )
-    host_set_status_led_HLDA();
-  else
-    host_clr_status_led_HLDA();
-}
-
-
 void read_inputs()
 {
   cswitch = 0;
@@ -122,11 +84,14 @@ void read_inputs()
 
 void process_inputs()
 {  
-  //if( cswitch!=0 ){Serial.print("cswitch="); Serial.println(cswitch); }
-
-  if( cswitch & (BIT(SW_DEPOSIT) | BIT(SW_DEPNEXT)) )
+  if( cswitch & BIT(SW_DEPOSIT) )
     {
-      if( cswitch & BIT(SW_DEPNEXT) ) regPC++;
+      MWRITE(regPC, dswitch&0xff);
+      altair_set_outputs(regPC, MREAD(regPC));
+    }
+  else if( cswitch & BIT(SW_DEPNEXT) )
+    {
+      regPC++;
       MWRITE(regPC, dswitch&0xff);
       altair_set_outputs(regPC, MREAD(regPC));
     }
@@ -145,40 +110,39 @@ void process_inputs()
 
   if( cswitch & BIT(SW_AUX1DOWN) )
     {
-      tape_basic_check_timeout();
+      serial_acr_check_cload_timeout();
+
+      if( dswitch & 0x80 )
+        {
+          host_set_status_led_HLDA();
+          
+          uint16_t page = dswitch & 0xff00;
+          byte filenum  = dswitch & 0x003f;
+          if( dswitch & 0x40 )
+            {
+              if( filesys_write_file('M', filenum, Mem+page, 256) )
+                DBG_FILEOPS2(3, "saved memory page ", int(page>>8));
+              else
+                DBG_FILEOPS2(2, "unable to save memory page ", int(page>>8));
+            }
+          else
+            {
+              if( filesys_read_file('M', filenum, Mem+page, 256)==256 )
+                {
+                  DBG_FILEOPS2(3, "loaded memory page ", int(page>>8));
+                  regPC = page;
+                }
+              else
+                DBG_FILEOPS2(2, "file not found for memory page ", int(page>>8));
+                
+              altair_set_outputs(regPC, MREAD(regPC));
+            }
+            
+          serial_update_hlda_led();
+        }
 
       switch( dswitch & 0xff )
         {
-        case 0x80:
-        case 0x81:
-          {
-            host_set_status_led_HLDA();
-            
-            uint16_t page = dswitch & 0xff00;
-            if( dswitch & 0x0001 )
-              {
-                if( filesys_write_file('M', page >> 8, Mem+page, 256) )
-                  DBG_FILEOPS2(3, "saved memory page ", int(page>>8));
-                else
-                  DBG_FILEOPS2(2, "unable to save memory page ", int(page>>8));
-              }
-            else
-              {
-                if( filesys_read_file('M', page >> 8, Mem+page, 256)==256 )
-                  {
-                    DBG_FILEOPS2(3, "loaded memory page ", int(page>>8));
-                    regPC = page;
-                  }
-                else
-                  DBG_FILEOPS2(2, "file not found for memory page ", int(page>>8));
-                
-                altair_set_outputs(regPC, MREAD(regPC));
-              }
-            
-            update_hlda_led();
-            break;
-          }
-
         case 0x00:
           {
             Serial.println();
@@ -187,9 +151,9 @@ void process_inputs()
             Serial.println(F("00000010) Kill-the-Bit"));
             Serial.println(F("00000011) Pong (LEDs)"));
             Serial.println(F("00000100) Pong (Terminal)"));
-            Serial.println(F("00000101) 4k Basic (A11 up)"));
+            Serial.println(F("00000101) 4k Basic"));
 #if !defined(__AVR_ATmega2560__)
-            Serial.println(F("00000110) MITS Programming System II (A15 up, A11 up, A9 up)"));
+            Serial.println(F("00000110) MITS Programming System II"));
             Serial.println(F("00000111) ALTAIR Turnkey Monitor"));
             Serial.println(F("00001000) Disk boot ROM"));
 #endif
@@ -198,9 +162,8 @@ void process_inputs()
             Serial.println(F("00001011) CPU Exerciser"));
             Serial.println(F("00001100) Status lights test"));
             Serial.println(F("00001101) Serial echo using IRQ"));
-            Serial.println(F("01000000) [manage file system]"));
-            Serial.println(F("10000000) [load memory page]"));
-            Serial.println(F("10000001) [save memory page]"));
+            Serial.println(F("10nnnnnn) [load memory page, nnnnnn=file number]"));
+            Serial.println(F("11nnnnnn) [save memory page, nnnnnn=file number]"));
             break;
           }
 
@@ -251,24 +214,12 @@ void process_inputs()
 #if !defined(__AVR_ATmega2560__)
         case 0x06:
           {
-            if( capture_fid>0 && (capture_device!=CAPTURE_TAPE && capture_fid!=0xff) )
-              DBG_FILEOPS(2, "cannot mount PS2 tape (other operation in progress)");
-            else 
+            if( serial_acr_mount_ps2() && !have_ps2 )
               {
-                if( !have_ps2 )
-                  {
-                    regPC = prog_ps2_copy_monitor(Mem);
-                    host_clr_status_led_WAIT();
-                    host_set_data_leds(MREAD(regPC));
-                    have_ps2 = true;
-                  }
-
-                // (re-) mount the PS2 tape
-                prog_ps2_read_start();
-                DBG_FILEOPS(3, "mounting PS2 tape");
-                capture_device = CAPTURE_TAPE;
-                capture_fid    = 0xff;
-                update_hlda_led();
+                regPC = prog_ps2_copy_monitor(Mem);
+                host_clr_status_led_WAIT();
+                host_set_data_leds(MREAD(regPC));
+                have_ps2 = true;
               }
             
             break;
@@ -322,16 +273,16 @@ void process_inputs()
         case 0x0c:
           {
             regPC = prog_tools_copy_statustest(Mem);
-            altair_set_outputs(regPC, MREAD(regPC));
             p_regPC = ~regPC;
+            altair_set_outputs(regPC, MREAD(regPC));
             break;
           }
 
         case 0x0d:
           {
             regPC = prog_tools_copy_serialirqtest(Mem);
-            altair_set_outputs(regPC, MREAD(regPC));
             p_regPC = ~regPC;
+            altair_set_outputs(regPC, MREAD(regPC));
             break;
           }
 
@@ -344,16 +295,31 @@ void process_inputs()
     } 
   else if( cswitch & BIT(SW_AUX1UP) )
     {
-      // ROM BASIC starts at 0xC000 so RAM goes up to 0xBFFF
-      mem_set_ram_limit(0xbfff);
-
-      regPC = 0xc000;
-      p_regPC = ~regPC;
+      if( (cswitch & BIT(SW_STOP)) || host_read_function_switch_debounced(SW_STOP) )
+        {
+          // edit configuration
+          config_edit();
+          if( config_serial_panel_enabled() ) 
+            { 
+              Serial.print(F("\033[14B")); 
+              print_panel_serial(true); 
+            }
+          p_regPC = ~regPC;
+          altair_set_outputs(regPC, MREAD(regPC));
+        }
+      else
+        {
+          // ROM BASIC starts at 0xC000 so RAM goes up to 0xBFFF
+          mem_set_ram_limit(0xbfff);
+          
+          regPC = 0xc000;
+          p_regPC = ~regPC;
 #if MEMSIZE>=0x10000
-      prog_basic_copy_16k(Mem);
+          prog_basic_copy_16k(Mem);
 #endif
-      host_set_data_leds(MREAD(regPC));
-      host_clr_status_led_WAIT();
+          host_set_data_leds(MREAD(regPC));
+          host_clr_status_led_WAIT();
+        }
     }
 
   if( (cswitch & BIT(SW_AUX2DOWN)) && (dswitch&0xF000)==0x1000 )
@@ -375,106 +341,12 @@ void process_inputs()
   else if( cswitch & BIT(SW_AUX2UP) )
     {
       print_panel_serial();
-      tape_basic_check_timeout();
-
-      if( capture_fid>0 )
-        {
-          // end capture (0xff is special fid for BASIC example playback)
-          if( capture_fid < 0xff && filesys_is_write(capture_fid) )
-            {
-              filesys_close(capture_fid);
-              capture_fid = 0;
-              DBG_FILEOPS(3, "ending capture");
-            }
-          else
-            DBG_FILEOPS(1, "cannot start capture (replay operation in progress)");
-        }
-      else
-        {
-          capture_device = 0;
-          if( (dswitch & 0xF000) == 0x8000 )
-            { capture_device = CAPTURE_2SIO1; DBG_FILEOPS(3, "capturing from 88-2SIO"); }
-          else if( (dswitch & 0xF000) == 0x4000 )
-            { capture_device = CAPTURE_TAPE; DBG_FILEOPS(3, "capturing from TAPE"); }
-          if( (dswitch & 0xF000) == 0x2000 )
-            { capture_device = CAPTURE_SIO; DBG_FILEOPS(3, "capturing from 88-SIO"); }
-          
-          if( capture_device!=0 )
-            {
-              // start capture
-              capture_fid = filesys_open_write('S', dswitch & 0xff);
-              if( capture_fid )
-                DBG_FILEOPS2(3, "starting data capture, file ", dswitch & 0xff);
-              else
-                DBG_FILEOPS(1, "unable to start capturing (storage full?)");
-            }
-          else
-            DBG_FILEOPS(2, "invalid capture device");
-        }
-      
-      update_hlda_led();
+      serial_capture_start(dswitch>>8, dswitch & 0xff);
     }
   else if( cswitch & BIT(SW_AUX2DOWN) )
     {
       print_panel_serial();
-      tape_basic_check_timeout();
-
-      if( capture_fid==0xff )
-        {
-          if( capture_device == CAPTURE_TAPE )
-            DBG_FILEOPS(3, "ejecting PS2 tape");
-          else
-            DBG_FILEOPS(3, "stopping BASIC example load");
-
-          capture_fid = 0;
-        }
-      else if( capture_fid>0 )
-        {
-          if( filesys_is_read(capture_fid) )
-            {
-              DBG_FILEOPS(3, "stopping data replay");
-              filesys_close(capture_fid);
-              capture_fid = 0;
-            }
-          else
-            DBG_FILEOPS(1, "unable to replay data (capture operation in progress)");
-        }
-      else if( capture_fid>0 )
-        DBG_FILEOPS(1, "unable to load example (other capture/replay operation in progress)");
-      else
-        {
-          capture_device = 0;
-          if( (dswitch & 0xF000) == 0x8000 )
-            { capture_device = CAPTURE_2SIO1; DBG_FILEOPS(3, "replaying to 88-2SIO"); }
-          else if( (dswitch & 0xF000) == 0x4000 )
-            { capture_device = CAPTURE_TAPE; DBG_FILEOPS(3, "replaying to TAPE"); }
-          if( (dswitch & 0xF000) == 0x2000 )
-            { capture_device = CAPTURE_SIO; DBG_FILEOPS(3, "replaying to 88-SIO"); }
-          
-          if( capture_device>0 )
-            {
-              capture_fid = filesys_open_read('S', dswitch&0xff);
-              if( capture_fid>0 )
-                DBG_FILEOPS2(3, "replaying captured data, file ", int(dswitch&0xff));
-              else
-                DBG_FILEOPS2(2, "unable to replay captured data (file not found), file ", int(dswitch&0xff));
-            }
-          else if( (dswitch & 0xF000)==0 )
-            {
-              if( prog_examples_read_start((dswitch&0xff)) )
-                {
-                  capture_fid    = 0xff;
-                  capture_device = CAPTURE_2SIO1;
-                  DBG_FILEOPS2(3, "loading example ", int(dswitch&0xff));
-                }
-              else
-                DBG_FILEOPS2(2, "example does not exist: ", int(dswitch&0xff));
-            }
-          else
-            DBG_FILEOPS(2, "invalid replay device");
-        }
-
-      update_hlda_led();
+      serial_replay_start(dswitch>>8, dswitch & 0xff);
     }
 
   if( cswitch & BIT(SW_RESET) )
@@ -484,18 +356,12 @@ void process_inputs()
 
   if( cswitch & BIT(SW_CLR) )
     {
-      if( capture_fid>0 )
-        {
-          filesys_close(capture_fid);
-          capture_fid = 0;
-        }
-
-      update_hlda_led();
+      serial_close_files();
     }
 
   if( cswitch & BIT(SW_RUN) )
     {
-      if( serial_debug && serial_input )
+      if( config_serial_debug_enabled() && config_serial_input_enabled() )
         Serial.print(F("\n\n--- RUNNING (press ESC to stop) ---\n\n"));
       host_clr_status_led_WAIT();
     }
@@ -542,10 +408,10 @@ void read_inputs_serial()
 {
   byte b;
 
-  if( !serial_input )
+  if( !config_serial_input_enabled() )
     return;
 
-  int data = altair_serial_read();
+  int data = serial_read();
   if( data<0 )
     return;
 #if STANDALONE>0
@@ -585,7 +451,9 @@ void read_inputs_serial()
   else if( data == 's' )
     cswitch |= BIT(SW_AUX2UP);
   else if( data == 'l' )
-    cswitch |= BIT(SW_AUX2DOWN);
+    // must run immediately because otherwise the debugging 
+    // console will consume the replayed characters
+    cswitch |= BIT(SW_AUX2DOWN) | BIT(SW_RUN);
   else if( data == 'Q' )
     cswitch |= BIT(SW_PROTECT);
   else if( data == 'q' )
@@ -602,8 +470,8 @@ void read_inputs_serial()
           Serial.print(F(": "));
           addr += disassemble(Mem, addr);
           Serial.println();
-          while( !altair_serial_available() ) delay(100);
-          go = (altair_serial_read() == 0x20);
+          while( !serial_available() ) delay(100);
+          go = (serial_read() == 0x20);
         }
       p_regPC = ~regPC;
       print_dbg_info();
@@ -628,9 +496,9 @@ void read_inputs_serial()
               Serial.write(MREAD(addr+i)<32 || MREAD(addr+i)>126 ? '.' : MREAD(addr+i));
             }
           Serial.println();
-          while( !altair_serial_available() ) delay(100);
+          while( !serial_available() ) delay(100);
           addr += 16;
-          go = (altair_serial_read() == 0x20);
+          go = (serial_read() == 0x20);
         }
       p_regPC = ~regPC;
       print_dbg_info();
@@ -638,13 +506,16 @@ void read_inputs_serial()
   else if( data == 'L' )
     {
       uint16_t addr = numsys_read_word();
+      Serial.write(' ');
       uint16_t len  = numsys_read_word();
       while( len>0 )
         {
+          Serial.write(' ');
           Mem[addr] = numsys_read_word();
           ++addr;
           --len;
         }
+      Serial.write('\n');
     }
   else if( data == 'n' )
     {
@@ -652,10 +523,12 @@ void read_inputs_serial()
       p_regPC = ~regPC;
       print_dbg_info();
     }
-  else if( data == 'F' )
-    prof_toggle();
+  else if( data == 'C' )
+    {
+      cswitch = BIT(SW_STOP) | BIT(SW_AUX1UP);
+    }
 #if MAX_BREAKPOINTS>0
-  else if( data == 'B' || data == 'C' )
+  else if( data == 'B' || data == 'V' )
     {
       if( data == 'B' )
         {
@@ -678,20 +551,20 @@ void read_inputs_serial()
 }
 
 
-void print_panel_serial()
+void print_panel_serial(bool force)
 {
   byte i, dbus;
   static uint16_t p_dswitch = 0, p_cswitch = 0, p_abus = 0xffff, p_dbus = 0xffff, p_status = 0xffff;
   uint16_t status, abus;
 
-  if( !serial_panel )
+  if( !config_serial_panel_enabled() )
     return;
 
   status = host_read_status_leds();
   abus   = host_read_addr_leds();
   dbus   = host_read_data_leds();
 
-  if( p_cswitch != cswitch || p_dswitch != dswitch || p_abus != abus || p_dbus != dbus || p_status != status )
+  if( force || p_cswitch != cswitch || p_dswitch != dswitch || p_abus != abus || p_dbus != dbus || p_status != status )
     {
       Serial.print(F("\033[s\033[0;0HINTE PROT MEMR INP M1 OUT HLTA STACK WO INT  D7  D6  D5  D4  D3  D2  D1  D0\n"));
 
@@ -762,21 +635,18 @@ void print_panel_serial()
       if( cswitch & BIT(SW_AUX1UP) )  Serial.print(F("     ^  "));   else if( cswitch & BIT(SW_AUX1DOWN) )  Serial.print(F("     v  "));  else Serial.print(F("     o  "));
       if( cswitch & BIT(SW_AUX2UP) )  Serial.print(F("  ^  "));      else if( cswitch & BIT(SW_AUX2DOWN) )  Serial.print(F("  v  "));     else Serial.print(F("  o  "));
       Serial.print(F("\n            Run         E.Next   D.Next    CLR   Unprotect\n\033[K\n\033[K\n\033[K\n\033[K\n\033[K\033[u"));
-      Serial.print(F("\033[u"));
       p_cswitch = cswitch;
       p_dswitch = dswitch;
       p_abus = abus;
       p_dbus = dbus;
       p_status = status;
-      //Serial.print("Status=");Serial.print(status); Serial.print("\n");
-      //for(i=8; i<12; i++) {Serial.print(2+i); Serial.print(" "); Serial.print(status & (1<<i)); Serial.print("\n");}
     }
 }
 
 
 void print_dbg_info()
 {
-  if( !serial_debug || !host_read_status_led_WAIT() )
+  if( !config_serial_debug_enabled() || !host_read_status_led_WAIT() )
     return;
 
   if( regPC != p_regPC )
@@ -804,11 +674,7 @@ void print_dbg_info()
       Serial.print(F(" regE = "));   numsys_print_byte(regE);
       Serial.print(F(" regH = "));   numsys_print_byte(regH);
       Serial.print(F(" regL = "));   numsys_print_byte(regL);
-      /*Serial.print("\n FACC (0x016f) = "); numsys_print_mem(0x016F,  4, true);
-      Serial.print("\n FBUF (0x0174) = "); numsys_print_mem(0x0174, 12, true);
-      Serial.print("\n LINE (0x0113) = "); numsys_print_mem(0x0113, 16, true);*/
       Serial.println();
-      //for(b=0; b<54; b++){ Serial.print(b); Serial.print(" "); Serial.print(digitalPinToPort(b)); Serial.print(" "); numsys_print_byte(digitalPinToBitMask(b)); Serial.println(""); }
     }
 }
 
@@ -826,7 +692,7 @@ void reset(bool resetPC)
   host_clr_status_led_MEMR();
   host_clr_status_led_INTE();
   host_clr_status_led_PROT();
-  update_hlda_led();
+  serial_update_hlda_led();
 
   if( resetPC )
     {
@@ -834,8 +700,7 @@ void reset(bool resetPC)
       p_regPC    = 0xffff;
     }
 
-  altair_2SIO_ctrl   = 0;
-  altair_2SIO_status = 0;
+  serial_reset();
 
 #if STANDALONE>0
   if( cswitch & BIT(SW_STOP) )
@@ -843,32 +708,16 @@ void reset(bool resetPC)
   if( host_read_function_switch(SW_STOP) )
 #endif
     {
-      // erase memory
-      //for(int i=0; i<MEMSIZE; i++) Mem[i] = 0;
+      // clear memory limit
       mem_clr_ram_limit();
       have_ps2 = false;
 
       // close all open files
-      if( capture_fid>0 && capture_fid<0xff ) filesys_close(capture_fid);
-      if( tape_basic_fid>0 ) filesys_close(tape_basic_fid);
-      capture_fid = 0;
-      tape_basic_fid = 0;
-      update_hlda_led();
+      serial_close_files();
 
       // unmount all drives
       drive_reset();
     }
-
-#if STANDALONE>0
-  serial_debug = true;
-  //serial_panel = true;
-  serial_input = true;
-#else
-  uint16_t b = host_read_addr_switches();
-  serial_debug = b & 0x80 ? true : false;
-  //serial_panel = b & 0x40 ? true : false;
-  serial_input = b & 0x20 ? true : false;
-#endif
 
   altair_interrupts = 0;
 }
@@ -888,9 +737,9 @@ void switch_interrupt_handler()
       host_clr_status_led_MEMR();
       host_clr_status_led_WO();
       host_set_status_led_WAIT();
-      if( !serial_debug ) 
+      if( !config_serial_debug_enabled() ) 
         {}
-      else if( serial_panel )
+      else if( config_serial_panel_enabled() )
         Serial.print(F("\033[2J\033[14B\n------ STOP ------\n\n"));
       else
         Serial.print(F("\n\n------ STOP ------\n\n"));
@@ -915,68 +764,6 @@ void switch_interrupt_handler()
 }
 
 
-// called by the host if serial data received
-void altair_receive_serial_data(byte b)
-{
-  if( b==27 && serial_input && !host_read_status_led_WAIT() )
-    {
-      // if we have serial input enabled then the the ESC key works as STOP
-      altair_interrupt(INT_SW_STOP);
-    }
-  else
-    {
-      // store received data (the 2SIO board can only buffer one byte)
-      if( altair_2SIO_status & ST_2SIO_RDRF )
-        {
-          // overrun occurred
-          // according to 2SIO (and 6850 UART) documentation, the overrun is not
-          // signaled until the previous (properly received) byte has been read.
-          // so we set a flag here to signal that as soon as the current byte is
-          // read we have to signal the overrun condition.
-          altair_2SIO_status |= ST_2SIO_OVRN2;
-        }
-      else
-        {
-          altair_2SIO_data = b;
-          altair_2SIO_status |= ST_2SIO_RDRF;
-        }
-
-      // trigger interrupt if interrupts are enabled
-      if( host_read_status_led_INTE() && (altair_2SIO_ctrl & 0x80) && (altair_2SIO_status & ST_2SIO_INT)==0 )
-        {
-          altair_2SIO_status |= ST_2SIO_INT;
-          altair_interrupt(INT_SERIAL);
-        }
-    }
-}
-
-
-bool altair_serial_available()
-{
-  host_check_interrupts();
-  return (altair_2SIO_status & ST_2SIO_RDRF)!=0;
-}
-
-
-int altair_serial_read()
-{
-  if( altair_serial_available() )
-    {
-      altair_2SIO_status &= ~(ST_2SIO_INT | ST_2SIO_RDRF | ST_2SIO_OVRN);
-      if( altair_2SIO_status & ST_2SIO_OVRN2 ) 
-        { 
-          // there was an overrun condition and the last properly received byte 
-          // has just been read => signal OVRN now
-          altair_2SIO_status |= ST_2SIO_OVRN;
-          altair_2SIO_status &= ST_2SIO_OVRN2;
-        }
-      return altair_2SIO_data;
-    }
-  else
-    return -1;
-}
-
-
 static byte altair_interrupt_handler()
 {
   byte opcode = 0;
@@ -994,7 +781,7 @@ static byte altair_interrupt_handler()
 
   if( opcode!=0 && host_read_status_led_WAIT() )
     {
-      if( serial_debug ) { Serial.print(F("\nInterrupt! opcode=")); numsys_print_byte(opcode); Serial.println(); }
+      if( config_serial_debug_enabled() ) { Serial.print(F("\nInterrupt! opcode=")); numsys_print_byte(opcode); Serial.println(); }
       altair_set_outputs(regPC, opcode);
       altair_wait_step();
     }
@@ -1053,175 +840,27 @@ void altair_hlt()
 }
 
 
-bool tape_basic_check_timeout()
+inline byte altair_read_sense_switches()
 {
-  if( tape_basic_fid>0 && millis() > tape_basic_last_op+100 )
-    {
-      // if the last write or read from BASIC was more than .1 seconds ago
-      // then this is a new read/write operation => close the previous file
-      filesys_close(tape_basic_fid);
-      tape_basic_fid = 0;
-      DBG_FILEOPS(4, "closing tape file due to timeout");
-      return true;
-    }
-  
-  return false;
-}  
-
-
-byte tape_read_next_byte()
-{
-  static byte tape_fname = 0;
   byte data;
-  bool go = true;
 
-  if( capture_fid>0 && capture_device==CAPTURE_TAPE && (capture_fid==0xff || filesys_is_read(capture_fid)) )
+  // read SENSE switches
+#if STANDALONE>0
+  data = dswitch / 256;
+#else
+  static unsigned long debounceTimeout = 0;
+  static byte debounceVal = 0;
+  if( millis()>debounceTimeout )
     {
-      if( capture_fid==0xff )
-        {
-          /* reading Programming System II data from tape (endless loop) */
-          prog_ps2_read_next(&data);
-          go = false;
-        }
-      else if( !filesys_read_char(capture_fid, &data) )
-        {
-          DBG_FILEOPS(4, "no more captured data");
-          //filesys_close(capture_fid);
-          //capture_fid = 0;
-          //update_hlda_led();
-          data = 0;
-        }
+      data = host_read_sense_switches();
+      debounceVal = data;
+      debounceTimeout = millis() + 20;
     }
-  else if( regPC==0xE2A0 )
-    {
-      // This is ALTAIR Extended BASIC loading from tape
-      
-      // check for timeout from previous operation
-      tape_basic_check_timeout();
-  
-      // if we were writing before, close the file now
-      if( tape_basic_fid>0 && !filesys_is_read(tape_basic_fid) )
-        {
-          filesys_close(tape_basic_fid);
-          tape_basic_fid = 0;
-        }
-
-      // no file is open: either we closed it due to timeout or
-      // there was a FILE NOT FOUND error earlier. In either case,
-      // we need to start searching from the first file again.
-      if( tape_basic_fid==0 )
-        tape_fname = 0;
-
-      while( go )
-        {
-          if( altair_interrupts & INT_SW_STOP )
-            break;
-          else if( tape_basic_fid>0 )
-            {
-              if( filesys_read_char(tape_basic_fid, &data) )
-                go = false;
-              else
-                {
-                  filesys_close(tape_basic_fid);
-                  tape_basic_fid = 0;
-                }
-            }
-
-          if( go )
-            {
-              while( tape_basic_fid==0 && tape_fname<96 )
-                {
-                  tape_basic_fid = filesys_open_read('B', 32+tape_fname);
-                  if( tape_basic_fid ) DBG_FILEOPS2(4, "reading BASIC CSAVE file: ", char(32+tape_fname));
-                  tape_fname++;
-                }
-              
-              if( tape_basic_fid==0 )
-                {
-                  // ALTAIR BASIC would wait forever and require the user to
-                  // reset the computer if a file is not found. We catch that
-                  // condition here for convenience. We're setting the PC to 
-                  // 0xC0A0 because it will be increased by one at the the end
-                  // of the IN instruction.
-                  Serial.println(F("FILE NOT FOUND"));
-                  regPC = 0xC0A0;
-                  break;
-                }
-            }
-        }
-
-      tape_basic_last_op = millis();
-    }
+  else
+    data = debounceVal;
+#endif
 
   return data;
-}
-
-
-void tape_write_next_byte(byte data)
-{
-  static byte leadchar = 0, leadcount = 0, endcount = 0;
-
-  // check for timeout from previous operation
-  tape_basic_check_timeout();
-  
-  if( capture_fid>0 && capture_device==CAPTURE_TAPE && filesys_is_write(capture_fid) )
-    {
-      if( !filesys_write_char(capture_fid, data) )
-        {
-          DBG_FILEOPS(1, "capture storage exhausted");
-          //filesys_close(capture_fid);
-          //capture_fid  = 0;
-          //update_hlda_led();
-        }
-    }
-  else if( regPC == 0xE2AF )
-    {
-      // This is ALTAIR Extended BASIC saving to tape
-
-      // if we were reading before, close the file now
-      if( tape_basic_fid>0 && !filesys_is_write(tape_basic_fid) )
-        {
-          filesys_close(tape_basic_fid);
-          tape_basic_fid = 0;
-        }
-  
-      if( tape_basic_fid==0 )
-        {
-          if( leadcount==0 && data==0xd3 )
-            leadcount = 1;
-          else if( data == 0xd3 ) 
-            leadcount++;
-          else 
-            {
-              if( leadcount>3 )
-                {
-                  tape_basic_fid = filesys_open_write('B', data);
-                  if( tape_basic_fid ) DBG_FILEOPS2(4, "writing BASIC CSAVE file: ", char(data));
-                  for(byte i=0; i<leadcount; i++) filesys_write_char(tape_basic_fid, 0xd3);
-                  filesys_write_char(tape_basic_fid, data);
-                }
-              leadcount = 0;
-            }
-        }
-      else
-        {
-          filesys_write_char(tape_basic_fid, data);
-      
-          if( data == 0x00 )
-            endcount++;
-          else
-            endcount = 0;
-          
-          if( endcount==10 )
-            {
-              filesys_close(tape_basic_fid);
-              tape_basic_fid = 0;
-              endcount = 0;
-            }
-        }
-
-      tape_basic_last_op = millis();
-    }
 }
 
 
@@ -1234,116 +873,21 @@ void altair_out(byte addr, byte data)
 
   switch( addr )
     {
-    case 0000:
-      {
-        // write to control register of 88-SIO
-        break;
-      }
+    case 0000: serial_sio_out_ctrl(data); break;
+    case 0001: serial_sio_out_data(data); break;
 
-    case 0001:
-      {
-        // write data to 88-SIO
-        if( capture_fid>0 && (capture_device==CAPTURE_SIO) && filesys_is_write(capture_fid) )
-          {
-            if( !filesys_write_char(capture_fid, data) )
-              {
-                DBG_FILEOPS(1, "capture storage exhausted");
-                //filesys_close(capture_fid);
-                //capture_fid  = 0;
-                //update_hlda_led();
-              }
-            else
-              DBG_FILEOPS2(5, "88-SIO writing captured data: ", int(data));
-          }
-        
-        break;
-      }
-
-    case 0006:
-      {
-        // write to control register of tape interface
-        break;
-      }
-
-    case 0007:
-      {
-        //printf("TAPE port data write at %04x: %02x (%c)\n", regPC, data, data>=32 ? data : '.');
-        tape_write_next_byte(data);
-        DBG_FILEOPS2(5, "88-SIO writing captured data: ", int(data));
-        break;
-      }
+    case 0006: serial_acr_out_ctrl(data); break;
+    case 0007: serial_acr_out_data(data); break;
 
     case 0010:
     case 0011:
-    case 0012:
-      {
-        drive_out(addr, data);
-        break;
-      }
+    case 0012: drive_out(addr, data); break;
 
-    case 0020:
-      {
-        // write to control register of first serial device of 88-2SIO
+    case 0020: serial_2sio1_out_ctrl(data); break;
+    case 0021: serial_2sio1_out_data(data); break;
 
-        if( !(altair_2SIO_ctrl & 0x80) && (data & 0x80) )
-          DBG_FILEOPS(4, "ENABLING interrupts on 2SIO");
-        else if( (altair_2SIO_ctrl & 0x80) && !(data & 0x80) )
-          DBG_FILEOPS(4, "disabling interrupts on 2SIO");
-
-        // write to control register of 88-2SIO
-        if( (data & 0x03)==0x03 )
-          {
-            // master reset
-            altair_2SIO_ctrl   = 0;
-            altair_2SIO_status = 0;
-          }
-        else
-          {
-            altair_2SIO_ctrl   = data;
-            altair_2SIO_status &= ~ST_2SIO_INT;
-          }
-
-        break;
-      }
-      
-    case 0021:
-      {
-        // write data to first serial device of 88-2SIO
-        if( regPC == 0x0380 || regPC == 0x071C )
-          {
-            // ALTAIR BASIC I/O routine has "OUT" instruction at 0x037F
-            // MITS Programming System II has OUT instruction at 0x071B
-
-            // only use lower 7 bits
-            data &= 0x7f;
-            
-            // translate '_' to backspace
-            if( data=='_' ) data = 127;
-          }
-        else if( regPC == 0x00AC )
-          {
-            // ALTAIR EXTENDED BASIC I/O routine has "OUT" instruction at 0x00AB
-
-            // translate '_' to backspace
-            if( data=='_' ) data = 127;
-          }
-
-        Serial.write(data);
-        if( !host_read_status_led_WAIT() && capture_fid>0 && (capture_device==CAPTURE_2SIO1) && filesys_is_write(capture_fid) )
-          {
-            if( !filesys_write_char(capture_fid, data) )
-              {
-                DBG_FILEOPS(1, "capture storage exhausted");
-                //filesys_close(capture_fid);
-                //capture_fid  = 0;
-                //update_hlda_led();
-              }
-            else
-              DBG_FILEOPS2(5, "88-2SIO writing captured data: ", int(data));
-          }
-        
-        break;
-      }
+    case 0022: serial_2sio2_out_ctrl(data); break;
+    case 0023: serial_2sio2_out_data(data); break;
     }
   
   if( host_read_status_led_WAIT() )
@@ -1368,193 +912,18 @@ byte altair_in(byte addr)
   //  - reading front panel switches
   switch( addr )
     {
-    case 0020:
-      {
-        // read control register of first serial device of 88-2SIO
-        if( capture_device==CAPTURE_2SIO1 && capture_fid>0 && (capture_fid==0xff || filesys_is_read(capture_fid)) )
-          {
-            if( capture_fid==0xff )
-              {
-                // we're playing back a basic example, those are always 0-terminated
-                // and capture_fid==0xff would not hold if we had
-                // reached the end
-                data |= ST_2SIO_RDRF;
-              }
-            else
-              {
-                if( !filesys_eof(capture_fid) )
-                  data |= ST_2SIO_RDRF;
-              }
-          }
-        else 
-          data |= altair_2SIO_status & (ST_2SIO_RDRF | ST_2SIO_OVRN | ST_2SIO_INT);
-
-        if( capture_device==CAPTURE_2SIO1 && capture_fid>0 && capture_fid<0xff && filesys_is_write(capture_fid) )
-          {
-            if( !filesys_eof(capture_fid) )
-              data |= ST_2SIO_TDRE;
-          }
-        else if( Serial.availableForWrite() )
-          data |= ST_2SIO_TDRE;
-
-        break;
-      }
-
-    case 0377:
-      {
-        // read SENSE switches
-#if STANDALONE>0
-        data = dswitch / 256;
-#else
-        static unsigned long debounceTimeout = 0;
-        static byte debounceVal = 0;
-        if( millis()>debounceTimeout )
-          {
-            data = host_read_sense_switches();
-            debounceVal = data;
-            debounceTimeout = millis() + 20;
-          }
-        else
-          data = debounceVal;
-#endif
-        break;
-      }
-
-    case 0000:
-      {
-        // read control register of 88-SIO
-        if( capture_device==CAPTURE_SIO && capture_fid>0 && capture_fid<0xff )
-          {
-            if( !filesys_is_write(capture_fid) || filesys_eof(capture_fid) )
-              data |= 0x80;
-
-            if( !filesys_is_read(capture_fid) || filesys_eof(capture_fid) )
-              data |= 0x01;
-          }
-        else
-          data |= 0x81;
-
-        break;
-      }
-
-    case 0001:
-      {
-        // read data from 88-SIO
-        if( capture_device==CAPTURE_SIO && capture_fid>0 && capture_fid<0xff && filesys_is_read(capture_fid) )
-          {
-            if( !filesys_read_char(capture_fid, &data) )
-              {
-                DBG_FILEOPS(4, "no more data for replay");
-                data = 0;
-              }
-            else
-              DBG_FILEOPS2(5, "88-SIO reading captured data: ", int(data));
-          }
-        
-        break;
-      }
-
-    case 0006:
-      {
-        if( capture_device==CAPTURE_TAPE && capture_fid>0 )
-          {
-            if( capture_fid == 0xff )
-              {
-                // This is us loading the Programming System II tape
-                // => we can always read (continuous loop) but not write
-                data |= 0x80;
-              }
-            else
-              {
-                if( !filesys_is_write(capture_fid) || filesys_eof(capture_fid) )
-                  data |= 0x80;
-                
-                if( !filesys_is_read(capture_fid) || filesys_eof(capture_fid) )
-                  data |= 0x01;
-              }
-          }
-        else if( regPC==0xE299 || regPC==0xE2A7 )
-          {
-            // This is ALTAIR Extended BASIC loading from or saving to tape
-            // our BASIC CSAVE/CLOAD tape emulation is a continuous loop so we always
-            // have data available (i.e. bit 0 NOT set) 
-            data = 0x00;
-          }
-        else
-          data = 0x81;
-        
-        break;
-      }
-      
-    case 0007:
-      {
-        data = tape_read_next_byte();
-        DBG_FILEOPS2(5, "tape reading captured data: ", int(data));
-        break;
-      }
-
+    case 0000: data = serial_sio_in_ctrl(); break;
+    case 0006: data = serial_acr_in_ctrl(); break;
+    case 0020: data = serial_2sio1_in_ctrl(); break;
+    case 0022: data = serial_2sio2_in_ctrl(); break;
+    case 0377: data = altair_read_sense_switches(); break;
     case 0010:
     case 0011:
-    case 0012:
-      {
-        data = drive_in(addr);
-        break;
-      }
-
-    case 0021:
-      {
-        // read data from first serial device of 88-2SIO
-        if( capture_device==CAPTURE_2SIO1 && capture_fid>0 && (capture_fid==0xff || filesys_is_read(capture_fid)) )
-          {
-            if( capture_fid==0xff )
-              {
-                // special fid for BASIC example replay
-                if( !prog_examples_read_next(&data) )
-                  {
-                    capture_fid = 0;
-                    DBG_FILEOPS(4, "done loading");
-                    update_hlda_led();
-                  }
-              }
-            else
-              {
-                if( !filesys_read_char(capture_fid, &data) )
-                  {
-                    DBG_FILEOPS(4, "no more data for replay");
-                    data = 0;
-                  }
-                else
-                  DBG_FILEOPS2(5, "88-2SIO reading captured data: ", int(data));
-              }
-          }
-        else
-          {
-            if( altair_2SIO_status & ST_2SIO_RDRF )
-              data = altair_serial_read();
-
-            if( regPC == 0x038A || regPC == 0x0726 )
-              {
-                // ALTAIR BASIC I/O routine has "IN" instruction at 0x0389
-                // MITS Programming System II has "IN" instruction at 0x0725
-
-                // only use upper-case letters
-                if( data>96 && data<123 ) data -= 32;
-                
-                // translate backspace to underscore
-                if( data==8 || data==127 ) data = '_';
-              }
-            else if( regPC == 0x00A0 )
-              {
-                // ALTAIR EXTENDED BASIC I/O routine has "IN" instruction at 0x009F
-
-                // translate backspace to underscore
-                if( data==8 || data==127 ) data = '_';
-              }
-          }
-        fflush(stdout);
-        
-        break;
-      }
+    case 0012: data = drive_in(addr); break;
+    case 0001: data = serial_sio_in_data(); break;
+    case 0007: data = serial_acr_in_data(); break;
+    case 0021: data = serial_2sio1_in_data(); break;
+    case 0023: data = serial_2sio2_in_data(); break;
     }
 
   if( host_read_status_led_WAIT() )
@@ -1574,27 +943,40 @@ void setup()
 {
   int i;
 
-#if STANDALONE>0
-  Serial.begin(115200);
-#else
-  Serial.begin(9600);
-#endif
-  Serial.setTimeout(10000);
-
   cswitch = 0;
   dswitch = 0;
 
   mem_setup();
   host_setup();
   filesys_setup();
+  config_setup();
   drive_setup();
+  serial_setup();
+
+  // if RESET switch is held up during powerup then use default configuration settings
+  if( host_read_function_switch(SW_RESET) )
+    {
+      // temporarily reset configuration (also calls host_serial_setup)
+      config_defaults(true);
+      Serial.println(F("Configuration temporarily reset to defaults"));
+      Serial.println(F("Raise and hold STOP and then raise AUX1 to enter configuration menu"));
+      while( host_read_function_switch(SW_RESET) );
+      delay(100);
+      host_reset_function_switch_state();
+    }
+  else
+    {
+      // set up serial connection on the host
+      host_serial_setup(0, config_host_serial_baud_rate(0), config_host_serial_primary()==0);
+      host_serial_setup(1, config_host_serial_baud_rate(1), config_host_serial_primary()==1);
+    }
 
   host_set_status_led_WAIT();
 
   // emulator extra: holding down CLR at powerup will keep all registers
   // and memory content initialized with 0. Otherwise (as would be normal 
   // with the Altair), everything is random.
-  if( !host_read_function_switch(SW_CLR) )
+  if( !host_read_function_switch(SW_CLR) && !config_clear_memory() )
     {
       regPC = host_get_random();
       regSP = host_get_random();
@@ -1613,7 +995,7 @@ void setup()
 
   reset(false);
 
-  if( serial_panel ) Serial.print(F("\033[2J\033[14B\n"));
+  if( config_serial_panel_enabled() ) Serial.print(F("\033[2J\033[14B\n"));
 }
 
 
@@ -1627,12 +1009,17 @@ void loop()
       // clear all switch-related interrupts before starting loop
       altair_interrupts &= ~INT_SW;
 
+      if( config_profiling_enabled() ) prof_reset();
 #if USE_THROTTLE>0
       uint32_t throttle_cycle_ctr = prof_cycle_counter;
       uint32_t throttle_ctr       = 10000;
       uint32_t throttle_micros    = micros();
-      uint32_t throttle_delay     = 20;
+      uint32_t throttle_delay     = config_throttle_enabled() ? 20 : 0;
 #endif
+
+      // check whether we need to re-enable timer interrupts
+      serial_timer_interrupt_check_enable();
+
       while( true )
         {
           // put PC on address bus LEDs
@@ -1684,22 +1071,32 @@ void loop()
           // (need the NOP, otherwise the compiler will optimize the loop away)
           for(uint32_t i=0; i<throttle_delay; i++) asm("NOP");
 
-          // adjust throttle_delay every 10000 instructions
           if( --throttle_ctr==0 )
             {
-              uint32_t ratio = (100 * (prof_cycle_counter-throttle_cycle_ctr)) / (micros()-throttle_micros);
-              if( ratio>200 )
-                throttle_delay++;
-              else if( ratio<200 && throttle_delay>0 )
-                throttle_delay--;
+              // adjust throttle_delay every 10000 instructions (if enabled)
+              if( config_throttle_enabled() )
+                {
+                  uint32_t now   = micros();
+                  uint32_t ratio = (100 * (prof_cycle_counter-throttle_cycle_ctr)) / (now-throttle_micros);
+                  if( ratio>200 )
+                    throttle_delay++;
+                  else if( ratio<200 && throttle_delay>0 )
+                    throttle_delay--;
+                  
+                  // check/show profiling to the user
+                  prof_check();
+                  
+                  // reset throttling counters for next cycle
+                  throttle_micros    = now;
+                  throttle_cycle_ctr = prof_cycle_counter;
+                }
+              else
+                {
+                  // check/show profiling to the user
+                  prof_check();
+                }
 
-              // check/show profiling to the user
-              prof_check();
-
-              // reset throttling counters for next cycle
-              throttle_ctr       = 10000;
-              throttle_micros    = micros();
-              throttle_cycle_ctr = prof_cycle_counter;
+              throttle_ctr = 10000;
             }
 #else
           // profile
@@ -1707,9 +1104,12 @@ void loop()
 #endif
         }
 
+      // stop timer interrupts from the host (for serial playback)
+      serial_timer_interrupt_disable();
+
       // flush any characters stuck in the serial buffer 
       // (so we don't accidentally execute commands after stopping)
-      while( altair_serial_available() ) altair_serial_read();
+      while( serial_available() ) serial_read();
     }
 
   if( cswitch & BIT(SW_RESET) )

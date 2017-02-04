@@ -1,7 +1,7 @@
 #include "filesys.h"
 #include "host.h"
 #include "numsys.h"
-#include "Altair8800.h"
+#include "serial.h"
 
 
 struct DirEntryStruct
@@ -234,6 +234,8 @@ byte filesys_open_read(char nm1, char nm2)
 {
   byte fid = 0, dirindex;
 
+  //printf("filesys_open_read(%c, %c)\n", nm1, nm2);
+
   struct DirEntryStruct entry;
   if( num_open_files < MAX_OPEN_FILES )
     if( (dirindex=dir_find_file(nm1, nm2, &entry))!=0xff && entry.len>0 )
@@ -431,6 +433,7 @@ void filesys_print_dir()
   // 03 BASIC program   a            800
   // 04 <80>            <81>         
 
+  Serial.print(F("\033[2J\n"));
   Serial.print(F("ID Type            Name        Size\n"));
   Serial.print(F("-----------------------------------\n"));
   byte numEntries = dir_get_num_entries();
@@ -445,19 +448,17 @@ void filesys_print_dir()
         {
         case 'M': 
           {
-            Serial.print(F("memory page     ")); 
-            numsys_print_word(((uint16_t) entry.name2) * 256);
-            Serial.print('-');
-            numsys_print_word(((uint16_t) entry.name2) * 256+255);
-            Serial.print(F("  "));
+            Serial.print(F("Memory page     #"));
+            numsys_print_byte(entry.name2);
+            Serial.print(F("        "));
             break;
           }
 
-        case 'S': 
+        case 'D': 
           {
-            Serial.print(F("captured data   file #")); 
+            Serial.print(F("Captured data   #")); 
             numsys_print_byte(entry.name2);
-            Serial.print(F("   "));
+            Serial.print(F("        "));
             break;
           }
 
@@ -466,6 +467,14 @@ void filesys_print_dir()
             Serial.print(F("BASIC program   "));
             Serial.print((char) entry.name2);
             Serial.print(F("          "));
+            break;
+          }
+          
+        case 'C': 
+          {
+            Serial.print(F("Configuration   #"));
+            numsys_print_byte(entry.name2);
+            Serial.print(F("        "));
             break;
           }
           
@@ -516,11 +525,11 @@ void filesys_manage()
     {
       Serial.print(F("\n\n"));
       filesys_print_dir();
-      Serial.println(F("\n\nCan not enter file system manager because file system is locked.\n"));
+      Serial.println(F("\n\n[File system is locked]\n"));
+      while( !serial_available() ) delay(50);
+      serial_read();
       return;
     }
-
-  Serial.print(F("\n\nFile system manager"));
 
   while( true )
     {
@@ -528,15 +537,14 @@ void filesys_manage()
       filesys_print_dir();
       Serial.print(F("\n\nCommand (dFrx): "));
       
-      while( !altair_serial_available() ) delay(50);
-      switch( altair_serial_read() )
+      while( !serial_available() ) delay(50);
+      Serial.println();
+
+      switch( serial_read() )
         {
         case 27:
         case 'x': 
-          {
-            Serial.println(F("\n\nFile system manager exiting."));
-            return;
-          }
+          return;
 
         case 'd':
           {
@@ -545,8 +553,8 @@ void filesys_manage()
             Serial.print(F("\nReally delete file with id "));
             numsys_print_byte(i);
             Serial.print(F(" (y/n)? "));
-            while( !altair_serial_available() );
-            if( altair_serial_read()=='y' )
+            while( !serial_available() );
+            if( serial_read()=='y' )
               filesys_delete(i);
             break;
           }
@@ -594,6 +602,8 @@ void filesys_manage()
                   }
                 
                 filesys_close(fid);
+                while( !serial_available() );
+                serial_read();
               }
             break;
           }
@@ -601,8 +611,8 @@ void filesys_manage()
         case 'F': 
           {
             Serial.print(F("\nReally re-format and lose all data (y/n)? "));
-            while( !altair_serial_available() );
-            if( altair_serial_read()=='y' )
+            while( !serial_available() );
+            if( serial_read()=='y' )
               dir_set_num_entries(0);
             break;
           }

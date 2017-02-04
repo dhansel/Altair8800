@@ -77,6 +77,9 @@ inline byte host_mega_read_switches(byte highlow)
 
 bool host_read_function_switch(byte inputNum);
 
-#define host_check_interrupts() { if( Serial.available() ) altair_receive_serial_data(Serial.read()); }
+#define host_check_interrupts() { if( Serial.available() ) serial_receive_host_data(0, Serial.read()); }
+
+#define host_serial_available_for_write(x) Serial.availableForWrite()
+#define host_serial_write(x, data)         Serial.write(data)
 
 #endif

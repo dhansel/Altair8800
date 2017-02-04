@@ -27,9 +27,8 @@ const char PROGMEM primes_bas[] =
 
 const char dir[] = 
   "NEW\r "
-  "0  \"0000) [captured output]\"\r"
-  "1  \"0001) [this directory]\"\r"
-  "2  \"0010) PRIMES\"\r"
+  "0  \"0000) [this directory]\"\r"
+  "1  \"0001) PRIMES\"\r"
   "NEW\r";
 
 
@@ -10761,9 +10760,7 @@ const char basic_dir[] =
   "50 \"00110010) weather\"\r"
   "51 \"00110011) word-puzzle\"\r"
   "52 \"00110100) wumpus\"\r"
-  "53 \"00110101) zilch\"\r"
-  "98 \"    40XX) [replay tape   data from file XX - capture with AUX2 UP]\"\r"
-  "99 \"    80XX) [replay serial data from file XX - capture with AUX2 UP]\"\r";
+  "53 \"00110101) zilch\"\r";
 
 
 const char * const basic_programs[]  = {

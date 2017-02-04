@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include "config.h"
 
 #if defined(__AVR_ATmega2560__)
 
@@ -17,6 +18,7 @@ const char * const asm_programs[] = {};
 
 static byte     prog_idx = 0;
 static uint16_t prog_ctr = 0;
+static byte     NULs     = 0;
 
 
 bool prog_examples_read_start(byte idx)
@@ -26,6 +28,7 @@ bool prog_examples_read_start(byte idx)
     {
       prog_idx = idx;
       prog_ctr = 0;
+      NULs     = 0;
       return true;
     }
   else
@@ -33,13 +36,20 @@ bool prog_examples_read_start(byte idx)
 }
 
 
-bool prog_examples_read_next(byte *b)
+bool prog_examples_read_next(byte dev, byte *b)
 {
-  if( prog_idx < 0x80 )
+  if( NULs>0 )
+    {
+      NULs--;
+      *b = 0;
+      return true;
+    }
+  else if( prog_idx < 0x80 )
     *b = READ_EX_BYTE(basic_programs, prog_idx, prog_ctr);
   else
     *b = READ_EX_BYTE(asm_programs, prog_idx-0x80, prog_ctr);
 
+  if( *b=='\r' ) NULs = config_serial_playback_example_nuls(dev);
   if( *b>0 ) prog_ctr++;
   return *b != 0;
 }

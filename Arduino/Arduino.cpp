@@ -31,7 +31,7 @@ void delay(unsigned long i)
 }
 
 
-void SerialClass::print(char c) { cout << c; }
+void SerialClass::print(char c) { write(c); }
 void SerialClass::print(const char *s) { cout << s; }
 void SerialClass::print(int i) { cout << i; }
 void SerialClass::print(unsigned int i) { cout << i; }
@@ -53,7 +53,7 @@ void SerialClass::println(double d)  { cout << d << endl; }
 static bool kbhit_prev_result = false;
 static unsigned long kbhit_next_check = 0;
 
-void SerialClass::write(char c) { cout << c; }
+void SerialClass::write(char c) { if( c==127 ) cout << "\b \b"; else cout << c; }
 char SerialClass::read() { kbhit_prev_result = false; kbhit_next_check = 0; if( kbhit() ) return getch(); else return 0; }
 char SerialClass::peek() { if( kbhit() ) { char c =  getch(); ungetch(c); return c; } else return 0; }
 bool SerialClass::availableForWrite() { return true; }

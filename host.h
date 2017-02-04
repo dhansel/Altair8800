@@ -15,10 +15,19 @@
 #endif
 
 
+void     host_serial_setup(byte iface, unsigned long baud, bool set_primary_interface = true);
+
 bool     host_read_function_switch(byte i);
 bool     host_read_function_switch_debounced(byte i);
 bool     host_read_function_switch_edge(byte i);
 uint16_t host_read_function_switches_edge();
+void     host_reset_function_switch_state();
+
+typedef void (*HostTimerFnTp)();
+void host_interrupt_timer_setup(byte tid, uint32_t microseconds, HostTimerFnTp timer_fn);
+void host_interrupt_timer_start(byte tid);
+void host_interrupt_timer_stop(byte tid);
+bool host_interrupt_timer_running(byte tid);
 
 void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len);
 

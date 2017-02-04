@@ -9,7 +9,6 @@
 
 #if USE_PROFILING>0
 
-word profiling = false;
 unsigned long prof_timer, prof_cycle_counter, prof_counter;
 
 #if USE_PROFILING_DETAIL>0
@@ -63,7 +62,7 @@ void prof_print_details()
 #endif
 
 
-static void prof_reset()
+void prof_reset()
 {
 #if USE_THROTTLE>0
   // if using throttling then we call prof_check only every 10000
@@ -74,19 +73,21 @@ static void prof_reset()
 #endif
   
   prof_cycle_counter = 0;
-  prof_timer = millis();
+  prof_timer = micros();
 }
 
 
 void prof_print()
 {
-  unsigned long d = millis() - prof_timer;
-  float mhz = ((float) prof_cycle_counter) / ((float) d * 1000.0);
+  unsigned long now = micros();
+  unsigned long d   = now - prof_timer;
+
+  float mhz = ((float) prof_cycle_counter) / ((float) d);
   Serial.print(F("Performance: "));
   Serial.print(prof_cycle_counter);
   Serial.print(F(" cycles in "));
   Serial.print(((float) d)/1000.0);
-  Serial.print(F(" sec = "));
+  Serial.print(F(" msec = "));
   Serial.print(mhz);
   Serial.print(F(" MHz = "));
   Serial.print(int(mhz/0.02+.5));
@@ -100,16 +101,11 @@ void prof_print()
       prof_reset_details();
     }
 #endif
+
+  prof_cycle_counter = 0;
+  prof_timer = now;
 }
 
-
-void prof_toggle()
-{
-  profiling = !profiling;
-  Serial.print(F("\nProfiling is "));
-  Serial.print(profiling ? F("ON\n") : F("off\n"));
-  prof_reset();
-}
 
 #else
 

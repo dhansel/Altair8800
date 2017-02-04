@@ -7,9 +7,16 @@
 #include "host_due.h"
 #include "mem.h"
 #include "cpucore.h"
+#include "serial.h"
 
 #include <SPI.h>
 #include <SD.h>
+
+
+// un-define Serial which was #define'd to SwitchSerialClass in host_due.h.
+// otherwise we get infinite loops when calling Serial.* functions below
+#undef Serial
+
 
 /*
   NOTE:
@@ -286,48 +293,204 @@ uint16_t host_read_addr_switches()
 
 //------------------------------------------------------------------------------------------------------
 
+volatile static bool timer_running[9];
+volatile static HostTimerFnTp timer_fn[9];
 
-volatile static bool serial_timer_running = false;
+void TC0_Handler() { TC_GetStatus(TC0, 0); timer_fn[0](); }
+void TC1_Handler() { TC_GetStatus(TC0, 1); timer_fn[1](); }
+void TC2_Handler() { TC_GetStatus(TC0, 2); timer_fn[2](); }
+void TC3_Handler() { TC_GetStatus(TC1, 0); timer_fn[3](); }
+void TC4_Handler() { TC_GetStatus(TC1, 1); timer_fn[4](); }
+void TC5_Handler() { TC_GetStatus(TC1, 2); timer_fn[5](); }
+void TC6_Handler() { TC_GetStatus(TC2, 0); timer_fn[6](); }
+void TC7_Handler() { TC_GetStatus(TC2, 1); timer_fn[7](); }
+void TC8_Handler() { TC_GetStatus(TC2, 2); timer_fn[8](); }
 
-void TC7_Handler()
+
+bool host_interrupt_timer_running(byte tid)
 {
-  TC_GetStatus(TC2, 1);
-  if( Serial.available() )
-    altair_receive_serial_data(Serial.read());
-  else 
-    { TC_Stop(TC2, 1); serial_timer_running = false; }
+  return timer_running[tid];
 }
 
 
-void serial_interrupt()
+void host_interrupt_timer_start(byte tid)
 {
-  if( !serial_timer_running )
-    { serial_timer_running = true; TC_Start(TC2, 1); }
+  if( timer_fn[tid]!=NULL )
+    {
+      timer_running[tid] = true; 
+      switch( tid / 3 )
+        {
+        case 0: TC_Start(TC0, tid % 3); break;
+        case 1: TC_Start(TC1, tid % 3); break;
+        case 2: TC_Start(TC2, tid % 3); break;
+        }
+    }
 }
 
 
-// period_us is the timer period in microseconds (i.e. the time span after the timer goes off) 
-void timer_setup(uint32_t period_us)
+void host_interrupt_timer_stop(byte tid)
 {
+  switch( tid / 3 )
+    {
+    case 0: TC_Stop(TC0, tid % 3); break;
+    case 1: TC_Stop(TC1, tid % 3); break;
+    case 2: TC_Stop(TC2, tid % 3); break;
+    }
+
+  timer_running[tid] = false; 
+}
+
+
+void host_interrupt_timer_setup(byte tid, uint32_t period_us, HostTimerFnTp f)
+{
+  byte chid = tid % 3;
+  byte clid = tid / 3;
+
+  Tc *TC = NULL;
+  switch( clid )
+    {
+    case 0 : TC = TC0; break;
+    case 1 : TC = TC1; break;
+    case 2 : TC = TC2; break;
+    }
+  
+  if( TC==NULL ) return;
+  
   // turn on the timer clock in the power management controller
   pmc_set_writeprotect(false);     // disable write protection for pmc registers
-  pmc_enable_periph_clk(ID_TC7);   // enable peripheral clock TC7
+  switch( tid )
+  {
+  case 0 : pmc_enable_periph_clk(ID_TC0); break;
+  case 1 : pmc_enable_periph_clk(ID_TC1); break;
+  case 2 : pmc_enable_periph_clk(ID_TC2); break;
+  case 3 : pmc_enable_periph_clk(ID_TC3); break;
+  case 4 : pmc_enable_periph_clk(ID_TC4); break;
+  case 5 : pmc_enable_periph_clk(ID_TC5); break;
+  case 6 : pmc_enable_periph_clk(ID_TC6); break;
+  case 7 : pmc_enable_periph_clk(ID_TC7); break;
+  case 8 : pmc_enable_periph_clk(ID_TC8); break;
+  }
 
-  // we want wavesel 01 with RC
-  TC_Configure(TC2,1, TC_CMR_WAVE | TC_CMR_WAVSEL_UP_RC | TC_CMR_TCCLKS_TIMER_CLOCK3); 
+  // we want wavesel 01 with RC (clock #0, channel 0)
+  // TC_CMR_TCCLKS_TIMER_CLOCK3 specifies a base frequency of 2.625MHz
+  // this gives a timer range from 0.38us to 1636s with a resolution of 0.38 us
+  TC_Configure(TC, chid, TC_CMR_WAVE | TC_CMR_WAVSEL_UP_RC | TC_CMR_TCCLKS_TIMER_CLOCK3); 
 
   // enable timer interrupts on the timer
-  TC2->TC_CHANNEL[1].TC_IER=TC_IER_CPCS;   // IER = interrupt enable register
-  TC2->TC_CHANNEL[1].TC_IDR=~TC_IER_CPCS;  // IDR = interrupt disable register
+  TC->TC_CHANNEL[chid].TC_IER=TC_IER_CPCS;   // IER = interrupt enable register
+  TC->TC_CHANNEL[chid].TC_IDR=~TC_IER_CPCS;  // IDR = interrupt disable register
 
   // Enable the interrupt in the nested vector interrupt controller
-  // TC4_IRQn where 4 is the timer number * timer channels (3) + the channel number (=(1*3)+1) for timer1 channel1
-  NVIC_EnableIRQ(TC7_IRQn);
+  switch( tid )
+  {
+  case 0 : NVIC_EnableIRQ(TC0_IRQn); break;
+  case 1 : NVIC_EnableIRQ(TC1_IRQn); break;
+  case 2 : NVIC_EnableIRQ(TC2_IRQn); break;
+  case 3 : NVIC_EnableIRQ(TC3_IRQn); break;
+  case 4 : NVIC_EnableIRQ(TC4_IRQn); break;
+  case 5 : NVIC_EnableIRQ(TC5_IRQn); break;
+  case 6 : NVIC_EnableIRQ(TC6_IRQn); break;
+  case 7 : NVIC_EnableIRQ(TC7_IRQn); break;
+  case 8 : NVIC_EnableIRQ(TC8_IRQn); break;
+  }
+  
+  // set the timer period. CLOCK3 is 2.625 MHz so if we set the
+  // timer to period_us*2.625 then timer will go off after period_us microseconds
+  TC_SetRC(TC, chid, period_us * 2.625);
+  timer_running[tid] = false;
+  timer_fn[tid] = f;
+}
 
-  // set the timer period. CLOCK3 is 2.65 MHz so if we set the
-  // timer to 2625000/period_us then timer will go off after period_us microseconds
-  TC_SetRC(TC2, 1, 2625000 / period_us);
-  serial_timer_running = false;
+
+//------------------------------------------------------------------------------------------------------
+
+
+static void host_serial_receive_finished_interrupt_if0()
+{
+  // a complete character should have been received
+  if( Serial.available() )
+    serial_receive_host_data(0, Serial.read());
+  else 
+    host_interrupt_timer_stop(7);
+}
+
+
+static void host_serial_receive_start_interrupt_if0()
+{
+  // we have seen a signal change on the RX serial line so
+  // a serial character is being received => wait until it is finished
+  if( !host_interrupt_timer_running(7) )
+    host_interrupt_timer_start(7);
+}
+
+
+static void host_serial_receive_finished_interrupt_if1()
+{
+  // a complete character should have been received
+  if( Serial1.available() )
+    serial_receive_host_data(1, Serial1.read());
+  else 
+    host_interrupt_timer_stop(8);
+}
+
+
+static void host_serial_receive_start_interrupt_if1()
+{
+  // we have seen a signal change on the RX serial line so
+  // a serial character is being received => wait until it is finished
+  if( !host_interrupt_timer_running(8) )
+    host_interrupt_timer_start(8);
+}
+
+
+void host_serial_setup(byte iface, unsigned long baud, bool set_primary_interface)
+{
+  byte rxPin, timer;
+  void (*fnStarting)(), (*fnFinished)();
+
+  if( iface==0 )
+    {
+      rxPin = 0; 
+      timer = 7; 
+      fnStarting = host_serial_receive_start_interrupt_if0; 
+      fnFinished = host_serial_receive_finished_interrupt_if0; 
+    }
+  else
+    { 
+      rxPin = 19; 
+      timer = 8; 
+      fnStarting = host_serial_receive_start_interrupt_if1; 
+      fnFinished = host_serial_receive_finished_interrupt_if1; 
+    }
+
+  // detach interrupt (if it was already set)
+  detachInterrupt(digitalPinToInterrupt(rxPin));
+
+  // stop timer interrupt (if running)
+  if( host_interrupt_timer_running(timer) ) host_interrupt_timer_stop(timer);
+
+  // set up timer such that we produce an interrupt after 1 byte
+  // (8 bits + 1 stop bit) has been received at the given baud rate.
+  host_interrupt_timer_setup(timer, (9*1000000)/baud, fnFinished);
+
+  // interrupt to see activity on serial RX pin
+  attachInterrupt(digitalPinToInterrupt(rxPin), fnStarting, RISING);
+
+  // switch the primary serial interface (if requested)
+  if( set_primary_interface ) SwitchSerial.select(iface); 
+
+  if( iface==0 )
+    { 
+      //if( Serial ) Serial.end(); 
+      Serial.begin(baud); 
+      Serial.setTimeout(10000); 
+    }
+  else if( iface==1 )
+    { 
+      //if( Serial1 ) Serial1.end(); 
+      Serial1.begin(baud); 
+      Serial1.setTimeout(10000); 
+    }
 }
 
 
@@ -526,6 +689,14 @@ uint16_t host_read_function_switches_edge()
 }
 
 
+void host_reset_function_switch_state()
+{
+  for(int i=0; i<16; i++) debounceTime[i]=0;
+  switches_debounced = 0;
+  switches_pulse     = 0;
+}
+
+
 static void switch_interrupt(int i)
 {
   if( millis()>debounceTime[i] )
@@ -540,13 +711,13 @@ static void switch_interrupt(int i)
           switches_debounced |= bitval;
           switches_pulse |= bitval;
           if( function_switch_irq[i]>0 ) altair_interrupt(function_switch_irq[i]);
-          debounceTime[i] = millis() + 100;
+          debounceTime[i] = millis() + 50;
         }
       else if( !d1 && d2 ) 
         {
           switches_debounced &= ~bitval;
           switches_pulse &= ~bitval;
-          debounceTime[i] = millis() + 100;
+          debounceTime[i] = millis() + 50;
         }
     }
 }
@@ -590,9 +761,7 @@ static void switches_setup()
   attachInterrupt(function_switch_pin[15], switch_interrupt_15, CHANGE);
 
   delay(1);
-  for(int i=0; i<16; i++) debounceTime[i]=0;
-  switches_debounced = 0;
-  switches_pulse     = 0;
+  host_reset_function_switch_state();
 }
 
 
@@ -697,13 +866,12 @@ void host_setup()
   // attach interrupts
   switches_setup();
 
-  // at 9600 baud with 1 stop bit it takes 1/9600*(8+1)=0.0009375 seconds to
-  // receive one character, so a byte should have been received 1ms (1000 microseconds)
-  // after we get an interrupt signaling activity on the serial line
-  timer_setup(1000);
-
-  // interrupt to see activity on serial RX pin
-  attachInterrupt(digitalPinToInterrupt(19), serial_interrupt, RISING);
+  // initialize interrupt timers
+  for(byte tid=0; tid<9; tid++)
+    {
+      timer_running[tid] = false;
+      timer_fn[tid] = NULL;
+    }
 
   // set mask for bits that will be written to via REG_PIOX_OSDR
   REG_PIOC_OWDR = 0xFFF00C03;  // address bus (16 bit)
@@ -770,5 +938,131 @@ uint32_t host_write_file(const char *filename, uint32_t offset, uint32_t len, vo
   return res;
 }
 
+
+// --------------------------------------------------------
+
+SwitchSerialClass SwitchSerial;
+
+SwitchSerialClass::SwitchSerialClass() : Stream()
+{
+  m_selected = 0;
+}
+
+
+void SwitchSerialClass::begin(unsigned long baud)
+{
+  switch( m_selected )
+    {
+    case 0: Serial.begin(baud); break;
+    case 1: Serial1.begin(baud); break;
+    }
+}
+
+void SwitchSerialClass::end()
+{
+  switch( m_selected )
+    {
+    case 0: Serial.end(); break;
+    case 1: Serial1.end(); break;
+    }
+}
+
+int SwitchSerialClass::available(void)
+{
+  switch( m_selected )
+    {
+    case 0: return Serial.available(); break;
+    case 1: return Serial1.available(); break;
+    }
+
+ return 0;
+}
+
+int SwitchSerialClass::availableForWrite(void)
+{
+  switch( m_selected )
+    {
+    case 0: return Serial.availableForWrite(); break;
+    case 1: return Serial1.availableForWrite(); break;
+    }
+
+ return 0;
+}
+
+int SwitchSerialClass::peek(void)
+{
+  switch( m_selected )
+    {
+    case 0: return Serial.peek(); break;
+    case 1: return Serial1.peek(); break;
+    }
+
+ return -1;
+}
+
+int SwitchSerialClass::read(void)
+{
+  switch( m_selected )
+    {
+    case 0: return Serial.read(); break;
+    case 1: return Serial1.read(); break;
+    }
+
+  return -1;
+}
+
+void SwitchSerialClass::flush(void)
+{
+  switch( m_selected )
+    {
+    case 0: Serial.flush(); break;
+    case 1: Serial1.flush(); break;
+    }
+}
+
+size_t SwitchSerialClass::write(uint8_t b)
+{
+  switch( m_selected )
+    {
+    case 0: return Serial.write(b); break;
+    case 1: return Serial1.write(b); break;
+    }
+
+  return 0;
+}
+
+
+SwitchSerialClass::operator bool() 
+{ 
+  switch( m_selected )
+    {
+    case 0: return (bool) Serial; break;
+    case 1: return (bool) Serial1; break;
+    }
+
+  return false;
+  }
+
+
+
+void host_serial_write(byte iface, byte data)
+{
+  switch( iface )
+    {
+    case 0 : Serial.write(data); break;
+    case 1 : Serial1.write(data); break;
+    }
+}
+
+bool host_serial_available_for_write(byte iface)
+{
+  switch( iface )
+    {
+    case 0 : return Serial.availableForWrite();
+    case 1 : return Serial1.availableForWrite();
+    }
+
+  return 0;
+}
 
 #endif

@@ -4,7 +4,6 @@
 #include "config.h"
 
 #if USE_PROFILING>0
-extern word profiling;
 extern unsigned long prof_timer, prof_cycle_counter, prof_counter;
 
 #if USE_PROFILING_DETAIL>0
@@ -15,10 +14,10 @@ extern unsigned long prof_counter_detail, prof_opcode_count[256];
 #endif
 
 void prof_print();
-void prof_toggle();
+void prof_reset();
 
 #define PROF_ADD_CYCLES(n) prof_cycle_counter += n
-#define prof_check() if( profiling && --prof_counter==0 ) prof_print()
+#define prof_check() {if( config_profiling_enabled() && --prof_counter==0 ) prof_print(); }
 
 #else
 

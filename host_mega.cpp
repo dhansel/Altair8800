@@ -119,6 +119,123 @@ uint32_t host_get_random()
 
 // --------------------------------------------------------------------------------------------------
 
+
+volatile static bool timer_running[4];
+volatile static HostTimerFnTp timer_fn[4];
+
+ISR(TIMER1_COMPA_vect) { noInterrupts(); timer_fn[0](); interrupts(); }
+ISR(TIMER3_COMPA_vect) { noInterrupts(); timer_fn[1](); interrupts(); }
+ISR(TIMER4_COMPA_vect) { noInterrupts(); timer_fn[2](); interrupts(); }
+ISR(TIMER5_COMPA_vect) { noInterrupts(); timer_fn[3](); interrupts(); }
+
+
+void host_interrupt_timer_setup(byte tid, uint32_t microseconds, HostTimerFnTp f)
+{
+  noInterrupts();
+
+  // clk/256 prescaler (62.5kHz) gives a timer range from 16us to 1.4s
+  // with a resolution of 16us
+  uint16_t compare = microseconds/16;
+
+  switch( tid )
+    {
+    case 0:
+      {
+        TCCR1A = 0;
+        TCCR1B = 0;
+        TCNT1  = 0;
+        OCR1A = compare;  
+        TCCR1B |= (1 << WGM12);   // CTC mode
+        TCCR1B &= ~0x07;          // prescale=0 (disable timer)
+        TIMSK1 |= (1 << OCIE1A);  // enable timer compare interrupt
+      }
+
+    case 1:
+      {
+        TCCR3A = 0;
+        TCCR3B = 0;
+        TCNT3  = 0;
+        OCR3A = compare;
+        TCCR3B |= (1 << WGM12);   // CTC mode
+        TCCR3B &= ~0x07;          // prescale=0 (disable timer)
+        TIMSK3 |= (1 << OCIE1A);  // enable timer compare interrupt
+      }
+
+    case 2:
+      {
+        TCCR4A = 0;
+        TCCR4B = 0;
+        TCNT4  = 0;
+        OCR4A = compare;
+        TCCR4B |= (1 << WGM12);   // CTC mode
+        TCCR4B &= ~0x07;          // prescale=0 (disable timer)
+        TIMSK4 |= (1 << OCIE1A);  // enable timer compare interrupt
+      }
+
+    case 3:
+      {
+        TCCR5A = 0;
+        TCCR5B = 0;
+        TCNT5  = 0;
+        OCR5A = compare;
+        TCCR5B |= (1 << WGM12);   // CTC mode
+        TCCR5B &= ~0x07;          // prescale=0 (disable timer)
+        TIMSK5 |= (1 << OCIE1A);  // enable timer compare interrupt
+      }
+    }
+
+  timer_running[tid] = false;
+  timer_fn[tid] = f;
+
+  interrupts();
+}
+
+
+void host_interrupt_timer_start(byte tid)
+{
+  noInterrupts();
+
+  // set clk/256 prescaler (enable timer)
+  timer_running[tid] = true; 
+  switch( tid )
+    {
+    case 0: TCCR1B |= 1<<CS12; break;
+    case 1: TCCR3B |= 1<<CS12; break;
+    case 2: TCCR4B |= 1<<CS12; break;
+    case 3: TCCR5B |= 1<<CS12; break;
+    }
+
+  interrupts();
+}
+
+
+void host_interrupt_timer_stop(byte tid)
+{
+  noInterrupts();
+
+  // set prescaler to 0 (disables timer)
+  switch( tid )
+    {
+    case 0: TCCR1B &= ~0x07; break;
+    case 1: TCCR3B &= ~0x07; break;
+    case 2: TCCR4B &= ~0x07; break;
+    case 3: TCCR5B &= ~0x07; break;
+    }
+  timer_running[tid] = false; 
+
+  interrupts();
+}
+
+
+bool host_interrupt_timer_running(byte tid)
+{
+  return timer_running[tid];
+}
+
+
+// --------------------------------------------------------------------------------------------------
+
+
 volatile static uint16_t switches_pulse = 0;
 volatile static uint16_t switches_debounced = 0;
 static uint32_t debounceTime[16];
@@ -187,6 +304,14 @@ uint16_t host_read_function_switches_edge()
 }
 
 
+void host_reset_function_switch_state()
+{
+  for(byte i=0; i<16; i++) debounceTime[i]=0;
+  switches_debounced = 0;
+  switches_pulse     = 0;
+}
+
+
 static void switch_interrupt(int i)
 {
   switch_check(i);
@@ -209,13 +334,23 @@ static void switches_setup()
   attachInterrupt(digitalPinToInterrupt(function_switch_pin[SW_AUX2DOWN]), switch_interrupt5, CHANGE);
 
   delay(1);
-  for(byte i=0; i<16; i++) debounceTime[i]=0;
-  switches_debounced = 0;
-  switches_pulse     = 0;
+  host_reset_function_switch_state();
 }
 
 
 // --------------------------------------------------------------------------------------------------
+
+
+void host_serial_setup(byte iface, unsigned long baud, bool set_primary_interface)
+{
+  if( iface==0 )
+    {
+      Serial.end();
+      Serial.begin(baud);
+      Serial.setTimeout(10000);
+    }
+}
+
 
 void host_setup()
 {

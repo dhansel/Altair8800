@@ -17,9 +17,7 @@ void break_check_do(uint16_t addr)
         Serial.print(F("\n\n--- Reached breakpoint at "));
         numsys_print_word(addr);
         Serial.print(F(" ---\n\n"));
-        host_clr_status_led_MEMR();
-        host_set_status_led_WAIT();
-        host_clr_status_led_WO();
+        altair_interrupt(INT_SW_STOP);
       }
 }
 

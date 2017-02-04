@@ -1416,14 +1416,12 @@ const char PROGMEM dir[] =
   "12 \"1100) SIN\"\r"
   "13 \"1101) BIRTHDAY\"\r"
   //"14 \"1110) SNOOPY\"\r"
-  "98 \"40XX) [replay tape   data from file XX - capture with AUX2 UP]\"\r"
-  "99 \"80XX) [replay serial data from file XX - capture with AUX2 UP]\"\r"
   "NEW\r";
 
 
 
 /* there seems to be a limit of how much data can be stored 
-   in PROGMEM (64k?) - Adding more examples will on the MEGA
+   in PROGMEM (64k?) - Adding more examples on the MEGA
    leads to corruption in program strings and other places */
 const char PROGMEM * const basic_programs[]  = { 
   dir, 

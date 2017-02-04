@@ -5,8 +5,10 @@
 #include <string>
 #include "Altair8800.h"
 #include "mem.h"
+#include "serial.h"
 #include "cpucore.h"
 #include "host_pc.h"
+#include "Windows.h"
 
 byte data_leds;
 uint16_t status_leds;
@@ -16,38 +18,86 @@ static FILE *storagefile = NULL;
 
 //#define DEBUG
 
-void host_setup()
-{
-  data_leds = 0;
-  status_leds = 0;
-  addr_leds = 0;
-  stop_request = 0;
+// ----------------------------------------------------------------------------------
 
-  storagefile = fopen("AltairStorage.dat", "r+b");
-  if( storagefile==NULL ) 
+
+struct TimerData {
+  HostTimerFnTp timer_fn;
+  uint32_t milliseconds;
+  DWORD    thread_id;
+  bool     go;
+} timer_data[9];
+  
+
+static DWORD WINAPI timer_interrupt_fn(void *d)
+{
+  byte tid = (word) d;
+  struct TimerData *data = timer_data+tid;
+
+  while( data->go )
     {
-      void *chunk = calloc(1024, 1);
-      storagefile = fopen("AltairStorage.dat", "wb");
-      if( storagefile!=NULL )
+      Sleep(data->milliseconds);
+      data->timer_fn();
+    }
+  
+  printf("[timer thread exit]\n");
+  data->thread_id = 0;
+  return 0;
+}
+
+
+void host_interrupt_timer_start(byte tid)
+{
+  printf("[Starting timer interrupts]\n");
+  timer_data[tid].go = true;
+  HANDLE h = CreateThread(0, 0, timer_interrupt_fn, (void *) tid, 0, &(timer_data[tid].thread_id));
+  if( h )
+    CloseHandle(h);
+  else
+    timer_data[tid].thread_id = 0;
+}
+
+
+void host_interrupt_timer_setup(byte tid, uint32_t microseconds, HostTimerFnTp timer_fn)
+{
+  timer_data[tid].go = false;
+  timer_data[tid].timer_fn = timer_fn;
+  timer_data[tid].milliseconds = (microseconds/1000.0)+0.5;
+  timer_data[tid].thread_id = 0;
+}
+
+
+void host_interrupt_timer_stop(byte tid)
+{
+  if( timer_data[tid].thread_id )
+    {
+      printf("[Stopping timer interrupts]\n");
+      timer_data[tid].go = false;
+      
+      // if this is not the timer thread itself then wait until
+      // the timer thread exits
+      if( GetCurrentThreadId() != timer_data[tid].thread_id )
         {
-          uint32_t size;
-          for( size = 0; (size+1024) < HOST_STORAGESIZE; size+=1024 )
-            fwrite(chunk, 1024, 1, storagefile);
-          fwrite(chunk, HOST_STORAGESIZE-size, 1, storagefile);
-          fclose(storagefile);
+          HANDLE h = OpenThread(SYNCHRONIZE, false, timer_data[tid].thread_id);
+          if( h!=NULL )
+            {
+              WaitForSingleObject(h, INFINITE); 
+              CloseHandle(h);
+            }
         }
       
-      storagefile = fopen("AltairStorage.dat", "r+b");
+      printf("[Stopped timer interrupts]\n");
     }
-
-  srand(time(NULL));
 }
 
 
-uint32_t host_get_random()
+bool host_interrupt_timer_running(byte tid)
 {
-  return (uint32_t) rand();
+  return timer_data[tid].thread_id!=0;
 }
+
+
+// ----------------------------------------------------------------------------------
 
 
 bool host_read_function_switch(byte i)
@@ -74,25 +124,11 @@ uint16_t host_read_function_switches_edge()
 }
 
 
-void host_check_interrupts()
+void host_reset_function_switch_state()
 {
-  static unsigned long prevCtrlC = 0;
-  if( Serial.available() )
-    {
-      byte c = Serial.read();
-      if( c == 3 )
-        {
-          // CTRL-C was pressed.  If we receive two CTRL-C in short order
-          // then we terminate the emulator.
-          if( millis()>prevCtrlC+250 )
-            prevCtrlC = millis();
-          else
-            exit(0);
-        }
-      
-      altair_receive_serial_data(c);
-    }
 }
+
+// ----------------------------------------------------------------------------------
 
 
 void host_write_data(const void *data, uint32_t addr, uint32_t len)
@@ -143,6 +179,9 @@ void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
 }
 
 
+// ----------------------------------------------------------------------------------
+
+
 uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, void *buffer)
 {
   char fnamebuf[30];
@@ -178,6 +217,76 @@ uint32_t host_write_file(const char *filename, uint32_t offset, uint32_t len, vo
 
   //printf("host_write_file('%s', %04x, %04x, %p)=%04x\n", filename, offset, len, buffer, res);
   return res;
+}
+
+
+// ----------------------------------------------------------------------------------
+
+
+uint32_t host_get_random()
+{
+  return rand()*65536l | rand();
+}
+
+
+void host_check_interrupts()
+{
+  static unsigned long prevCtrlC = 0;
+  if( Serial.available() )
+    {
+      byte c = Serial.read();
+      if( c == 3 )
+        {
+          // CTRL-C was pressed.  If we receive two CTRL-C in short order
+          // then we terminate the emulator.
+          if( millis()>prevCtrlC+250 )
+            prevCtrlC = millis();
+          else
+            exit(0);
+        }
+      
+      serial_receive_host_data(0, c);
+    }
+}
+
+
+void host_serial_setup(byte iface, unsigned long baud, bool set_primary_interface)
+{
+  // no setup to be done
+}
+
+
+void host_setup()
+{
+  data_leds = 0;
+  status_leds = 0;
+  addr_leds = 0;
+  stop_request = 0;
+  
+  storagefile = fopen("AltairStorage.dat", "r+b");
+  if( storagefile==NULL ) 
+    {
+      void *chunk = calloc(1024, 1);
+      storagefile = fopen("AltairStorage.dat", "wb");
+      if( storagefile!=NULL )
+        {
+          uint32_t size;
+          for( size = 0; (size+1024) < HOST_STORAGESIZE; size+=1024 )
+            fwrite(chunk, 1024, 1, storagefile);
+          fwrite(chunk, HOST_STORAGESIZE-size, 1, storagefile);
+          fclose(storagefile);
+        }
+      
+      storagefile = fopen("AltairStorage.dat", "r+b");
+    }
+
+  for(byte tid=0; tid<9; tid++)
+    {
+      timer_data[tid].go = false;
+      timer_data[tid].thread_id = 0;
+    }
+
+  srand(time(NULL));
 }
 
 

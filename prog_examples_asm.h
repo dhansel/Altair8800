@@ -393,7 +393,7 @@ const char asm_pong[] =
   "\tJNC\tMON\t;BACK TO MONITOR\r"
   "\tIN\t11H\r"
   "\tJMP\tEMPTY\r"
-  "PSCR:\tPUSH B\t;SAVE BALL POSITION\r"
+  "PSCR:\tPUSH\tB\t;SAVE BALL POSITION\r"
   "\tMVI\tB,1\t;MOVE CURSOR TO ROW 1,COLUMN 10\r"
   "\tMVI\tC,10               \r"
   "\tCALL\tMOVC\r"

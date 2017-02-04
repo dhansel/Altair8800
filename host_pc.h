@@ -9,9 +9,6 @@
 #undef  STANDALONE
 #define STANDALONE 1
 
-// never throttle on PC host (easier for testing)
-#undef  USE_THROTTLE
-#define USE_THROTTLE 0
 #define PROF_DISPLAY_INTERVAL 10000000
 
 #undef  MAX_BREAKPOINTS
@@ -78,5 +75,8 @@ extern byte stop_request;
 #define host_read_data_leds() data_leds
 
 void host_check_interrupts();
+
+#define host_serial_available_for_write(x) Serial.availableForWrite()
+#define host_serial_write(x, data)         Serial.write(data)
 
 #endif
