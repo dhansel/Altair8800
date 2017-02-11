@@ -936,6 +936,7 @@ byte serial_acr_in_ctrl()
       // our BASIC CSAVE/CLOAD tape emulation is a continuous loop so we always
       // have data available (i.e. bit 0 NOT set) 
       data &= ~0x01;
+      serial_status[CSM_ACR] |= SST_RDRF;
       
       serial_acr_check_cload_timeout();
       if( serial_status[CSM_ACR] & SST_FNF )
@@ -949,8 +950,6 @@ byte serial_acr_in_ctrl()
           regPC = 0xC0A0;
           serial_status[CSM_ACR] &= ~SST_FNF;
         }
-      else if( !(serial_status[CSM_ACR]&SST_RDRF) )
-        acr_read_next_cload_byte();
     }
 
   return data;
