@@ -901,8 +901,6 @@ void host_setup()
       use_sd = true;
       due_storagesize = 512*1024;
     }
-  else
-    due_storagesize = 0xFFFF;
 
   // restore HLDA status light to what it was before
   if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
