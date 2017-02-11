@@ -2,6 +2,8 @@
 
 #include "prog_tools.h"
 #include "host.h"
+#include "serial.h"
+#include "Altair8800.h"
 
 #if defined(__AVR_ATmega2560__)
 
@@ -818,8 +820,14 @@ static const char ps2_tape[] = {
 
 uint16_t prog_ps2_copy_monitor(byte *dst)
 {
-  host_copy_flash_to_ram(dst+0x0038, ps2_monitor, sizeof(ps2_monitor));
-  return 0x0040;
+  if( serial_acr_mount_ps2() && !have_ps2 )
+    {
+      host_copy_flash_to_ram(dst+0x0038, ps2_monitor, sizeof(ps2_monitor));
+      have_ps2 = true;
+      return 0x0040;
+    }
+  else
+    return 0xffff;
 }
 
 

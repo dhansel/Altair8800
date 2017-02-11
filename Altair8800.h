@@ -38,17 +38,27 @@
 #define INT_SW_CLR      0x2000
 #define INT_SW_AUX2UP   0x1000
 #define INT_SW_AUX2DOWN 0x0800
-#define INT_SW          0xff00
+#define INT_SWITCH      0xff00
 
-#define INT_SERIAL      0x0001
+#define INT_SIO         0x0001
+#define INT_ACR         0x0002
+#define INT_2SIO1       0x0004
+#define INT_2SIO2       0x0008
+#define INT_DRIVE       0x0010
+#define INT_RTC         0x0020
+#define INT_VECTOR      0x0080
+#define INT_DEVICE      0x00ff
 
 extern word status_wait;
 extern word status_inte;
+extern bool have_ps2;
 
 byte altair_in(byte addr);
 void altair_out(byte addr, byte val);
 void altair_hlt();
-void altair_interrupt(uint16_t i);
+void altair_interrupt(uint16_t i, bool set = true);
+void altair_interrupt_enable();
+void altair_interrupt_disable();
 bool altair_isreset();
 void altair_wait_step();
 void altair_set_outputs(uint16_t a, byte v);

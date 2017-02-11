@@ -503,9 +503,9 @@ void filesys_print_dir()
           {
             switch( file_data[j].name1 )
               {
-              case 'W': Serial.print("  [currently open for writing]"); break;
-              case 'R': Serial.print("  [currently open for reading]"); break;
-              default:  Serial.print("  ???"); break;
+              case 'W': Serial.print(F("  [currently open for writing]")); break;
+              case 'R': Serial.print(F("  [currently open for reading]")); break;
+              default:  Serial.print(F("  ???")); break;
               }
           }
 

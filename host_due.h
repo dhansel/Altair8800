@@ -16,6 +16,8 @@ Solution: Have 64k minus one byte of memory. That will stop the
 #define HOST_STORAGESIZE due_storagesize
 #define HOST_BUFFERSIZE  0x100
 
+#define HOST_PERFORMANCE_FACTOR 1.0
+
 extern uint32_t due_storagesize;
 
 // ------------------------------------------ serial interface
@@ -74,7 +76,7 @@ uint16_t host_read_addr_switches();
 #define host_set_status_led_M1()      REG_PIOC_SODR = 1<<23
 #define host_set_status_led_INP()     REG_PIOC_SODR = 1<<22
 #define host_set_status_led_MEMR()    REG_PIOC_SODR = 1<<21
-#define host_set_status_led_INTE()  { REG_PIOD_SODR = 1<<8;  status_inte = true; }
+#define host_set_status_led_INTE()    REG_PIOD_SODR = 1<<8;
 #define host_set_status_led_PROT()    REG_PIOB_SODR = 1<<27
 #define host_set_status_led_WAIT()  { REG_PIOC_SODR = 1<<29; status_wait = true; }
 #define host_set_status_led_HLDA()    REG_PIOB_SODR = 1<<26
@@ -87,7 +89,7 @@ uint16_t host_read_addr_switches();
 #define host_clr_status_led_M1()      REG_PIOC_CODR = 1<<23
 #define host_clr_status_led_INP()     REG_PIOC_CODR = 1<<22
 #define host_clr_status_led_MEMR()    REG_PIOC_CODR = 1<<21
-#define host_clr_status_led_INTE()  { REG_PIOD_CODR = 1<<8;  status_inte = false; }
+#define host_clr_status_led_INTE()    REG_PIOD_CODR = 1<<8;
 #define host_clr_status_led_PROT()    REG_PIOB_CODR = 1<<27
 #define host_clr_status_led_WAIT()  { REG_PIOC_CODR = 1<<29; status_wait = false; }
 #define host_clr_status_led_HLDA()    REG_PIOB_CODR = 1<<26

@@ -5,6 +5,8 @@
 #define HOST_STORAGESIZE 0x80000 /* 512k */
 #define HOST_BUFFERSIZE  0x400   /* 1k */
 
+#define HOST_PERFORMANCE_FACTOR 75.0
+
 // PC host is always standalone
 #undef  STANDALONE
 #define STANDALONE 1
@@ -30,7 +32,7 @@ extern byte stop_request;
 #define host_set_status_led_M1()      status_leds |= ST_M1
 #define host_set_status_led_INP()     status_leds |= ST_INP
 #define host_set_status_led_MEMR()    status_leds |= ST_MEMR
-#define host_set_status_led_INTE()  { status_leds |= ST_INTE; status_inte = true; }
+#define host_set_status_led_INTE()    status_leds |= ST_INTE;
 #define host_set_status_led_PROT()    status_leds |= ST_PROT
 #define host_set_status_led_WAIT()  { status_leds |= ST_WAIT; status_wait = true; }
 #define host_set_status_led_HLDA()    status_leds |= ST_HLDA
@@ -43,7 +45,7 @@ extern byte stop_request;
 #define host_clr_status_led_M1()      status_leds &= ~ST_M1
 #define host_clr_status_led_INP()     status_leds &= ~ST_INP
 #define host_clr_status_led_MEMR()    status_leds &= ~ST_MEMR
-#define host_clr_status_led_INTE()  { status_leds &= ~ST_INTE;  status_inte = false; }
+#define host_clr_status_led_INTE()    status_leds &= ~ST_INTE;
 #define host_clr_status_led_PROT()    status_leds &= ~ST_PROT
 #define host_clr_status_led_WAIT()  { status_leds &= ~ST_WAIT; status_wait = false; }
 #define host_clr_status_led_HLDA()    status_leds &= ~ST_HLDA
@@ -51,7 +53,6 @@ extern byte stop_request;
 #define host_read_status_led_WAIT()   status_wait
 #define host_read_status_led_M1()     (status_leds & ST_M1)
 #define host_read_status_led_HLTA()   (status_leds & ST_HLTA)
-#define host_read_status_led_INTE()   status_inte
 
 // reading from memory (MEMR on, WO on)
 #define host_set_status_leds_READMEM()     status_leds |= ST_MEMR | ST_WO
@@ -73,6 +74,7 @@ extern byte stop_request;
 
 #define host_set_data_leds(v) data_leds = v
 #define host_read_data_leds() data_leds
+
 
 void host_check_interrupts();
 

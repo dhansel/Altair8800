@@ -10,6 +10,8 @@
 #define HOST_STORAGESIZE 4096 // have 4k EEPROM
 #define HOST_BUFFERSIZE  0    // have little SRAM so don't buffer
 
+#define HOST_PERFORMANCE_FACTOR 0.25
+
 #define PROF_DISPLAY_INTERVAL 100000
 
 #define host_set_addr_leds(v)  (PORTA=((v) & 0xff), PORTC=((v) / 256))
@@ -25,7 +27,7 @@
 #define host_set_status_led_M1()      PORTB |=  0x20
 #define host_set_status_led_INP()     PORTB |=  0x40
 #define host_set_status_led_MEMR()    PORTB |=  0x80
-#define host_set_status_led_INTE()  { digitalWrite(38, HIGH); status_inte = true; }
+#define host_set_status_led_INTE()    digitalWrite(38, HIGH);
 #define host_set_status_led_PROT()    digitalWrite(39, HIGH)
 #define host_set_status_led_WAIT()  { digitalWrite(40, HIGH); status_wait = true; }
 #define host_set_status_led_HLDA()    digitalWrite(41, HIGH)
@@ -38,7 +40,7 @@
 #define host_clr_status_led_M1()      PORTB &= ~0x20
 #define host_clr_status_led_INP()     PORTB &= ~0x40
 #define host_clr_status_led_MEMR()    PORTB &= ~0x80
-#define host_clr_status_led_INTE()  { digitalWrite(38, LOW); status_inte = false; }
+#define host_clr_status_led_INTE()    digitalWrite(38, LOW);
 #define host_clr_status_led_PROT()    digitalWrite(39, LOW)
 #define host_clr_status_led_WAIT()  { digitalWrite(40, LOW); status_wait = false; }
 #define host_clr_status_led_HLDA()    digitalWrite(41, LOW)

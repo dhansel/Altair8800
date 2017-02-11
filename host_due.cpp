@@ -8,6 +8,7 @@
 #include "mem.h"
 #include "cpucore.h"
 #include "serial.h"
+#include "timer.h"
 
 #include <SPI.h>
 #include <SD.h>
@@ -293,36 +294,47 @@ uint16_t host_read_addr_switches()
 
 //------------------------------------------------------------------------------------------------------
 
-volatile static bool timer_running[9];
-volatile static HostTimerFnTp timer_fn[9];
+volatile static bool host_timer_running[9];
+volatile static TimerFnTp host_timer_fn[9];
 
-void TC0_Handler() { TC_GetStatus(TC0, 0); timer_fn[0](); }
-void TC1_Handler() { TC_GetStatus(TC0, 1); timer_fn[1](); }
-void TC2_Handler() { TC_GetStatus(TC0, 2); timer_fn[2](); }
-void TC3_Handler() { TC_GetStatus(TC1, 0); timer_fn[3](); }
-void TC4_Handler() { TC_GetStatus(TC1, 1); timer_fn[4](); }
-void TC5_Handler() { TC_GetStatus(TC1, 2); timer_fn[5](); }
-void TC6_Handler() { TC_GetStatus(TC2, 0); timer_fn[6](); }
-void TC7_Handler() { TC_GetStatus(TC2, 1); timer_fn[7](); }
-void TC8_Handler() { TC_GetStatus(TC2, 2); timer_fn[8](); }
+void TC0_Handler() { TC_GetStatus(TC0, 0); host_timer_fn[0](); }
+void TC1_Handler() { TC_GetStatus(TC0, 1); host_timer_fn[1](); }
+void TC2_Handler() { TC_GetStatus(TC0, 2); host_timer_fn[2](); }
+void TC3_Handler() { TC_GetStatus(TC1, 0); host_timer_fn[3](); }
+void TC4_Handler() { TC_GetStatus(TC1, 1); host_timer_fn[4](); }
+void TC5_Handler() { TC_GetStatus(TC1, 2); host_timer_fn[5](); }
+void TC6_Handler() { TC_GetStatus(TC2, 0); host_timer_fn[6](); }
+void TC7_Handler() { TC_GetStatus(TC2, 1); host_timer_fn[7](); }
+void TC8_Handler() { TC_GetStatus(TC2, 2); host_timer_fn[8](); }
 
 
 bool host_interrupt_timer_running(byte tid)
 {
-  return timer_running[tid];
+  return host_timer_running[tid];
 }
 
 
-void host_interrupt_timer_start(byte tid)
+void host_interrupt_timer_start(byte tid, uint32_t period_us = 0)
 {
-  if( timer_fn[tid]!=NULL )
+  if( host_timer_fn[tid]!=NULL )
     {
-      timer_running[tid] = true; 
+      host_timer_running[tid] = true; 
       switch( tid / 3 )
         {
-        case 0: TC_Start(TC0, tid % 3); break;
-        case 1: TC_Start(TC1, tid % 3); break;
-        case 2: TC_Start(TC2, tid % 3); break;
+        case 0: 
+          if( period_us>0 ) TC_SetRC(TC0, tid % 3, period_us * 2.625);
+          TC_Start(TC0, tid % 3); 
+          break;
+
+        case 1: 
+          if( period_us>0 ) TC_SetRC(TC0, tid % 3, period_us * 2.625);
+          TC_Start(TC1, tid % 3); 
+          break;
+
+        case 2: 
+          if( period_us>0 ) TC_SetRC(TC0, tid % 3, period_us * 2.625);
+          TC_Start(TC2, tid % 3); 
+          break;
         }
     }
 }
@@ -337,11 +349,11 @@ void host_interrupt_timer_stop(byte tid)
     case 2: TC_Stop(TC2, tid % 3); break;
     }
 
-  timer_running[tid] = false; 
+  host_timer_running[tid] = false; 
 }
 
 
-void host_interrupt_timer_setup(byte tid, uint32_t period_us, HostTimerFnTp f)
+void host_interrupt_timer_setup(byte tid, uint32_t period_us, TimerFnTp f)
 {
   byte chid = tid % 3;
   byte clid = tid / 3;
@@ -397,8 +409,8 @@ void host_interrupt_timer_setup(byte tid, uint32_t period_us, HostTimerFnTp f)
   // set the timer period. CLOCK3 is 2.625 MHz so if we set the
   // timer to period_us*2.625 then timer will go off after period_us microseconds
   TC_SetRC(TC, chid, period_us * 2.625);
-  timer_running[tid] = false;
-  timer_fn[tid] = f;
+  host_timer_running[tid] = false;
+  host_timer_fn[tid] = f;
 }
 
 
@@ -497,17 +509,17 @@ void host_serial_setup(byte iface, unsigned long baud, bool set_primary_interfac
 //------------------------------------------------------------------------------------------------------
 
 static bool use_sd = false;
-uint32_t due_storagesize = 0xC000;
+uint32_t due_storagesize = 0x8000;
 
 
 // The Due has 512k FLASH memory (addresses 0x00000-0x7ffff).
-// We use 48k (0xC000 bytes) for storage
+// We use 32k (0x8000 bytes) for storage
 // DueFlashStorage address 0 is the first address of the second memory bank,
-// i.e. 0x40000. We add 0x3C000 so we use at 0x74000-0x7ffff
+// i.e. 0x40000. We add 0x38000 so we use at 0x78000-0x7ffff
 // => MUST make sure that our total program size (shown in Arduine IDE after compiling)
-//    is less than 475135 (0x73fff)! Otherwise we would overwrite our own program when
+//    is less than 491519 (0x77fff)! Otherwise we would overwrite our own program when
 //    saving memory pages.
-#define FLASH_STORAGE_OFFSET 0x34000
+#define FLASH_STORAGE_OFFSET 0x38000
 DueFlashStorage dueFlashStorage;
 
 #define MOVE_BUFFER_SIZE 1024
@@ -869,8 +881,8 @@ void host_setup()
   // initialize interrupt timers
   for(byte tid=0; tid<9; tid++)
     {
-      timer_running[tid] = false;
-      timer_fn[tid] = NULL;
+      host_timer_running[tid] = false;
+      host_timer_fn[tid] = NULL;
     }
 
   // set mask for bits that will be written to via REG_PIOX_OSDR
@@ -894,6 +906,40 @@ void host_setup()
 
   // restore HLDA status light to what it was before
   if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
+}
+
+
+int host_get_file_size(const char *filename)
+{
+  int res = -1;
+  bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
+
+  File f = SD.open(filename, FILE_READ);
+  if( f )
+    {
+      res = f.size();
+      f.close();
+    }
+
+  if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
+  return res;
+}
+
+
+bool host_file_exists(const char *filename)
+{
+  bool res = false;
+  bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
+
+  File f = SD.open(filename, FILE_READ);
+  if( f )
+    {
+      f.close();
+      res = true;
+    }
+
+  if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
+  return res;
 }
 
 

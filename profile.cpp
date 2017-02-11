@@ -1,15 +1,9 @@
 #include <Arduino.h>
 #include "profile.h"
 #include "disassembler.h"
+#include "timer.h"
+#include "config.h"
 #include "host.h"
-
-#ifndef PROF_DISPLAY_INTERVAL
-#define PROF_DISPLAY_INTERVAL 500000
-#endif
-
-#if USE_PROFILING>0
-
-unsigned long prof_timer, prof_cycle_counter, prof_counter;
 
 #if USE_PROFILING_DETAIL>0
 unsigned long prof_detail_counter, prof_opcode_count[256];
@@ -62,56 +56,60 @@ void prof_print_details()
 #endif
 
 
-void prof_reset()
-{
-#if USE_THROTTLE>0
-  // if using throttling then we call prof_check only every 10000
-  // instructions, so scale the counter accordingly
-  prof_counter = PROF_DISPLAY_INTERVAL / 10000;
-#else
-  prof_counter = PROF_DISPLAY_INTERVAL;
-#endif
-  
-  prof_cycle_counter = 0;
-  prof_timer = micros();
-}
-
+static uint32_t prof_time;
+static uint32_t prof_cycles;
 
 void prof_print()
 {
-  unsigned long now = micros();
-  unsigned long d   = now - prof_timer;
+  uint32_t now = micros();
 
-  float mhz = ((float) prof_cycle_counter) / ((float) d);
-  Serial.print(F("Performance: "));
-  Serial.print(prof_cycle_counter);
-  Serial.print(F(" cycles in "));
-  Serial.print(((float) d)/1000.0);
-  Serial.print(F(" msec = "));
-  Serial.print(mhz);
-  Serial.print(F(" MHz = "));
-  Serial.print(int(mhz/0.02+.5));
-  Serial.println(F("%"));
-  prof_reset();
-
-#if USE_PROFILING_DETAIL>0
-  if( ++prof_detail_counter == 10 )
+  if( (now-prof_time) >= 1000000 )
     {
-      prof_print_details();
-      prof_reset_details();
-    }
+      uint32_t d   = now - prof_time;
+      uint32_t c   = timer_get_cycles() - prof_cycles;
+      float mhz = ((float) c) / ((float) d);
+      Serial.print(F("Performance: "));
+      Serial.print(c);
+      Serial.print(F(" cycles in "));
+      Serial.print(((float) d)/1000.0);
+      Serial.print(F(" msec = "));
+      Serial.print(mhz);
+      Serial.print(F(" MHz = "));
+      Serial.print(int(mhz/0.02+.5));
+      Serial.println(F("%"));
+      
+#if USE_PROFILING_DETAIL>0
+      if( ++prof_detail_counter == 10 )
+        {
+          prof_print_details();
+          prof_reset_details();
+        }
 #endif
-
-  prof_cycle_counter = 0;
-  prof_timer = now;
+      
+      prof_time   = now;
+      prof_cycles = timer_get_cycles();
+    }
 }
 
 
-#else
+void profile_enable(bool b)
+{
+  if( b )
+    {
+      prof_time   = micros();
+      prof_cycles = timer_get_cycles();
+      timer_start(TIMER_PROFILE, 0, true);
+    }
+  else
+    timer_stop(TIMER_PROFILE);
 
-#if USE_THROTTLE>0
-#error USE_THROTTLE requires USE_PROFILING
+#if USE_PROFILING_DETAIL>0
+  prof_reset_details();
 #endif
+}
 
-#endif
 
+void profile_setup()
+{
+  timer_setup(TIMER_PROFILE, 100000, prof_print);
+}

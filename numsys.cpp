@@ -29,6 +29,15 @@ void numsys_set(byte sys)
 }
 
 
+void numsys_print_byte_bin(byte b)
+{
+  for(byte i=0; i<8; i++)
+    {
+      Serial.print(b & 0x80 ? '1' : '0');
+      b = b * 2;
+    }
+}
+
 void numsys_print_byte(byte b)
 {
   if( numsys==NUMSYS_HEX )

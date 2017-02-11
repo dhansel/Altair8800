@@ -1,7 +1,13 @@
-#ifndef CPUCORE_V2_H
-#define CPUCORE_V2_H
+#ifndef CPUCORE_H
+#define CPUCORE_H
 
 #include <Arduino.h>
+
+#define PS_CARRY       0x01
+#define PS_PARITY      0x04
+#define PS_HALFCARRY   0x10
+#define PS_ZERO        0x40
+#define PS_SIGN        0x80
 
 extern union unionBC
 {

@@ -6,6 +6,7 @@
 #include "prog_examples.h"
 #include "cpucore.h"
 #include "prog_ps2.h"
+#include "timer.h"
 
 #define SST_RDRF    0x01 // receive register full (character received)
 #define SST_TDRE    0x02 // send register empty (ready for next byte)
@@ -14,33 +15,55 @@
 #define SST_OVRN2   0x40 // used in the simulator to signal that OVRN is upcoming
 #define SST_INT     0x80 // interrupt signaled
 
+#define SSC_INTTX   0x20 // transmit interrupt enabled
+#define SSC_INTRX   0x80 // receive  interrupt enabled
 
 byte     acr_cload_fid     = 0;
 uint32_t acr_cload_timeout = 0;
 
-volatile byte serial_ctrl[4];
-volatile byte serial_fid[4];
+volatile byte serial_ctrl[4], serial_data[4];
 volatile byte serial_status[4], serial_status_dev[4];
-volatile byte serial_data[4];
-volatile byte last_active_primary_device = 0xff;
+byte serial_fid[4];
+byte last_active_primary_device = 0xff;
+static const byte serial_device_interrupts[4] = {INT_SIO, INT_ACR, INT_2SIO1, INT_2SIO2};
 
 static void serial_replay(byte dev);
 static void acr_read_next_byte();
+static void serial_timer_interrupt_check_enable(byte dev = 0xff);
 
 
 void set_serial_status(byte dev, byte status)
 {
+  // check whether the interrupt line should be enabled
+  // either receive interrups are enabled and receive register is full
+  // or transmit interrupts are enabled and transmit register is empty
+  bool intr = ((serial_ctrl[dev] & SSC_INTRX) && (status & SST_RDRF) || 
+               (serial_ctrl[dev] & SSC_INTTX) && (status & SST_TDRE));
+
+  // set the INT status bit accordingly
+  if( intr ) status |=  SST_INT;
+  else       status &= ~SST_INT;
+
+  // set the status
   serial_status[dev] = status;
 
+  // enable or disable the ALTAIR interrupt status
+  altair_interrupt(serial_device_interrupts[dev], intr);
+
+  // set the device status register
   if( dev==CSM_2SIO1 || dev==CSM_2SIO2 )
     serial_status_dev[dev] = status & ~SST_OVRN2;
   else
     {
-      serial_status_dev[dev] = 0x81;
-      if( status & SST_OVRN ) serial_status_dev[dev] |=  0x10;
-      if( status & SST_RDRF ) serial_status_dev[dev] &= ~0x01;
-      if( status & SST_TDRE ) serial_status_dev[dev] &= ~0x80;
+      byte data = 0x00;
+      if( status & SST_OVRN ) data |= 0x10;
+      if( status & SST_RDRF ) data |= 0x20; else data |= 0x01;
+      if( status & SST_TDRE ) data |= 0x80; else data |= 0x02;
+      serial_status_dev[dev] = data;
     }
+
+  // check if timer interrupts need to be enabled or disabled
+  serial_timer_interrupt_check_enable(dev);
 }
 
 
@@ -130,7 +153,7 @@ void serial_replay_start(byte switches, byte filenum)
     }
 
   // either start interrupt timer or prepare first byte for replay
-  if( serial_ctrl[dev] & SST_INT )
+  if( serial_ctrl[dev] & SSC_INTRX )
     serial_timer_interrupt_check_enable(dev);
   else
     serial_replay(dev);
@@ -200,8 +223,6 @@ void serial_reset()
       serial_ctrl[dev]   = 0;
       set_serial_status(dev, 0);
     }
-
-  serial_timer_interrupt_check_enable();
 }
 
 
@@ -226,15 +247,8 @@ static void serial_receive_data(byte dev, byte b)
       status |= SST_RDRF;
     }
   
-  // trigger interrupt if interrupts are enabled
-  if( host_read_status_led_INTE() && (serial_ctrl[dev] & SST_INT) /*&& !(serial_status[dev] & SST_INT)*/ )
-    {
-      status |= SST_INT;
-      set_serial_status(dev, status);
-      altair_interrupt(INT_SERIAL);
-    }
-  else
-    set_serial_status(dev, status);
+  // set status register (also triggers interrupt if necessary)
+  set_serial_status(dev, status);
 }
 
 
@@ -272,7 +286,6 @@ static void serial_replay(byte dev)
               DBG_FILEOPS(4, "done loading");
               serial_fid[dev] = 0;
               serial_update_hlda_led();
-              serial_timer_interrupt_check_enable();
             }
         }
       else
@@ -289,7 +302,6 @@ static void serial_replay(byte dev)
               filesys_close(fid);
               serial_fid[dev] = 0;
               serial_update_hlda_led();
-              serial_timer_interrupt_check_enable();
             }
         }
     }
@@ -345,8 +357,7 @@ static byte serial_read(byte dev)
   if( config_serial_map_sim_to_host(dev)==config_host_serial_primary() )
     last_active_primary_device = dev;
 
-  byte status = serial_status[dev];
-  status &= ~(SST_INT | SST_RDRF | SST_OVRN);
+  byte status = serial_status[dev] & ~(SST_RDRF | SST_OVRN);
   if( status & SST_OVRN2 ) 
     { 
       // there was an overrun condition and the last properly received byte 
@@ -358,7 +369,7 @@ static byte serial_read(byte dev)
 
   set_serial_status(dev, status);
 
-  // note that we're reading whatever is there, even
+  // note that we're reading whatever there is, even
   // if nothing new has arrived
   return serial_data[dev];
 }
@@ -390,32 +401,20 @@ void serial_write(byte dev, byte data)
 }
 
 
-bool serial_timer_interrupt_enabled(byte dev)
-{
-  return host_interrupt_timer_running(dev);
-}
-
-
-void serial_timer_interrupt_disable(byte dev)
-{
-  if( dev<0xff )
-    host_interrupt_timer_stop(dev);
-  else
-    for(dev=0; dev<4; dev++)
-      host_interrupt_timer_stop(dev);
-}
-
-
 void serial_timer_interrupt_check_enable(byte dev)
 {
   if( dev<0xff )
     {
-      bool enable  = (serial_ctrl[dev] & SST_INT) && serial_fid[dev]>0 && (serial_fid[dev]==0xff || filesys_is_read(serial_fid[dev]));
-      bool enabled = host_interrupt_timer_running(0);
+      bool enable  = ((serial_ctrl[dev] & SSC_INTRX) && serial_fid[dev]>0 && (serial_fid[dev]==0xff || filesys_is_read(serial_fid[dev]))
+                      ||
+                      (serial_ctrl[dev] & SSC_INTTX) && !(serial_status[dev] & SST_TDRE));
+      
+      bool enabled = timer_running(dev);
+
       if( !enabled && enable )
-        host_interrupt_timer_start(dev);
+        timer_start(dev);
       else if( enabled && !enable )
-        host_interrupt_timer_stop(dev);
+        timer_stop(dev);
     }
   else
     for(dev=0; dev<4; dev++)
@@ -423,10 +422,27 @@ void serial_timer_interrupt_check_enable(byte dev)
 }
 
 
-static void serial_timer_interrupt_SIO()   { serial_replay(CSM_SIO); }
-static void serial_timer_interrupt_ACR()   { serial_replay(CSM_ACR); }
-static void serial_timer_interrupt_2SIO1() { serial_replay(CSM_2SIO1); }
-static void serial_timer_interrupt_2SIO2() { serial_replay(CSM_2SIO2); }
+static void serial_timer_interrupt(byte dev)
+{
+  // write out data scheduled to write (if necessary)
+  if( serial_ctrl[dev] & SSC_INTTX )
+    {
+      // update status register (send buffer is empty now)
+      serial_status[dev] |= SST_TDRE;
+    }
+
+  // read serial playback data
+  serial_replay(dev);
+
+  // this schedules additional interrupts as necessary
+  set_serial_status(dev, serial_status[dev]);
+}
+
+
+static void serial_timer_interrupt_SIO()   { serial_timer_interrupt(CSM_SIO); }
+static void serial_timer_interrupt_ACR()   { serial_timer_interrupt(CSM_ACR); }
+static void serial_timer_interrupt_2SIO1() { serial_timer_interrupt(CSM_2SIO1); }
+static void serial_timer_interrupt_2SIO2() { serial_timer_interrupt(CSM_2SIO2); }
 
 
 void serial_timer_interrupt_setup(byte dev)
@@ -436,18 +452,18 @@ void serial_timer_interrupt_setup(byte dev)
       // calculate the number of microseconds it would take to receive
       // one byte given a specific baud rate (assuming 8 bit plus 1 stop bit and 1 parity bit):
       // (10 * 1000000) / baud_rate
-      bool enabled = serial_timer_interrupt_enabled(dev);
-      serial_timer_interrupt_disable(dev);
+      bool running = timer_running(dev);
+      timer_stop(dev);
       uint32_t us_per_byte = 10000000lu / config_serial_playback_baud_rate(dev);
       switch( dev )
         {
-        case CSM_SIO:   host_interrupt_timer_setup(dev, us_per_byte, serial_timer_interrupt_SIO);   break;
-        case CSM_ACR:   host_interrupt_timer_setup(dev, us_per_byte, serial_timer_interrupt_ACR);   break;
-        case CSM_2SIO1: host_interrupt_timer_setup(dev, us_per_byte, serial_timer_interrupt_2SIO1); break;
-        case CSM_2SIO2: host_interrupt_timer_setup(dev, us_per_byte, serial_timer_interrupt_2SIO2); break;
+        case CSM_SIO:   timer_setup(dev, us_per_byte, serial_timer_interrupt_SIO);   break;
+        case CSM_ACR:   timer_setup(dev, us_per_byte, serial_timer_interrupt_ACR);   break;
+        case CSM_2SIO1: timer_setup(dev, us_per_byte, serial_timer_interrupt_2SIO1); break;
+        case CSM_2SIO2: timer_setup(dev, us_per_byte, serial_timer_interrupt_2SIO2); break;
         }
 
-      if( enabled ) serial_timer_interrupt_check_enable(dev);
+      if( running ) timer_start(dev);
     }
   else
     for(dev=0; dev<4; dev++)
@@ -468,11 +484,19 @@ static byte serial_map_characters_in(byte dev, byte data)
       if( data>96 && data<123 ) data -= 32;
     }
 
-  if( config_serial_backspace(dev)==CSF_ON ||
-      (config_serial_backspace(dev)==CSF_AUTO && (regPC == 0x038A || regPC == 0x0726 || regPC == 0x08e5 || regPC == 0x00A0)) )
+  byte b = config_serial_backspace(dev);
+  if( b==CSFB_AUTO && (regPC == 0x038A || regPC == 0x0726 || regPC == 0x08e5 || regPC == 0x00A0) ) 
+    b = CSFB_UNDERSCORE;
+
+  switch( b ) 
     {
-      // translate backspace to underscore
+    case CSFB_UNDERSCORE: 
       if( data==8 || data==127 ) data = '_';
+      break;
+      
+    case CSFB_RUBOUT:
+      if( data==8 ) data = 127;
+      break;
     }
 
   return data;
@@ -492,13 +516,15 @@ static byte serial_map_characters_out(byte dev, byte data)
       data &= 0x7f;
     }
 
-  if( config_serial_backspace(dev)==CSF_ON ||
-      (config_serial_backspace(dev)==CSF_AUTO && (regPC == 0x0380 || regPC == 0x071C || regPC == 0x00AC)) )
+  byte b = config_serial_backspace(dev);
+  if( b==CSFB_AUTO && (regPC == 0x0380 || regPC == 0x071C || regPC == 0x00AC) )
+    b = CSFB_UNDERSCORE;
+  
+  if( b==CSFB_UNDERSCORE )
     {
       // translate underscore to backspace
       if( data=='_' ) data = 127;
     }
-
 
   return data;
 }
@@ -506,159 +532,112 @@ static byte serial_map_characters_out(byte dev, byte data)
 // -----------------------------------------------------------------------------------------------------------------------
 
 
-byte serial_2sio1_in_ctrl()
+byte serial_2sio_in_ctrl(byte dev)
 {
-  // read control register of first serial device of 88-2SIO-1
-  byte data = serial_status_dev[CSM_2SIO1];
-  byte fid  = serial_fid[CSM_2SIO1];
+  // read control register of 88-2SIO device
+  byte data = serial_status_dev[dev];
+  byte fid  = serial_fid[dev];
 
-  if( fid>0 && fid<0xff && filesys_is_write(fid) )
+  // if transmit interrupts are enabled then the TDRE flag is handled
+  // by the timer. If not, we need to determine the flag setting here
+  if( !(serial_ctrl[dev] & SSC_INTTX) )
     {
-      if( !filesys_eof(fid) )
-        data |= 0x02;
+      if( fid>0 && fid<0xff && filesys_is_write(fid) )
+        {
+          if( !filesys_eof(fid) )
+            data |= SST_TDRE;
+          else
+            data &= ~SST_TDRE;
+        }
+      else if( host_serial_available_for_write(config_serial_map_sim_to_host(dev)) )
+        data |= SST_TDRE;
+      else
+        data &= ~SST_TDRE;
     }
-  else if( host_serial_available_for_write(config_serial_map_sim_to_host(CSM_2SIO1)) )
-    data |= 0x02;
 
   return data;
 }
 
 
-byte serial_2sio1_in_data()
+byte serial_2sio_in_data(byte dev)
 {
   byte data = 0;
 
-  if( serial_status[CSM_2SIO1] & SST_RDRF )
+  if( serial_status[dev] & SST_RDRF )
     {
       // get character
-      data = serial_read(CSM_2SIO1);
+      data = serial_read(dev);
 
       // map character (for BASIC etc)
-      data = serial_map_characters_in(CSM_2SIO1, data);
+      data = serial_map_characters_in(dev, data);
 
       // if interrupts are not enabled, prepare the next byte for replay now
-      if( !(serial_ctrl[CSM_2SIO1] & SST_INT) )
-        serial_replay(CSM_2SIO1);
+      if( !(serial_ctrl[dev] & SSC_INTRX) )
+        serial_replay(dev);
     }
 
   return data;
 }
 
 
-void serial_2sio1_out_ctrl(byte data)
+void serial_2sio_out_ctrl(byte dev, byte data)
 {
-  // write to control register of first serial device of 88-2SIO1
+  // write to control register of 88-2SIO1 device
 
-  if( !(serial_ctrl[CSM_2SIO1] & SST_INT) && (data & 0x80) )
-    DBG_FILEOPS(4, "ENABLING interrupts on 2SIO1");
-  else if( (serial_ctrl[CSM_2SIO1] & SST_INT) && !(data & 0x80) )
-    DBG_FILEOPS(4, "disabling interrupts on 2SIO1");
+  if( !(serial_ctrl[dev] & SSC_INTRX) && (data & SSC_INTRX) )
+    DBG_FILEOPS2(4, "ENABLING receive interrupts on 2SIO-", dev==CSM_2SIO1 ? '1' : '2');
+  else if( (serial_ctrl[dev] & SSC_INTRX) && !(data & SSC_INTRX) )
+    DBG_FILEOPS2(4, "disabling receive interrupts on 2SIO-", dev==CSM_2SIO1 ? '1' : '2');
 
-  // write to control register of 88-2SIO1
+  //data |= SSC_INTTX;
+  if( !(serial_ctrl[dev] & SSC_INTTX) && (data & SSC_INTTX) )
+    DBG_FILEOPS2(4, "ENABLING transmit interrupts on 2SIO-", dev==CSM_2SIO1 ? '1' : '2');
+  else if( (serial_ctrl[dev] & SSC_INTTX) && !(data & SSC_INTTX) )
+    DBG_FILEOPS2(4, "disabling transmit interrupts on 2SIO-", dev==CSM_2SIO1 ? '1' : '2');
+
   if( (data & 0x03)==0x03 )
     {
       // master reset
-      serial_ctrl[CSM_2SIO1]   = 0;
-      set_serial_status(CSM_2SIO1, 0);
+      serial_ctrl[dev] = 0;
+      set_serial_status(dev, SST_TDRE);
     }
   else
     {
-      serial_ctrl[CSM_2SIO1] = data;
-      serial_timer_interrupt_check_enable();
+      serial_ctrl[dev] = data;
       
-      // clear interrupt flag in status
-      set_serial_status(CSM_2SIO1, serial_status[CSM_2SIO1] & ~SST_INT);
+      // check serial status (interrupts)
+      set_serial_status(dev, serial_status[dev]);
     }
 }
 
 
-void serial_2sio1_out_data(byte data)
+void serial_2sio_out_data(byte dev, byte data)
 {
   // map character (for BASIC etc)
-  data = serial_map_characters_out(CSM_2SIO1, data);
+  data = serial_map_characters_out(dev, data);
 
   // output character
-  serial_write(CSM_2SIO1, data);
-}
+  serial_write(dev, data);
 
-
-// ------------------------------------------------------------------------------------------------------------
-
-
-byte serial_2sio2_in_ctrl()
-{
-  // read control register of second serial device of 88-2SIO
-  byte data = serial_status_dev[CSM_2SIO2];
-  byte fid  = serial_fid[CSM_2SIO2];
-
-  if( fid>0 && fid<0xff && filesys_is_write(fid) )
+  if( serial_ctrl[dev] & SSC_INTTX )
     {
-      if( !filesys_eof(fid) )
-        data |= 0x02;
-    }
-  else if( host_serial_available_for_write(config_serial_map_sim_to_host(CSM_2SIO2)) )
-    data |= 0x02;
-
-  return data;
-}
-
-
-byte serial_2sio2_in_data()
-{
-  byte data = 0;
-
-  if( serial_status[CSM_2SIO2] & SST_RDRF )
-    {
-      // get character
-      data = serial_read(CSM_2SIO2);
-
-      // map character (for BASIC etc)
-      data = serial_map_characters_in(CSM_2SIO2, data);
-
-      // if interrupts are not enabled, prepare the next byte for replay now
-      if( !(serial_ctrl[CSM_2SIO2] & SST_INT) )
-        serial_replay(CSM_2SIO2);
-    }
-
-  return data;
-}
-
-
-void serial_2sio2_out_ctrl(byte data)
-{
-  // write to control register of second serial device of 88-2SIO
-
-  if( !(serial_ctrl[CSM_2SIO2] & SST_INT) && (data & 0x80) )
-    DBG_FILEOPS(4, "ENABLING interrupts on 2SIO-2");
-  else if( (serial_ctrl[CSM_2SIO2] & SST_INT) && !(data & 0x80) )
-    DBG_FILEOPS(4, "disabling interrupts on 2SIO-2");
-
-  // write to control register of 88-2SIO2
-  if( (data & 0x03)==0x03 )
-    {
-      // master reset
-      serial_ctrl[CSM_2SIO2]   = 0;
-      set_serial_status(CSM_2SIO2, 0);
-    }
-  else
-    {
-      serial_ctrl[CSM_2SIO2] = data;
-      serial_timer_interrupt_check_enable();
-      
-      // clear interrupt flag in status
-      set_serial_status(CSM_2SIO2, serial_status[CSM_2SIO2] & ~SST_INT);
+      // transmit interrupts are enabled
+      // update status register (send buffer is NOT empty now)
+      // this also schedules a timer to set the TDRE flag again
+      set_serial_status(dev, serial_status[dev] & ~SST_TDRE);
     }
 }
 
 
-void serial_2sio2_out_data(byte data)
-{
-  // map character (for BASIC etc)
-  data = serial_map_characters_out(CSM_2SIO2, data);
+byte serial_2sio1_in_ctrl() { return serial_2sio_in_ctrl(CSM_2SIO1); }
+byte serial_2sio1_in_data() { return serial_2sio_in_data(CSM_2SIO1); }
+void serial_2sio1_out_ctrl(byte data) { serial_2sio_out_ctrl(CSM_2SIO1, data); }
+void serial_2sio1_out_data(byte data) { serial_2sio_out_data(CSM_2SIO1, data); }
 
-  // output character
-  serial_write(CSM_2SIO2, data);
-}
+byte serial_2sio2_in_ctrl() { return serial_2sio_in_ctrl(CSM_2SIO2); }
+byte serial_2sio2_in_data() { return serial_2sio_in_data(CSM_2SIO2); }
+void serial_2sio2_out_ctrl(byte data) { serial_2sio_out_ctrl(CSM_2SIO2, data); }
+void serial_2sio2_out_data(byte data) { serial_2sio_out_data(CSM_2SIO2, data); }
 
 
 // ------------------------------------------------------------------------------------------------------------
@@ -667,15 +646,19 @@ void serial_2sio2_out_data(byte data)
 byte serial_sio_in_ctrl()
 {
   byte data = serial_status_dev[CSM_SIO];
-  byte fid  = serial_fid[CSM_SIO];
 
-  if( fid>0 && fid<0xff && filesys_is_write(fid) )
+  // if transmit interrupts are enabled then the TDRE flag is handled
+  // by the timer. If not, we need to determine the flag setting here
+  if( !(serial_ctrl[CSM_SIO] & SSC_INTTX) )
     {
-      if( !filesys_eof(fid) )
-        data &= ~0x80;
+      byte fid  = serial_fid[CSM_SIO];
+      
+      data &= ~0x82;
+      if( fid>0 && fid<0xff && filesys_is_write(fid) )
+        data |= filesys_eof(fid) ? 0x80 : 0x02;
+      else
+        data |= host_serial_available_for_write(config_serial_map_sim_to_host(CSM_SIO)) ? 0x02 : 0x80;
     }
-  else if( host_serial_available_for_write(config_serial_map_sim_to_host(CSM_SIO)) )
-    data &= ~0x80;
 
   return data;
 }
@@ -694,7 +677,7 @@ byte serial_sio_in_data()
       data = serial_map_characters_in(CSM_SIO, data);
       
       // if interrupts are not enabled, prepare the next byte for replay now
-      if( !(serial_ctrl[CSM_SIO] & SST_INT) )
+      if( !(serial_ctrl[CSM_SIO] & SSC_INTRX) )
         serial_replay(CSM_SIO);
     }
 
@@ -706,19 +689,30 @@ void serial_sio_out_ctrl(byte data)
 {
   // write to control register of 88-SIO
 
-  if( !(serial_ctrl[CSM_SIO] & SST_INT) && (data & 0x01) )
+  if( !(serial_ctrl[CSM_SIO] & SSC_INTRX) && (data & 0x01) )
     {
-      DBG_FILEOPS(4, "ENABLING interrupts on SIO");
-      serial_ctrl[CSM_SIO] |= 0x80;
+      DBG_FILEOPS(4, "ENABLING receive interrupts on SIO");
+      serial_ctrl[CSM_SIO] |= SSC_INTRX;
     }
-  else if( (serial_ctrl[CSM_SIO] & SST_INT) && !(data & 0x01) )
+  else if( (serial_ctrl[CSM_SIO] & SSC_INTRX) && !(data & 0x01) )
     {
-      DBG_FILEOPS(4, "disabling interrupts on SIO");
-      serial_ctrl[CSM_SIO] &= ~0x80;
+      DBG_FILEOPS(4, "disabling receive interrupts on SIO");
+      serial_ctrl[CSM_SIO] &= ~SSC_INTRX;
+    }
+
+  if( !(serial_ctrl[CSM_SIO] & SSC_INTTX) && (data & 0x02) )
+    {
+      DBG_FILEOPS(4, "ENABLING transmit interrupts on SIO");
+      serial_ctrl[CSM_SIO] |= SSC_INTTX;
+    }
+  else if( (serial_ctrl[CSM_SIO] & SSC_INTTX) && !(data & 0x02) )
+    {
+      DBG_FILEOPS(4, "disabling transmit interrupts on SIO");
+      serial_ctrl[CSM_SIO] &= ~SSC_INTTX;
     }
 
   // check whether we need to enable timer interrupts
-  serial_timer_interrupt_check_enable();
+  serial_timer_interrupt_check_enable(CSM_SIO);
 
   // clear interrupt flag in status
   set_serial_status(CSM_SIO, serial_status[CSM_SIO] & ~SST_INT);
@@ -732,6 +726,14 @@ void serial_sio_out_data(byte data)
 
   // output character
   serial_write(CSM_SIO, data);
+
+  if( serial_ctrl[CSM_SIO] & SSC_INTTX )
+    {
+      // transmit interrupts are enabled
+      // update status register (send buffer is NOT empty now)
+      // this also schedules a timer to set the TDRE flag again
+      set_serial_status(CSM_SIO, serial_status[CSM_SIO] & ~SST_TDRE);
+    }
 }
 
 
@@ -903,7 +905,7 @@ static void acr_read_next_byte()
           prog_ps2_read_next(&data);
           serial_receive_data(CSM_ACR, data);
         }
-      else if( !(serial_ctrl[CSM_ACR] & SST_INT) )
+      else if( !(serial_ctrl[CSM_ACR] & SSC_INTRX) )
         serial_replay(CSM_ACR);
     }
   else if( regPC==0xE2A0 && config_serial_trap_CLOAD() )
@@ -914,23 +916,27 @@ static void acr_read_next_byte()
 byte serial_acr_in_ctrl()
 {
   byte data = serial_status_dev[CSM_ACR];
-  byte fid  = serial_fid[CSM_ACR];
 
-  if( fid>0 && fid<0xff && filesys_is_write(fid) )
+  // if transmit interrupts are enabled then the TDRE flag is handled
+  // by the timer. If not, we need to determine the flag setting here
+  if( !(serial_ctrl[CSM_ACR] & SSC_INTTX) )
     {
-      if( !filesys_eof(fid) )
-        data &= ~0x80;
+      byte fid  = serial_fid[CSM_ACR];
+      
+      data &= ~0x82;
+      if( fid>0 && fid<0xff && filesys_is_write(fid) )
+        data |= filesys_eof(fid) ? 0x80 : 0x02;
+      else
+        data |= host_serial_available_for_write(config_serial_map_sim_to_host(CSM_ACR)) ? 0x02 : 0x80;
     }
-  else if( host_serial_available_for_write(config_serial_map_sim_to_host(CSM_ACR)) )
-    data &= ~0x80;
-
+      
   if( (regPC==0xE299 || regPC==0xE2A7) && config_serial_trap_CLOAD() )
     {
       // This is ALTAIR Extended BASIC loading from or saving to ACR
       // our BASIC CSAVE/CLOAD tape emulation is a continuous loop so we always
       // have data available (i.e. bit 0 NOT set) 
-      data = 0x00;
-
+      data &= ~0x01;
+      
       serial_acr_check_cload_timeout();
       if( serial_status[CSM_ACR] & SST_FNF )
         {
@@ -962,7 +968,7 @@ byte serial_acr_in_data()
       data = serial_read(CSM_ACR);
 
       // if interrupts are not enabled, prepare the next byte for replay now
-      if( !(serial_ctrl[CSM_ACR] & SST_INT) )
+      if( !(serial_ctrl[CSM_ACR] & SSC_INTRX) )
         acr_read_next_byte();
     }
 
@@ -973,19 +979,30 @@ byte serial_acr_in_data()
 void serial_acr_out_ctrl(byte data)
 {
   // write to control register of acr interface
-  if( !(serial_ctrl[CSM_ACR] & 0x80) && (data & 0x01) )
+  if( !(serial_ctrl[CSM_ACR] & SSC_INTRX) && (data & 0x01) )
     {
       DBG_FILEOPS(4, "ENABLING interrupts on ACR");
-      serial_ctrl[CSM_ACR] |= 0x80;
+      serial_ctrl[CSM_ACR] |= SSC_INTRX;
     }
-  else if( (serial_ctrl[CSM_ACR] & 0x80) && !(data & 0x01) )
+  else if( (serial_ctrl[CSM_ACR] & SSC_INTRX) && !(data & 0x01) )
     {
       DBG_FILEOPS(4, "disabling interrupts on ACR");
-      serial_ctrl[CSM_ACR] &= ~0x80;
+      serial_ctrl[CSM_ACR] &= ~SSC_INTRX;
+    }
+
+  if( !(serial_ctrl[CSM_ACR] & SSC_INTTX) && (data & 0x02) )
+    {
+      DBG_FILEOPS(4, "ENABLING transmit interrupts on ACR");
+      serial_ctrl[CSM_ACR] |= SSC_INTTX;
+    }
+  else if( (serial_ctrl[CSM_ACR] & SSC_INTTX) && !(data & 0x02) )
+    {
+      DBG_FILEOPS(4, "disabling transmit interrupts on ACR");
+      serial_ctrl[CSM_ACR] &= ~SSC_INTTX;
     }
 
   // check whether we need to enable timer interrupts
-  serial_timer_interrupt_check_enable();
+  serial_timer_interrupt_check_enable(CSM_ACR);
 
   // clear interrupt flag in status
   set_serial_status(CSM_ACR, serial_status[CSM_ACR] & ~SST_INT);
@@ -1006,6 +1023,14 @@ void serial_acr_out_data(byte data)
     serial_write(CSM_ACR, data);
 
   DBG_FILEOPS2(5, "ACR writing captured data: ", int(data));
+
+  if( serial_ctrl[CSM_ACR] & SSC_INTTX )
+    {
+      // transmit interrupts are enabled
+      // update status register (send buffer is NOT empty now)
+      // this also schedules a timer to set the TDRE flag again
+      set_serial_status(CSM_ACR, serial_status[CSM_ACR] & ~SST_TDRE);
+    }
 }
 
 

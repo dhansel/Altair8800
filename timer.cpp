@@ -1,7 +1,5 @@
 #include "timer.h"
 
-#define MAX_TIMERS 10
-
 #define DEBUG 0
 
 uint32_t timer_cycle_counter        = 0;
@@ -207,45 +205,45 @@ void timer_check()
       else
         tid = 0xff;
     }
-
-  /*
-  for(byte i=1; i<timer_queue_len; i++)
-    if( timer_data[timer_queue[i]].cycles_count > 0xF0000000 )
-      {printf("XXXX %i: ", timer_cycle_counter); print_queue2(); exit(0); }
-  */
 }
 
 
 void timer_setup(byte tid, uint32_t microseconds, TimerFnTp timer_fn)
 {
-  bool running = timer_data[tid].running;
-  if( running ) timer_stop(tid);
-  timer_data[tid].timer_fn      = timer_fn;
-  timer_data[tid].cycles_period = microseconds*2;
-  if( running ) timer_start(tid);
+  if( tid<MAX_TIMERS )
+    {
+      bool running = timer_data[tid].running;
+      if( running ) timer_stop(tid);
+      timer_data[tid].timer_fn      = timer_fn;
+      timer_data[tid].cycles_period = microseconds*2;
+      if( running ) timer_start(tid);
+    }
 }
 
 
 void timer_start(byte tid, uint32_t microseconds, bool recurring)
 {
+  if( tid<MAX_TIMERS )
+    {
+      if( microseconds>0 ) timer_data[tid].cycles_period = microseconds*2;
+
 #if DEBUG>0
-  printf("%u: starting timer %i: %i microseconds\n", timer_get_cycles(), tid, timer_data[tid].cycles_period/2);
+      printf("%u: starting timer %i: %i microseconds\n", timer_get_cycles(), tid, timer_data[tid].cycles_period/2);
 #endif
+      if( timer_data[tid].running ) timer_queue_remove(tid);
 
-  if( timer_data[tid].running ) timer_queue_remove(tid);
-
-  if( microseconds>0 ) timer_data[tid].cycles_period = microseconds*2;
-  timer_data[tid].recurring    = recurring;
-  timer_data[tid].cycles_count = timer_data[tid].cycles_period;
-  timer_data[tid].running      = true;
-
-  timer_queue_add(tid);
+      timer_data[tid].recurring    = recurring;
+      timer_data[tid].cycles_count = timer_data[tid].cycles_period;
+      timer_data[tid].running      = true;
+      
+      timer_queue_add(tid);
+    }
 }
 
 
 void timer_stop(byte tid)
 {
-  if( timer_data[tid].running )
+  if( tid < MAX_TIMERS && timer_data[tid].running )
     {
 #if DEBUG>0
       printf("%u: stopping timer %i\n", timer_get_cycles(), tid);
@@ -257,12 +255,12 @@ void timer_stop(byte tid)
 
 uint32_t timer_get_period(byte tid)
 {
-  return timer_data[tid].cycles_period / 2;
+  return tid < MAX_TIMERS ? timer_data[tid].cycles_period / 2 : 0;
 }
 
 bool timer_running(byte tid)
 {
-  return timer_data[tid].running;
+  return tid < MAX_TIMERS ? timer_data[tid].running : false;
 }
 
 

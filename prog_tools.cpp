@@ -2,6 +2,7 @@
 
 #include "prog_tools.h"
 #include "host.h"
+#include "mem.h"
 
 const byte PROGMEM BDOS[28] = {
 /* 0x0000 */ B11000011, 0x00, 0x00, // jmp 0000
@@ -541,15 +542,29 @@ static const byte prog_diskboot[] = {
 
 uint16_t prog_tools_copy_turnmon(byte *dst)
 {
-  host_copy_flash_to_ram(dst+0xFD00, prog_turnmon, sizeof(prog_turnmon));
-  return 0xFD00;
+  if( MEMSIZE > 0xFFFF )
+    {
+      host_copy_flash_to_ram(dst+0xFD00, prog_turnmon, sizeof(prog_turnmon));
+      return 0xFD00;
+    }
+  else
+    return 0xFFFF;
 }
 
 
 uint16_t prog_tools_copy_diskboot(byte *dst)
 {
-  host_copy_flash_to_ram(dst+0xFF00, prog_diskboot, sizeof(prog_diskboot));
-  return 0xFF00;
+  if( MEMSIZE > 0xFFFF )
+    {
+      host_copy_flash_to_ram(dst+0xFF00, prog_diskboot, sizeof(prog_diskboot));
+
+      // disk boot rom starts at 0xff00 so RAM goes up to 0xfeff
+      mem_set_ram_limit(0xfeff);
+
+      return 0xFF00;
+    }
+  else
+    return 0xFFFF;
 }
 
 #endif

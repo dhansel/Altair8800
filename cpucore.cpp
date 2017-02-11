@@ -1,9 +1,7 @@
 #include "cpucore.h"
-#include "profile.h"
+#include "timer.h"
 #include "mem.h"
 #include "Altair8800.h"
-
-#if CPUCORE_VERSION == 2
 
 union unionBC regBC;
 union unionDE regDE;
@@ -192,7 +190,7 @@ inline uint16_t popStackWord()
     setCarryBit(w&0x100); \
     setStatusBits(w); \
     regA = w; \
-    PROF_ADD_CYCLES(4); \
+    TIMER_ADD_CYCLES(4); \
   }
 
 CPU_ADC(B);
@@ -212,7 +210,7 @@ CPU_ADC(A);
     setHalfCarryBitAdd(regA, reg ## REG, w); \
     setStatusBits(w); \
     regA = w; \
-    PROF_ADD_CYCLES(4); \
+    TIMER_ADD_CYCLES(4); \
   }
 
 CPU_ADD(B);
@@ -233,7 +231,7 @@ CPU_ADD(A);
     setCarryBit(w&0x100); \
     setStatusBits(w); \
     regA = w; \
-    PROF_ADD_CYCLES(4); \
+    TIMER_ADD_CYCLES(4); \
   }
 
 CPU_SBB(B);
@@ -253,7 +251,7 @@ CPU_SBB(A);
     setHalfCarryBitSub(regA, reg ## REG, w); \
     setStatusBits(w); \
     regA = w; \
-    PROF_ADD_CYCLES(4); \
+    TIMER_ADD_CYCLES(4); \
   }
 
 CPU_SUB(B);
@@ -272,7 +270,7 @@ CPU_SUB(A);
     regA &= reg ## REG; \
     setCarryBit(0); \
     setStatusBits(regA); \
-    PROF_ADD_CYCLES(4); \
+    TIMER_ADD_CYCLES(4); \
   } 
 
 CPU_ANA(B);
@@ -291,7 +289,7 @@ CPU_ANA(A);
     setCarryBit(0); \
     setHalfCarryBit(0); \
     setStatusBits(regA); \
-    PROF_ADD_CYCLES(4); \
+    TIMER_ADD_CYCLES(4); \
   }
 
 CPU_XRA(B);
@@ -310,7 +308,7 @@ CPU_XRA(A);
     setCarryBit(0); \
     setHalfCarryBit(0); \
     setStatusBits(regA); \
-    PROF_ADD_CYCLES(4); \
+    TIMER_ADD_CYCLES(4); \
   }
 
 CPU_ORA(B);
@@ -331,7 +329,7 @@ void cpu_ADCM()
   setCarryBit(w&0x100);
   setStatusBits(w);
   regA = w;
-  PROF_ADD_CYCLES(7);
+  TIMER_ADD_CYCLES(7);
 }
 
 void cpu_ADDM()
@@ -342,7 +340,7 @@ void cpu_ADDM()
   setHalfCarryBitAdd(regA, opd2, w);
   setStatusBits(w);
   regA = w;
-  PROF_ADD_CYCLES(7);
+  TIMER_ADD_CYCLES(7);
 }
 
 void cpu_SBBM()
@@ -354,7 +352,7 @@ void cpu_SBBM()
   setCarryBit(w&0x100);
   setStatusBits(w);
   regA = w;
-  PROF_ADD_CYCLES(7);
+  TIMER_ADD_CYCLES(7);
 }
 
 void cpu_SUBM()
@@ -365,7 +363,7 @@ void cpu_SUBM()
   setHalfCarryBitSub(regA, opd2, w);
   setStatusBits(w);
   regA = w;
-  PROF_ADD_CYCLES(7);
+  TIMER_ADD_CYCLES(7);
 }
 
 void cpu_ANAM()
@@ -375,7 +373,7 @@ void cpu_ANAM()
   regA &= opd2;
   setCarryBit(0);
   setStatusBits(regA);
-  PROF_ADD_CYCLES(7);
+  TIMER_ADD_CYCLES(7);
 }
 
 void cpu_XRAM()
@@ -384,7 +382,7 @@ void cpu_XRAM()
   setCarryBit(0);
   setHalfCarryBit(0);
   setStatusBits(regA);
-  PROF_ADD_CYCLES(7);
+  TIMER_ADD_CYCLES(7);
 }
 
 void cpu_ORAM()
@@ -393,7 +391,7 @@ void cpu_ORAM()
   setCarryBit(0);
   setHalfCarryBit(0);
   setStatusBits(regA);
-  PROF_ADD_CYCLES(7);
+  TIMER_ADD_CYCLES(7);
 }
 
 void cpu_CALL()
@@ -401,7 +399,7 @@ void cpu_CALL()
   regPC += 2;
   pushPC();
   regPC = MEM_READ_WORD(regPC-2);
-  PROF_ADD_CYCLES(17);
+  TIMER_ADD_CYCLES(17);
 }
 
 #define CPU_CMP(REG) \
@@ -411,7 +409,7 @@ void cpu_CALL()
     setCarryBit(w&0x100); \
     setHalfCarryBitSub(regA, reg ## REG, w); \
     setStatusBits(w); \
-    PROF_ADD_CYCLES(4); \
+    TIMER_ADD_CYCLES(4); \
   }
 
 CPU_CMP(B);
@@ -430,7 +428,7 @@ void cpu_CMPM()
   setCarryBit(w&0x100);
   setHalfCarryBitSub(regA, opd2, w);
   setStatusBits(w);
-  PROF_ADD_CYCLES(7);
+  TIMER_ADD_CYCLES(7);
 }
 
 #define CPU_DCR(REG) \
@@ -440,7 +438,7 @@ void cpu_DCR ## REG () \
     setHalfCarryBit((res & 0x0f)!=0x0f); \
     setStatusBits(res); \
     reg ## REG = res; \
-    PROF_ADD_CYCLES(4); \
+    TIMER_ADD_CYCLES(4); \
   }
 
 CPU_DCR(B);
@@ -457,7 +455,7 @@ void cpu_DCRM()
   setHalfCarryBit((res & 0x0f)!=0x0f);
   setStatusBits(res);
   MEM_WRITE(regHL.HL, res);
-  PROF_ADD_CYCLES(7);
+  TIMER_ADD_CYCLES(7);
 }
 
 void cpu_ADI()
@@ -469,7 +467,7 @@ void cpu_ADI()
   setStatusBits(w);
   regA = w;
   regPC++;
-  PROF_ADD_CYCLES(7);
+  TIMER_ADD_CYCLES(7);
 }
 
 void cpu_ACI()
@@ -482,7 +480,7 @@ void cpu_ACI()
   setStatusBits(w);
   regA = w;
   regPC++;
-  PROF_ADD_CYCLES(7);
+  TIMER_ADD_CYCLES(7);
 }
 
 void cpu_SUI()
@@ -494,7 +492,7 @@ void cpu_SUI()
   setStatusBits(w);
   regA = w;
   regPC++;
-  PROF_ADD_CYCLES(7);
+  TIMER_ADD_CYCLES(7);
 }
 
 void cpu_SBI()
@@ -507,7 +505,7 @@ void cpu_SBI()
   setStatusBits(w);
   regA = w;
   regPC++;
-  PROF_ADD_CYCLES(7);
+  TIMER_ADD_CYCLES(7);
 }
 
 void cpu_ANI()
@@ -518,7 +516,7 @@ void cpu_ANI()
   setCarryBit(0);
   setStatusBits(regA);
   regPC++;
-  PROF_ADD_CYCLES(7);
+  TIMER_ADD_CYCLES(7);
 }
 
 void cpu_XRI()
@@ -528,7 +526,7 @@ void cpu_XRI()
   setHalfCarryBit(0);
   setStatusBits(regA);
   regPC++;
-  PROF_ADD_CYCLES(7);
+  TIMER_ADD_CYCLES(7);
 }
 
 void cpu_ORI()
@@ -538,7 +536,7 @@ void cpu_ORI()
   setHalfCarryBit(0);
   setStatusBits(regA);
   regPC++;
-  PROF_ADD_CYCLES(7);
+  TIMER_ADD_CYCLES(7);
 }
 
 void cpu_CPI()
@@ -549,19 +547,19 @@ void cpu_CPI()
   setHalfCarryBitSub(regA, opd2, w);
   setStatusBits(w);
   regPC++;
-  PROF_ADD_CYCLES(7);
+  TIMER_ADD_CYCLES(7);
 }
 
 void cpu_CMA()
 {
   regA = ~regA;
-  PROF_ADD_CYCLES(4);
+  TIMER_ADD_CYCLES(4);
 }
 
 void cpu_CMC()
 {
   regS ^= PS_CARRY;
-  PROF_ADD_CYCLES(4);
+  TIMER_ADD_CYCLES(4);
 }
 
 void cpu_DAA()
@@ -575,7 +573,7 @@ void cpu_DAA()
   regA = b + adj;
   setHalfCarryBitAdd(b, adj, regA);
   setStatusBits(regA);
-  PROF_ADD_CYCLES(4);
+  TIMER_ADD_CYCLES(4);
 }
 
 
@@ -586,7 +584,7 @@ void cpu_DAA()
     uint16_t w = reg##REG.REG;  \
     regHL.HL += w;              \
     setCarryBit(regHL.HL < w);  \
-    PROF_ADD_CYCLES(10);        \
+    TIMER_ADD_CYCLES(10);        \
   }
 
 CPU_DAD(BC);
@@ -598,7 +596,7 @@ void cpu_DADS()
 {
   regHL.HL += regSP;
   setCarryBit(regHL.HL < regSP);
-  PROF_ADD_CYCLES(10);
+  TIMER_ADD_CYCLES(10);
 }
 
 
@@ -606,7 +604,7 @@ void cpu_DADS()
   void cpu_DCX ## REG () \
   {                      \
     reg##REG.REG--;      \
-    PROF_ADD_CYCLES(5);  \
+    TIMER_ADD_CYCLES(5);  \
   }
 
 CPU_DCX(BC);
@@ -616,25 +614,25 @@ CPU_DCX(HL);
 void cpu_DCXSP()
 {
   regSP--;
-  PROF_ADD_CYCLES(5);
+  TIMER_ADD_CYCLES(5);
 }
 
 void cpu_DI()
 {
-  host_clr_status_led_INTE();
-  PROF_ADD_CYCLES(4);
+  altair_interrupt_disable();
+  TIMER_ADD_CYCLES(4);
 }
 
 void cpu_EI()
 {
-  host_set_status_led_INTE();
-  PROF_ADD_CYCLES(4);
+  altair_interrupt_enable();
+  TIMER_ADD_CYCLES(4);
 }
 
 void cpu_HLT()
 {
   altair_hlt();
-  PROF_ADD_CYCLES(7);
+  TIMER_ADD_CYCLES(7);
 }
 
 #define CPU_INR(REG) \
@@ -644,7 +642,7 @@ void cpu_HLT()
     setHalfCarryBit((res&0x0f)==0); \
     setStatusBits(res); \
     reg ## REG = res; \
-    PROF_ADD_CYCLES(5); \
+    TIMER_ADD_CYCLES(5); \
   }
 
 CPU_INR(B);
@@ -662,14 +660,14 @@ void cpu_INRM()
   setHalfCarryBit((res&0x0f)==0);
   setStatusBits(res);
   MEM_WRITE(regHL.HL, res);
-  PROF_ADD_CYCLES(10);
+  TIMER_ADD_CYCLES(10);
 }
 
 #define CPU_INX(REG) \
   void cpu_INX ## REG () \
   { \
     reg##REG.REG++; \
-    PROF_ADD_CYCLES(5); \
+    TIMER_ADD_CYCLES(5); \
   }
 
 CPU_INX(BC);
@@ -680,7 +678,7 @@ CPU_INX(HL);
 void cpu_INXSP()
 {
   regSP++;
-  PROF_ADD_CYCLES(5);
+  TIMER_ADD_CYCLES(5);
 }
 
 void cpu_LDA()
@@ -688,14 +686,14 @@ void cpu_LDA()
   uint16_t addr = MEM_READ_WORD(regPC);
   regA = MEM_READ(addr);
   regPC += 2;
-  PROF_ADD_CYCLES(13);
+  TIMER_ADD_CYCLES(13);
 }
 
 #define CPU_LDX(REG) \
   void cpu_LDX ## REG() \
   { \
     regA = MEM_READ(reg##REG.REG); \
-    PROF_ADD_CYCLES(7); \
+    TIMER_ADD_CYCLES(7); \
   }
 
 CPU_LDX(BC);
@@ -707,14 +705,14 @@ void cpu_LHLD()
   regL = MEM_READ(addr);
   regH = MEM_READ(addr+1);
   regPC += 2;
-  PROF_ADD_CYCLES(16);
+  TIMER_ADD_CYCLES(16);
 }
 
 void cpu_LXIS()
 {
   regSP = MEM_READ_WORD(regPC);
   regPC += 2;
-  PROF_ADD_CYCLES(10);
+  TIMER_ADD_CYCLES(10);
 }
   
 #define CPU_LXI(REGH,REGL) \
@@ -723,7 +721,7 @@ void cpu_LXIS()
     reg ## REGL = MEM_READ(regPC); \
     reg ## REGH = MEM_READ(regPC+1); \
     regPC += 2; \
-    PROF_ADD_CYCLES(10); \
+    TIMER_ADD_CYCLES(10); \
   }
 
 CPU_LXI(B,C);
@@ -735,21 +733,21 @@ CPU_LXI(H,L);
   void cpu_MV ## REGTO ## REGFROM ()            \
   {                                             \
     reg ## REGTO = reg ## REGFROM;              \
-    PROF_ADD_CYCLES(5);                         \
+    TIMER_ADD_CYCLES(5);                         \
   }
 
 #define CPU_MVMR(REGFROM)                       \
   void cpu_MVM ## REGFROM()                     \
   {                                             \
     MEM_WRITE(regHL.HL, reg ## REGFROM);        \
-    PROF_ADD_CYCLES(7);                         \
+    TIMER_ADD_CYCLES(7);                         \
   }
 
 #define CPU_MVRM(REGTO)                         \
   void cpu_MV ## REGTO ## M()                   \
   {                                             \
     reg ## REGTO = MEM_READ(regHL.HL);          \
-    PROF_ADD_CYCLES(7);                         \
+    TIMER_ADD_CYCLES(7);                         \
   }
 
 #define CPU_MVRI(REGTO)                         \
@@ -757,7 +755,7 @@ CPU_LXI(H,L);
   {                                             \
     reg ## REGTO = MEM_READ(regPC);             \
     regPC++;                                    \
-    PROF_ADD_CYCLES(7);                         \
+    TIMER_ADD_CYCLES(7);                         \
   }
 
 CPU_MVRR(B, B);
@@ -843,19 +841,19 @@ void cpu_MVMI()
   // MVI dst, M 
   MEM_WRITE(regHL.HL, MEM_READ(regPC));
   regPC++;
-  PROF_ADD_CYCLES(10);
+  TIMER_ADD_CYCLES(10);
 }
 
 
 void cpu_NOP()
 {
-  PROF_ADD_CYCLES(4);
+  TIMER_ADD_CYCLES(4);
 }
 
 void cpu_PCHL()
 {
   regPC = regHL.HL;
-  PROF_ADD_CYCLES(5);
+  TIMER_ADD_CYCLES(5);
 }
 
 
@@ -863,7 +861,7 @@ void cpu_PCHL()
   void cpu_POP ## REGH ## REGL() \
   { \
     popStack(reg ## REGH, reg ## REGL); \
-    PROF_ADD_CYCLES(10); \
+    TIMER_ADD_CYCLES(10); \
   }
 
 CPU_POP(B, C);
@@ -876,7 +874,7 @@ CPU_POP(A, S);
   void cpu_PSH ## REGH ## REGL() \
   { \
     pushStack(reg ## REGH, reg ## REGL); \
-    PROF_ADD_CYCLES(11); \
+    TIMER_ADD_CYCLES(11); \
   }
 
 CPU_PSH(B, C);
@@ -887,7 +885,7 @@ CPU_PSH(H, L);
 void cpu_PSHAS()
 {
   pushStack(regA, (regS & 0xD5) | 0x02); 
-  PROF_ADD_CYCLES(11);
+  TIMER_ADD_CYCLES(11);
 }
 
 void cpu_RLC()
@@ -895,7 +893,7 @@ void cpu_RLC()
   byte b = regA & 128;
   regA   = (regA * 2) | (b ? 1 : 0) ;
   setCarryBit(b);
-  PROF_ADD_CYCLES(4);
+  TIMER_ADD_CYCLES(4);
 }
 
 void cpu_RRC()
@@ -903,7 +901,7 @@ void cpu_RRC()
   byte b = regA & 1;
   regA   = (regA / 2) | (b ? 128 : 0) ;
   setCarryBit(b);
-  PROF_ADD_CYCLES(4);
+  TIMER_ADD_CYCLES(4);
 }
 
 void cpu_RAL()
@@ -911,7 +909,7 @@ void cpu_RAL()
   byte b = regA & 128;
   regA   = (regA * 2) | ((regS & PS_CARRY) ? 1 : 0) ;
   setCarryBit(b);
-  PROF_ADD_CYCLES(4);
+  TIMER_ADD_CYCLES(4);
 }
 
 void cpu_RAR()
@@ -919,13 +917,13 @@ void cpu_RAR()
   byte b = regA & 1;
   regA   = (regA / 2) | ((regS & PS_CARRY) ? 128 : 0) ;
   setCarryBit(b);
-  PROF_ADD_CYCLES(4);
+  TIMER_ADD_CYCLES(4);
 }
 
 void cpu_RET()
 {
   popPC();
-  PROF_ADD_CYCLES(10);
+  TIMER_ADD_CYCLES(10);
 }
 
 #define CPU_RST(N) \
@@ -933,7 +931,7 @@ void cpu_RET()
   { \
     pushPC(); \
     regPC = 0x00 ## N; \
-    PROF_ADD_CYCLES(4); \
+    TIMER_ADD_CYCLES(4); \
   }
 
 CPU_RST(00);
@@ -948,127 +946,127 @@ CPU_RST(38);
 void cpu_RNZ()
 {
   if( !(regS & PS_ZERO) ) 
-    { popPC(); PROF_ADD_CYCLES(11); }
+    { popPC(); TIMER_ADD_CYCLES(11); }
   else
-    PROF_ADD_CYCLES(5);
+    TIMER_ADD_CYCLES(5);
 }
 
 void cpu_RZ()
 {
   if( (regS & PS_ZERO) ) 
-    { popPC(); PROF_ADD_CYCLES(11); }
+    { popPC(); TIMER_ADD_CYCLES(11); }
   else
-    PROF_ADD_CYCLES(5);
+    TIMER_ADD_CYCLES(5);
 }
 
 void cpu_RNC()
 {
   if( !(regS & PS_CARRY) ) 
-    { popPC(); PROF_ADD_CYCLES(11); }
+    { popPC(); TIMER_ADD_CYCLES(11); }
   else
-    PROF_ADD_CYCLES(5);
+    TIMER_ADD_CYCLES(5);
 }
 
 void cpu_RC()
 {
   if( (regS & PS_CARRY) ) 
-    { popPC(); PROF_ADD_CYCLES(11); }
+    { popPC(); TIMER_ADD_CYCLES(11); }
   else
-    PROF_ADD_CYCLES(5);
+    TIMER_ADD_CYCLES(5);
 }
 
 void cpu_RPO()
 {
   if( !(regS & PS_PARITY) ) 
-    { popPC(); PROF_ADD_CYCLES(11); }
+    { popPC(); TIMER_ADD_CYCLES(11); }
   else
-    PROF_ADD_CYCLES(5);
+    TIMER_ADD_CYCLES(5);
 }
 
 void cpu_RPE()
 {
   if( (regS & PS_PARITY) ) 
-    { popPC(); PROF_ADD_CYCLES(11); }
+    { popPC(); TIMER_ADD_CYCLES(11); }
   else
-    PROF_ADD_CYCLES(5);
+    TIMER_ADD_CYCLES(5);
 }
 
 void cpu_RP()
 {
   if( !(regS & PS_SIGN) ) 
-    { popPC(); PROF_ADD_CYCLES(11); }
+    { popPC(); TIMER_ADD_CYCLES(11); }
   else
-    PROF_ADD_CYCLES(5);
+    TIMER_ADD_CYCLES(5);
 }
 
 void cpu_RM()
 {
   if( (regS & PS_SIGN) ) 
-    { popPC(); PROF_ADD_CYCLES(11); }
+    { popPC(); TIMER_ADD_CYCLES(11); }
   else
-    PROF_ADD_CYCLES(5);
+    TIMER_ADD_CYCLES(5);
 }
 
 void cpu_JMP()
 {
   regPC = MEM_READ_WORD(regPC);
-  PROF_ADD_CYCLES(10);
+  TIMER_ADD_CYCLES(10);
 }
 
 void cpu_JNZ()
 {
   uint16_t addr = MEM_READ_WORD(regPC);
   if( !(regS & PS_ZERO) ) regPC = addr; else regPC += 2;
-  PROF_ADD_CYCLES(10);
+  TIMER_ADD_CYCLES(10);
 }
 
 void cpu_JZ()
 {
   uint16_t addr = MEM_READ_WORD(regPC);
   if( (regS & PS_ZERO) ) regPC = addr; else regPC += 2;
-  PROF_ADD_CYCLES(10);
+  TIMER_ADD_CYCLES(10);
 }
 
 void cpu_JNC()
 {
   uint16_t addr = MEM_READ_WORD(regPC);
   if( !(regS & PS_CARRY) ) regPC = addr; else regPC += 2;
-  PROF_ADD_CYCLES(10);
+  TIMER_ADD_CYCLES(10);
 }
 
 void cpu_JC()
 {
   uint16_t addr = MEM_READ_WORD(regPC);
   if( (regS & PS_CARRY) ) regPC = addr; else regPC += 2;
-  PROF_ADD_CYCLES(10);
+  TIMER_ADD_CYCLES(10);
 }
 
 void cpu_JPO()
 {
   uint16_t addr = MEM_READ_WORD(regPC);
   if( !(regS & PS_PARITY) ) regPC = addr; else regPC += 2;
-  PROF_ADD_CYCLES(10);
+  TIMER_ADD_CYCLES(10);
 }
 
 void cpu_JPE()
 {
   uint16_t addr = MEM_READ_WORD(regPC);
   if( (regS & PS_PARITY) ) regPC = addr; else regPC += 2;
-  PROF_ADD_CYCLES(10);
+  TIMER_ADD_CYCLES(10);
 }
 
 void cpu_JP()
 {
   uint16_t addr = MEM_READ_WORD(regPC);
   if( !(regS & PS_SIGN) ) regPC = addr; else regPC += 2;
-  PROF_ADD_CYCLES(10);
+  TIMER_ADD_CYCLES(10);
 }
 
 void cpu_JM()
 {
   uint16_t addr = MEM_READ_WORD(regPC);
   if( (regS & PS_SIGN) ) regPC = addr; else regPC += 2;
-  PROF_ADD_CYCLES(10);
+  TIMER_ADD_CYCLES(10);
 }
 
 void cpu_CNZ()
@@ -1076,9 +1074,9 @@ void cpu_CNZ()
   uint16_t addr = MEM_READ_WORD(regPC);
   regPC+=2; 
   if( !(regS & PS_ZERO) ) 
-    { pushPC(); regPC = addr; PROF_ADD_CYCLES(17); }
+    { pushPC(); regPC = addr; TIMER_ADD_CYCLES(17); }
   else
-    { PROF_ADD_CYCLES(11); }
+    { TIMER_ADD_CYCLES(11); }
 }
 
 void cpu_CZ()
@@ -1086,9 +1084,9 @@ void cpu_CZ()
   uint16_t addr = MEM_READ_WORD(regPC);
   regPC+=2; 
   if( (regS & PS_ZERO) ) 
-    { pushPC(); regPC = addr; PROF_ADD_CYCLES(17); }
+    { pushPC(); regPC = addr; TIMER_ADD_CYCLES(17); }
   else
-    { PROF_ADD_CYCLES(11); }
+    { TIMER_ADD_CYCLES(11); }
 }
 
 void cpu_CNC()
@@ -1096,9 +1094,9 @@ void cpu_CNC()
   uint16_t addr = MEM_READ_WORD(regPC);
   regPC+=2; 
   if( !(regS & PS_CARRY) ) 
-    { pushPC(); regPC = addr; PROF_ADD_CYCLES(17); }
+    { pushPC(); regPC = addr; TIMER_ADD_CYCLES(17); }
   else
-    { PROF_ADD_CYCLES(11); }
+    { TIMER_ADD_CYCLES(11); }
 }
 
 void cpu_CC()
@@ -1106,9 +1104,9 @@ void cpu_CC()
   uint16_t addr = MEM_READ_WORD(regPC);
   regPC+=2; 
   if( (regS & PS_CARRY) ) 
-    { pushPC(); regPC = addr; PROF_ADD_CYCLES(17); }
+    { pushPC(); regPC = addr; TIMER_ADD_CYCLES(17); }
   else
-    { PROF_ADD_CYCLES(11); }
+    { TIMER_ADD_CYCLES(11); }
 }
 
 void cpu_CPO()
@@ -1116,9 +1114,9 @@ void cpu_CPO()
   uint16_t addr = MEM_READ_WORD(regPC);
   regPC+=2; 
   if( !(regS & PS_PARITY) ) 
-    { pushPC(); regPC = addr; PROF_ADD_CYCLES(17); }
+    { pushPC(); regPC = addr; TIMER_ADD_CYCLES(17); }
   else
-    { PROF_ADD_CYCLES(11); }
+    { TIMER_ADD_CYCLES(11); }
 }
 
 void cpu_CPE()
@@ -1126,9 +1124,9 @@ void cpu_CPE()
   uint16_t addr = MEM_READ_WORD(regPC);
   regPC+=2; 
   if( (regS & PS_PARITY) ) 
-    { pushPC(); regPC = addr; PROF_ADD_CYCLES(17); }
+    { pushPC(); regPC = addr; TIMER_ADD_CYCLES(17); }
   else
-    { PROF_ADD_CYCLES(11); }
+    { TIMER_ADD_CYCLES(11); }
 }
 
 void cpu_CP()
@@ -1136,9 +1134,9 @@ void cpu_CP()
   uint16_t addr = MEM_READ_WORD(regPC);
   regPC+=2; 
   if( !(regS & PS_SIGN) ) 
-    { pushPC(); regPC = addr; PROF_ADD_CYCLES(17); }
+    { pushPC(); regPC = addr; TIMER_ADD_CYCLES(17); }
   else
-    { PROF_ADD_CYCLES(11); }
+    { TIMER_ADD_CYCLES(11); }
 }
 
 void cpu_CM()
@@ -1146,9 +1144,9 @@ void cpu_CM()
   uint16_t addr = MEM_READ_WORD(regPC);
   regPC+=2; 
   if( (regS & PS_SIGN) ) 
-    { pushPC(); regPC = addr; PROF_ADD_CYCLES(17); }
+    { pushPC(); regPC = addr; TIMER_ADD_CYCLES(17); }
   else
-    { PROF_ADD_CYCLES(11); }
+    { TIMER_ADD_CYCLES(11); }
 }
 
 void cpu_SHLD()
@@ -1157,13 +1155,13 @@ void cpu_SHLD()
   MEM_WRITE(addr,   regL);
   MEM_WRITE(addr+1, regH);
   regPC += 2;
-  PROF_ADD_CYCLES(16);
+  TIMER_ADD_CYCLES(16);
 }
 
 void cpu_SPHL()
 {
   regSP = regHL.HL;
-  PROF_ADD_CYCLES(5);
+  TIMER_ADD_CYCLES(5);
 }
 
 void cpu_STA()
@@ -1171,14 +1169,14 @@ void cpu_STA()
   uint16_t addr = MEM_READ_WORD(regPC);
   MEM_WRITE(addr, regA);
   regPC += 2;
-  PROF_ADD_CYCLES(13);
+  TIMER_ADD_CYCLES(13);
 }
 
 #define CPU_STX(REG) \
   void cpu_STX ## REG() \
   { \
     MEM_WRITE(reg##REG.REG, regA); \
-    PROF_ADD_CYCLES(7); \
+    TIMER_ADD_CYCLES(7); \
   }
 
 CPU_STX(BC);
@@ -1188,7 +1186,7 @@ CPU_STX(DE);
 void cpu_STC()
 {
   regS |= PS_CARRY;
-  PROF_ADD_CYCLES(4);
+  TIMER_ADD_CYCLES(4);
 }
 
 void cpu_XTHL()
@@ -1196,7 +1194,7 @@ void cpu_XTHL()
   byte b;
   b = MEM_READ(regSP+1); MEM_WRITE(regSP+1, regH); regH = b;
   b = MEM_READ(regSP);   MEM_WRITE(regSP,   regL); regL = b;
-  PROF_ADD_CYCLES(18);
+  TIMER_ADD_CYCLES(18);
 }
 
 void cpu_XCHG()
@@ -1204,20 +1202,20 @@ void cpu_XCHG()
   byte b;
   b = regD; regD = regH; regH = b;
   b = regE; regE = regL; regL = b;
-  PROF_ADD_CYCLES(5);
+  TIMER_ADD_CYCLES(5);
 }
 
 void cpu_OUT()
 {
   altair_out(MEM_READ(regPC), regA);
-  PROF_ADD_CYCLES(10);
+  TIMER_ADD_CYCLES(10);
   regPC++;
 }
 
 void cpu_IN()
 {
   regA = altair_in(MEM_READ(regPC));
-  PROF_ADD_CYCLES(10);
+  TIMER_ADD_CYCLES(10);
   regPC++;
 }
 
@@ -1259,5 +1257,3 @@ CPUFUN cpu_opcodes[256] = {
   cpu_RP,    cpu_POPAS, cpu_JP,    cpu_DI,    cpu_CP,    cpu_PSHAS, cpu_ORI,   cpu_RST30,	// 360-367 (0xF0-0xF7)
   cpu_RM,    cpu_SPHL,  cpu_JM,    cpu_EI,    cpu_CM,    cpu_CALL,  cpu_CPI,   cpu_RST38	// 370-377 (0xF8-0xFF)
 };
-
-#endif

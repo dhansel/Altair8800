@@ -55,8 +55,11 @@ extern SerialClass  Serial;
 
 #define PROGMEM
 #define F(x) x
+#define PSTR(x) x
+#define PGM_P const char *
 #define pgm_read_byte(p) *(p)
 #define pgm_read_word(p) *(p)
+#define strcmp_P strcmp
 
 #define B00000000 0
 #define B00000001 1

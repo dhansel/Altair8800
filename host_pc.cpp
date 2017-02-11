@@ -9,6 +9,7 @@
 #include "cpucore.h"
 #include "host_pc.h"
 #include "Windows.h"
+#include "profile.h"
 
 byte data_leds;
 uint16_t status_leds;
@@ -17,87 +18,6 @@ byte stop_request;
 static FILE *storagefile = NULL;
 
 //#define DEBUG
-
-// ----------------------------------------------------------------------------------
-
-
-struct TimerData {
-  HostTimerFnTp timer_fn;
-  uint32_t milliseconds;
-  DWORD    thread_id;
-  bool     go;
-} timer_data[9];
-  
-
-static DWORD WINAPI timer_interrupt_fn(void *d)
-{
-  byte tid = (word) d;
-  struct TimerData *data = timer_data+tid;
-
-  while( data->go )
-    {
-      Sleep(data->milliseconds);
-      data->timer_fn();
-    }
-  
-  printf("[timer thread exit]\n");
-  data->thread_id = 0;
-  return 0;
-}
-
-
-void host_interrupt_timer_start(byte tid)
-{
-  printf("[Starting timer interrupts]\n");
-  timer_data[tid].go = true;
-  HANDLE h = CreateThread(0, 0, timer_interrupt_fn, (void *) tid, 0, &(timer_data[tid].thread_id));
-  if( h )
-    CloseHandle(h);
-  else
-    timer_data[tid].thread_id = 0;
-}
-
-
-void host_interrupt_timer_setup(byte tid, uint32_t microseconds, HostTimerFnTp timer_fn)
-{
-  timer_data[tid].go = false;
-  timer_data[tid].timer_fn = timer_fn;
-  timer_data[tid].milliseconds = (microseconds/1000.0)+0.5;
-  timer_data[tid].thread_id = 0;
-}
-
-
-void host_interrupt_timer_stop(byte tid)
-{
-  if( timer_data[tid].thread_id )
-    {
-      printf("[Stopping timer interrupts]\n");
-      timer_data[tid].go = false;
-      
-      // if this is not the timer thread itself then wait until
-      // the timer thread exits
-      if( GetCurrentThreadId() != timer_data[tid].thread_id )
-        {
-          HANDLE h = OpenThread(SYNCHRONIZE, false, timer_data[tid].thread_id);
-          if( h!=NULL )
-            {
-              WaitForSingleObject(h, INFINITE); 
-              CloseHandle(h);
-            }
-        }
-      
-      printf("[Stopped timer interrupts]\n");
-    }
-}
-
-
-bool host_interrupt_timer_running(byte tid)
-{
-  return timer_data[tid].thread_id!=0;
-}
-
-
-// ----------------------------------------------------------------------------------
 
 
 bool host_read_function_switch(byte i)
@@ -182,12 +102,47 @@ void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
 // ----------------------------------------------------------------------------------
 
 
-uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, void *buffer)
+static FILE *open_file(const char *filename)
 {
   char fnamebuf[30];
   sprintf(fnamebuf, "disks\\%s", filename);
+  return fopen(fnamebuf, "rb");
+}
+
+
+bool host_file_exists(const char *filename)
+{
+  FILE *f = open_file(filename);
+  if( f )
+    {
+      fclose(f);
+      return true;
+    }
+
+  return false;
+}
+
+
+int host_get_file_size(const char *filename)
+{
+  int res = -1;
+
+  FILE *f = open_file(filename);
+  if( f )
+    {
+      if( fseek(f, 0, SEEK_END)==0 )
+        res = ftell(f);
+      fclose(f);
+    }
+  
+  return res;
+}
+
+
+uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, void *buffer)
+{
   uint32_t res = 0;
-  FILE *f = fopen(fnamebuf, "rb");
+  FILE *f = open_file(filename);
   if( f )
     {
       if( fseek(f, offset, SEEK_SET)==0 )
@@ -263,6 +218,7 @@ void host_setup()
   addr_leds = 0;
   stop_request = 0;
   
+  // open storage data file for mini file system
   storagefile = fopen("AltairStorage.dat", "r+b");
   if( storagefile==NULL ) 
     {
@@ -280,12 +236,17 @@ void host_setup()
       storagefile = fopen("AltairStorage.dat", "r+b");
     }
 
-  for(byte tid=0; tid<9; tid++)
-    {
-      timer_data[tid].go = false;
-      timer_data[tid].thread_id = 0;
-    }
+  // send CTRL-C to input instead of processing it (otherwise the
+  // emulator would immediately quit if CTRL-C is pressed) and we
+  // could not use CTRL-C to stop a running BASIC example.
+  // CTRL-C is handled in host_check_interrupts (above) such that 
+  // pressing it twice within 250ms will cause the emulator to terminate.
+  DWORD mode;
+  HANDLE hstdin = GetStdHandle(STD_INPUT_HANDLE);
+  GetConsoleMode(hstdin, &mode);
+  SetConsoleMode(hstdin, mode & ~ENABLE_PROCESSED_INPUT);
 
+  // initialize random number generator
   srand(time(NULL));
 }
 

@@ -76,16 +76,6 @@ void setup();
 void loop();
 int main(int argc, char **argv)
 {
-  // send CTRL-C to input instead of processing it (otherwise the
-  // emulator would immediately quit if CTRL-C is pressed) and we
-  // could not use CTRL-C to stop a running BASIC example.
-  // CTRL-C is handled in host_pc.cpp such that pressing it twice
-  // within 250ms will cause the emulator to terminate.
-  DWORD mode;
-  HANDLE hstdin = GetStdHandle(STD_INPUT_HANDLE);
-  GetConsoleMode(hstdin, &mode);
-  SetConsoleMode(hstdin, mode & ~ENABLE_PROCESSED_INPUT);
-
   setup();
   while(1) loop();
 }

@@ -10,11 +10,8 @@
 #include "numsys.h"
 #include "filesys.h"
 #include "drive.h"
-#include "prog_ps2.h"
-#include "prog_basic.h"
-#include "prog_games.h"
-#include "prog_tools.h"
-
+#include "timer.h"
+#include "prog.h"
 
 #define BIT(n) (1<<(n))
 
@@ -23,10 +20,15 @@ uint16_t dswitch = 0;
 
 uint16_t p_regPC = 0xFFFF;
 
-volatile uint16_t altair_interrupts = 0;
+volatile byte     altair_interrupts_buf = 0;
+volatile uint16_t altair_interrupts     = 0;
+volatile byte     altair_vi_level_cur   = 0;
+volatile byte     altair_vi_level       = 0;
+volatile bool     altair_interrupts_enabled = false;
+static   bool     altair_rtc_available  = false;
+static   bool     altair_rtc_running    = false;
 
 word status_wait = false;
-word status_inte = false;
 bool have_ps2    = false;
 
 void print_panel_serial(bool force = false);
@@ -34,6 +36,24 @@ void print_dbg_info();
 void read_inputs_panel();
 void read_inputs_serial();
 void process_inputs();
+void rtc_setup();
+
+uint32_t  throttle_micros = 0;
+uint16_t  throttle_delay  = 0;
+
+#define THROTTLE_TIMER_PERIOD 25000
+void update_throttle()
+{
+  uint32_t now   = micros();
+  uint32_t ratio = (200*THROTTLE_TIMER_PERIOD) / (now-throttle_micros);
+
+  if( ratio>201 )
+    throttle_delay += (uint16_t) HOST_PERFORMANCE_FACTOR;
+  else if( ratio<200 && throttle_delay>0 )
+    throttle_delay -= (uint16_t) HOST_PERFORMANCE_FACTOR;
+
+  throttle_micros = now;
+}
 
 
 void altair_set_outputs(uint16_t a, byte v)
@@ -114,12 +134,14 @@ void process_inputs()
 
       if( dswitch & 0x80 )
         {
+          // SW7 is up => memory page operation
           host_set_status_led_HLDA();
           
           uint16_t page = dswitch & 0xff00;
           byte filenum  = dswitch & 0x003f;
           if( dswitch & 0x40 )
             {
+              // SW6 is up => save memory page
               if( filesys_write_file('M', filenum, Mem+page, 256) )
                 DBG_FILEOPS2(3, "saved memory page ", int(page>>8));
               else
@@ -127,6 +149,7 @@ void process_inputs()
             }
           else
             {
+              // SW6 is down => load memory page
               if( filesys_read_file('M', filenum, Mem+page, 256)==256 )
                 {
                   DBG_FILEOPS2(3, "loaded memory page ", int(page>>8));
@@ -140,164 +163,28 @@ void process_inputs()
             
           serial_update_hlda_led();
         }
-
-      switch( dswitch & 0xff )
+      else
         {
-        case 0x00:
-          {
-            Serial.println();
-            Serial.println(F("00000000) [print this directory]"));
-            Serial.println(F("00000001) Calculator"));
-            Serial.println(F("00000010) Kill-the-Bit"));
-            Serial.println(F("00000011) Pong (LEDs)"));
-            Serial.println(F("00000100) Pong (Terminal)"));
-            Serial.println(F("00000101) 4k Basic"));
-#if !defined(__AVR_ATmega2560__)
-            Serial.println(F("00000110) MITS Programming System II"));
-            Serial.println(F("00000111) ALTAIR Turnkey Monitor"));
-            Serial.println(F("00001000) Disk boot ROM"));
-#endif
-            Serial.println(F("00001001) Music ('Daisy')"));
-            Serial.println(F("00001010) CPU Diagnostic"));
-            Serial.println(F("00001011) CPU Exerciser"));
-            Serial.println(F("00001100) Status lights test"));
-            Serial.println(F("00001101) Serial echo using IRQ"));
-            Serial.println(F("10nnnnnn) [load memory page, nnnnnn=file number]"));
-            Serial.println(F("11nnnnnn) [save memory page, nnnnnn=file number]"));
-            break;
-          }
-
-        case 0x01:
-          {
-            regPC = prog_tools_copy_calc(Mem);
-            host_set_data_leds(MREAD(regPC));
-            host_clr_status_led_WAIT();
-            break;
-          }
-
-        case 0x02:
-          {
-            regPC = prog_games_copy_killbits(Mem);
-            host_set_data_leds(MREAD(regPC));
-            host_clr_status_led_WAIT();
-            break;
-          }
-
-        case 0x03:
-          {
-            regPC = prog_games_copy_pong(Mem);
-            host_set_data_leds(MREAD(regPC));
-            host_clr_status_led_WAIT();
-            break;
-          }
-
-        case 0x04:
-          {
-            regPC = prog_games_copy_pongterm(Mem);
-            host_set_data_leds(MREAD(regPC));
-            host_clr_status_led_WAIT();
-            break;
-          }
-
-        case 0x05:
-          {
-            regPC = prog_basic_copy_4k(Mem);
-            host_set_data_leds(MREAD(regPC));
-            host_clr_status_led_WAIT();
-
-            // 4k BASIC will get into an infinite loop if a full 64k RAM are
-            // available => purposely reduce the RAM size by 1 byte
-            mem_set_ram_limit(0xfffe);
-            break;
-          }
-
-#if !defined(__AVR_ATmega2560__)
-        case 0x06:
-          {
-            if( serial_acr_mount_ps2() && !have_ps2 )
-              {
-                regPC = prog_ps2_copy_monitor(Mem);
-                host_clr_status_led_WAIT();
-                host_set_data_leds(MREAD(regPC));
-                have_ps2 = true;
-              }
-            
-            break;
-          }
-
-        case 0x07:
-          {
-            regPC = prog_tools_copy_turnmon(Mem);
-            host_set_data_leds(MREAD(regPC));
-            if( regPC<MEMSIZE ) 
-              { host_clr_status_led_WAIT(); }
-            else
+          // SW7 is down => load program
+          if( prog_load(dswitch & 0xff, &regPC, Mem) )
+            {
+              // program exists and is supposed to run immediately
+              host_set_data_leds(MREAD(regPC));
+              host_clr_status_led_WAIT();
+            }
+          else
+            {
+              // either program does not exist or is not supposed to run immediately
+              p_regPC = ~regPC;
               altair_set_outputs(regPC, MREAD(regPC));
-            break;
-          }
-
-        case 0x08:
-          {
-            regPC = prog_tools_copy_diskboot(Mem);
-            host_set_data_leds(MREAD(regPC));
-            host_clr_status_led_WAIT();
-            // disk boot rom starts at 0xff00 so RAM goes up to 0xfeff
-            mem_set_ram_limit(0xfeff);
-            break;
-          }
-#endif
-        case 0x09:
-          {
-            regPC = prog_games_copy_daisy(Mem);
-            host_set_data_leds(MREAD(regPC));
-            host_clr_status_led_WAIT();
-            break;
-          }
-
-        case 0x0a:
-          {
-            regPC = prog_tools_copy_diag(Mem);
-            host_set_data_leds(MREAD(regPC));
-            host_clr_status_led_WAIT();
-            break;
-          }
-
-        case 0x0b:
-          {
-            regPC = prog_tools_copy_exerciser(Mem);
-            host_set_data_leds(MREAD(regPC));
-            host_clr_status_led_WAIT();
-            break;
-          }
-
-        case 0x0c:
-          {
-            regPC = prog_tools_copy_statustest(Mem);
-            p_regPC = ~regPC;
-            altair_set_outputs(regPC, MREAD(regPC));
-            break;
-          }
-
-        case 0x0d:
-          {
-            regPC = prog_tools_copy_serialirqtest(Mem);
-            p_regPC = ~regPC;
-            altair_set_outputs(regPC, MREAD(regPC));
-            break;
-          }
-
-        case 0x40:
-          {
-            filesys_manage();
-            break;
-          }
+            }
         }
-    } 
+    }
   else if( cswitch & BIT(SW_AUX1UP) )
     {
       if( (cswitch & BIT(SW_STOP)) || host_read_function_switch_debounced(SW_STOP) )
         {
-          // edit configuration
+          // STOP is up => edit configuration
           config_edit();
           if( config_serial_panel_enabled() ) 
             { 
@@ -306,19 +193,29 @@ void process_inputs()
             }
           p_regPC = ~regPC;
           altair_set_outputs(regPC, MREAD(regPC));
+          rtc_setup();
         }
       else
         {
-          // ROM BASIC starts at 0xC000 so RAM goes up to 0xBFFF
-          mem_set_ram_limit(0xbfff);
-          
-          regPC = 0xc000;
-          p_regPC = ~regPC;
-#if MEMSIZE>=0x10000
-          prog_basic_copy_16k(Mem);
-#endif
-          host_set_data_leds(MREAD(regPC));
-          host_clr_status_led_WAIT();
+          // program shortcut
+          byte p = config_aux1_program();
+          if( p & 0x80 )
+            {
+              // run disk (first mount disk then install and run disk boot ROM)
+              if( drive_mount(0, p & 0x7f) )
+                {
+                  dswitch = (dswitch & 0xff00) | 0x08;
+                  cswitch = BIT(SW_AUX1DOWN);
+                  process_inputs();
+                }
+            }
+          else if( p>0 && prog_get_name(p)!=NULL )
+            {
+              // run program
+              dswitch = (dswitch & 0xff00) | p;
+              cswitch = BIT(SW_AUX1DOWN);
+              process_inputs();
+            }
         }
     }
 
@@ -505,9 +402,11 @@ void read_inputs_serial()
     }
   else if( data == 'L' )
     {
+      Serial.print(F("\n\nStart address: "));
       uint16_t addr = numsys_read_word();
-      Serial.write(' ');
+      Serial.print(F("\nNumber of bytes: "));
       uint16_t len  = numsys_read_word();
+      Serial.print(F("\nData: "));
       while( len>0 )
         {
           Serial.write(' ');
@@ -516,7 +415,7 @@ void read_inputs_serial()
           --len;
         }
       Serial.write('\n');
-    }
+      }
   else if( data == 'n' )
     {
       numsys_toggle();
@@ -719,13 +618,8 @@ void reset(bool resetPC)
       drive_reset();
     }
 
-  altair_interrupts = 0;
-}
-
-
-void altair_interrupt(uint16_t i)
-{
-  altair_interrupts |= i;
+  altair_interrupts     = 0;
+  altair_interrupts_buf = 0;
 }
 
 
@@ -764,22 +658,146 @@ void switch_interrupt_handler()
 }
 
 
-static byte altair_interrupt_handler()
-{
-  byte opcode = 0;
 
-  host_set_status_led_M1();
-  host_clr_status_led_INTE();
-  host_set_status_led_INT();
-  host_clr_status_led_MEMR();
-  
-  if( altair_interrupts & INT_SERIAL )
+void altair_rtc_interrupt()
+{
+  altair_interrupt(INT_RTC);
+}
+
+
+void rtc_setup()
+{
+  float rate = config_rtc_rate();
+  altair_rtc_available = rate > 0.0;
+
+  if( !altair_rtc_available )
     {
-      opcode = 0xff;
-      altair_interrupts &= ~INT_SERIAL;
+      timer_stop(TIMER_RTC);
+      altair_rtc_running = false;
+      //printf("RTC disabled\n");
+    }
+  else
+    {
+      timer_setup(TIMER_RTC, 1000000.0/rate, altair_rtc_interrupt);
+      if( altair_rtc_running ) timer_start(TIMER_RTC, 0, true);
+      //printf("RTC enabled: %f %i\n", rate, (int) (1000000.0/rate));
+    }
+}
+
+
+void altair_vi_check_interrupt()
+{
+  byte level = 0xff;
+
+  if     ( altair_interrupts_buf & config_interrupt_vi_mask[0] ) level = 0;
+  else if( altair_interrupts_buf & config_interrupt_vi_mask[1] ) level = 1;
+  else if( altair_interrupts_buf & config_interrupt_vi_mask[2] ) level = 2;
+  else if( altair_interrupts_buf & config_interrupt_vi_mask[3] ) level = 3;
+  else if( altair_interrupts_buf & config_interrupt_vi_mask[4] ) level = 4;
+  else if( altair_interrupts_buf & config_interrupt_vi_mask[5] ) level = 5;
+  else if( altair_interrupts_buf & config_interrupt_vi_mask[6] ) level = 6;
+  else if( altair_interrupts_buf & config_interrupt_vi_mask[7] ) level = 7;
+
+  if( level<altair_vi_level_cur )
+    {
+      altair_vi_level    = level;
+      altair_interrupts |= INT_VECTOR;
+    }
+}
+
+
+void altair_vi_out_control(byte data)
+{
+  // set current interrupt level for vector interrupts
+  altair_vi_level_cur = (data & 8)==0 ? 0xff : (7-(data&7));
+  
+  // reset interrupt line from RTC 
+  if( data & 0x10 )
+    altair_interrupt(INT_RTC, false);
+
+  // enable/disable real-time clock
+  if( ((data & 0x40) && !altair_rtc_running && altair_rtc_available) )
+    {
+      altair_rtc_running = true;
+      timer_start(TIMER_RTC, 0, true);
+    }
+  else if( !(data & 0x40) && altair_rtc_running )
+    {
+      altair_rtc_running = false;
+      timer_stop(TIMER_RTC);
     }
 
-  if( opcode!=0 && host_read_status_led_WAIT() )
+  if( altair_interrupts_enabled )
+    altair_vi_check_interrupt();
+}
+
+
+void altair_interrupt_enable()
+{
+  host_set_status_led_INTE();
+  altair_interrupts_enabled = true;
+
+  if( config_have_vi() )
+    altair_vi_check_interrupt();
+  else
+    altair_interrupts = (altair_interrupts & ~INT_DEVICE) | (altair_interrupts_buf & config_interrupt_mask);
+}
+
+
+void altair_interrupt_disable()
+{
+  host_clr_status_led_INTE();
+  altair_interrupts_enabled = false;
+  altair_interrupts &= ~INT_DEVICE;
+}
+
+
+void altair_interrupt(uint16_t i, bool set)
+{
+  if( i & INT_DEVICE )
+    {
+      if( set )
+        altair_interrupts_buf |=  (i & INT_DEVICE);
+      else
+        altair_interrupts_buf &= ~(i & INT_DEVICE);
+
+      if( !altair_interrupts_enabled ) 
+        altair_interrupts &= ~INT_DEVICE;
+      else if( config_have_vi() )
+        altair_vi_check_interrupt();
+      else
+        altair_interrupts = (altair_interrupts & ~INT_DEVICE) | (altair_interrupts_buf & config_interrupt_mask);
+    }
+  
+  if( i & INT_SWITCH )
+    altair_interrupts |= (i & INT_SWITCH);
+}
+
+
+static byte altair_interrupt_handler()
+{
+  byte opcode = 0xff;
+
+  host_set_status_led_M1();
+  host_set_status_led_INT();
+  host_clr_status_led_MEMR();
+
+  // Determine the opcode to put on the data bus (if VI enabled).
+  // Must do this before calling altair_interrupt_disable, otherwise
+  // the INT_VECTOR flag is cleared already
+  if( altair_interrupts & INT_VECTOR )
+    {
+      opcode = 0307 | (altair_vi_level * 8);
+
+      // the VI interrupt output line gets cleared as soon as the 
+      // CPU acknowledges the interrupt
+      altair_interrupts &= ~INT_VECTOR;
+    }
+
+  // disable interrupts now
+  altair_interrupt_disable();
+
+  if( host_read_status_led_WAIT() )
     {
       if( config_serial_debug_enabled() ) { Serial.print(F("\nInterrupt! opcode=")); numsys_print_byte(opcode); Serial.println(); }
       altair_set_outputs(regPC, opcode);
@@ -812,13 +830,21 @@ void altair_hlt()
       host_set_status_led_MEMR();
       host_set_status_led_WAIT();
       altair_interrupts = 0;
-      while( (altair_interrupts & (~INT_SW|INT_SW_RESET))==0 ) host_check_interrupts();
+      while( (altair_interrupts & (~INT_SWITCH|INT_SW_RESET))==0 ) 
+        { 
+          // check host interrupts (e.g. switches on Mega)
+          host_check_interrupts(); 
+
+          // advance simulation time (so timers can expire)
+          TIMER_ADD_CYCLES(2);
+        }
+
       if( altair_interrupts & INT_SW_RESET )
         {
           cswitch = 0;
           while( !(cswitch & BIT(SW_RESET)) ) read_inputs_panel();
         }
-      else if( altair_interrupts & INT_SERIAL )
+      else if( altair_interrupts & INT_DEVICE )
         host_clr_status_led_WAIT();
     }
   else
@@ -827,16 +853,18 @@ void altair_hlt()
       altair_set_outputs(0xffff, 0xff);
 
       altair_interrupts = 0;
-      while( (altair_interrupts & (~INT_SW|INT_SW_RESET))==0 )
+      while( (altair_interrupts & (~INT_SWITCH|INT_SW_RESET))==0 )
         {
           read_inputs_panel();
           print_panel_serial();
           host_check_interrupts();
+
+          // advance simulation time (so timers can expire)
+          TIMER_ADD_CYCLES(1);
         }
     }
 
   host_clr_status_led_HLTA();
-  PROF_ADD_CYCLES(7);
 }
 
 
@@ -888,6 +916,8 @@ void altair_out(byte addr, byte data)
 
     case 0022: serial_2sio2_out_ctrl(data); break;
     case 0023: serial_2sio2_out_data(data); break;
+
+    case 0376: altair_vi_out_control(data); break;
     }
   
   if( host_read_status_led_WAIT() )
@@ -938,7 +968,7 @@ byte altair_in(byte addr)
   return data;
 }
 
-     
+
 void setup() 
 {
   int i;
@@ -946,12 +976,15 @@ void setup()
   cswitch = 0;
   dswitch = 0;
 
+  timer_setup();
   mem_setup();
   host_setup();
   filesys_setup();
   config_setup();
   drive_setup();
   serial_setup();
+  profile_setup();
+  rtc_setup();
 
   // if RESET switch is held up during powerup then use default configuration settings
   if( host_read_function_switch(SW_RESET) )
@@ -999,6 +1032,7 @@ void setup()
 }
 
 
+
 void loop() 
 {
   byte opcode;
@@ -1007,18 +1041,22 @@ void loop()
   if( !host_read_status_led_WAIT() )
     {
       // clear all switch-related interrupts before starting loop
-      altair_interrupts &= ~INT_SW;
+      altair_interrupts &= ~INT_SWITCH;
+      
+      // enable/disable profiling
+      profile_enable(config_profiling_enabled());
 
-      if( config_profiling_enabled() ) prof_reset();
 #if USE_THROTTLE>0
-      uint32_t throttle_cycle_ctr = prof_cycle_counter;
-      uint32_t throttle_ctr       = 10000;
-      uint32_t throttle_micros    = micros();
-      uint32_t throttle_delay     = config_throttle_enabled() ? 20 : 0;
+      if( config_throttle()<0 )
+        {
+          timer_setup(TIMER_THROTTLE, 0, update_throttle);
+          timer_start(TIMER_THROTTLE, THROTTLE_TIMER_PERIOD, true);
+          throttle_delay  = 10 * HOST_PERFORMANCE_FACTOR;
+          throttle_micros = micros();
+        }
+      else
+        throttle_delay = config_throttle() * HOST_PERFORMANCE_FACTOR;
 #endif
-
-      // check whether we need to re-enable timer interrupts
-      serial_timer_interrupt_check_enable();
 
       while( true )
         {
@@ -1032,12 +1070,12 @@ void loop()
           if( altair_interrupts )
             {
               // interrupt detected
-              if( altair_interrupts & INT_SW )
+              if( altair_interrupts & INT_SWITCH )
                 {
                   // switch-related interrupt (simulation handling)
                   switch_interrupt_handler();
                   if( host_read_status_led_WAIT() ) 
-                    break;    // exit simulation lop
+                    break;    // exit simulation loop
                   else
                     continue; // start over
                 }
@@ -1060,7 +1098,7 @@ void loop()
             }
 
           // take a CPU step
-          PROF_COUNT_OPCODE(opcode);
+          PROFILE_COUNT_OPCODE(opcode);
           CPU_EXEC(opcode);
 
           // check for breakpoint hit
@@ -1070,42 +1108,12 @@ void loop()
           // delay execution according to current delay
           // (need the NOP, otherwise the compiler will optimize the loop away)
           for(uint32_t i=0; i<throttle_delay; i++) asm("NOP");
-
-          if( --throttle_ctr==0 )
-            {
-              // adjust throttle_delay every 10000 instructions (if enabled)
-              if( config_throttle_enabled() )
-                {
-                  uint32_t now   = micros();
-                  uint32_t ratio = (100 * (prof_cycle_counter-throttle_cycle_ctr)) / (now-throttle_micros);
-                  if( ratio>200 )
-                    throttle_delay++;
-                  else if( ratio<200 && throttle_delay>0 )
-                    throttle_delay--;
-                  
-                  // check/show profiling to the user
-                  prof_check();
-                  
-                  // reset throttling counters for next cycle
-                  throttle_micros    = now;
-                  throttle_cycle_ctr = prof_cycle_counter;
-                }
-              else
-                {
-                  // check/show profiling to the user
-                  prof_check();
-                }
-
-              throttle_ctr = 10000;
-            }
-#else
-          // profile
-          prof_check();
 #endif
         }
 
-      // stop timer interrupts from the host (for serial playback)
-      serial_timer_interrupt_disable();
+#if USE_THROTTLE>0
+      timer_stop(TIMER_THROTTLE);
+#endif
 
       // flush any characters stuck in the serial buffer 
       // (so we don't accidentally execute commands after stopping)
@@ -1125,7 +1133,7 @@ void loop()
   
   // only check for interrupts not related to front-panel switches (e.g. serial)
   host_check_interrupts();
-  if( altair_interrupts & ~INT_SW )
+  if( altair_interrupts )
     opcode = altair_interrupt_handler();
   else
     { opcode = MEM_READ(regPC); regPC++; }
@@ -1133,7 +1141,7 @@ void loop()
   host_clr_status_led_M1();
   if( !(cswitch & BIT(SW_RESET)) ) 
     {
-      PROF_COUNT_OPCODE(opcode);
+      PROFILE_COUNT_OPCODE(opcode);
       CPU_EXEC(opcode);
     }
 }

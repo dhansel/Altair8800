@@ -6,6 +6,7 @@
 #define DBG_FILEOPS_LEVEL 3
 
 #if DBG_FILEOPS_LEVEL>0
+
 #define DBG_FILEOPS(lvl, s) if(DBG_FILEOPS_LEVEL>=lvl) {Serial.print('['); Serial.print(F(s)); Serial.println(']');} else while(0)
 #define DBG_FILEOPS2(lvl, s1, s2) if(DBG_FILEOPS_LEVEL>=lvl) { Serial.print('['); Serial.print(F(s1)); Serial.print(s2); Serial.println(']');} else while(0)
 #define DBG_FILEOPS3(lvl, s1, s2, s3) if(DBG_FILEOPS_LEVEL>=lvl) { Serial.print('['); Serial.print(F(s1)); Serial.print(s2); Serial.print(s3); Serial.println(']');} else while(0)
@@ -28,9 +29,6 @@ bool serial_file_open();
 void serial_close_files();
 
 void serial_timer_interrupt_setup(byte dev = 0xff);
-bool serial_timer_interrupt_enabled(byte dev);
-void serial_timer_interrupt_disable(byte dev = 0xff);
-void serial_timer_interrupt_check_enable(byte dev = 0xff);
 void serial_receive_host_data(byte host_interface, byte b);
 bool serial_available();
 int  serial_read();

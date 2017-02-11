@@ -28,17 +28,17 @@ struct prog_info_struct get_prog_info(byte i)
       {PSTR("Pong (LEDs)"),                prog_games_copy_pong,          true},
       {PSTR("Pong (Terminal)"),            prog_games_copy_pongterm,      true},
       {PSTR("4k Basic"),                   prog_basic_copy_4k,            true},
+      {PSTR("16k ROM Basic"),              prog_basic_copy_16k,           true},
 #if !defined(__AVR_ATmega2560__)
       {PSTR("MITS Programming System II"), prog_ps2_copy_monitor,         true},
-      {PSTR("ALTAIR Turnkey Monitor"),     prog_tools_copy_turnmon,       true},
       {PSTR("Disk boot ROM"),              prog_tools_copy_diskboot,      true},
+      {PSTR("ALTAIR Turnkey Monitor"),     prog_tools_copy_turnmon,       true},
       {PSTR("Music ('Daisy')"),            prog_games_copy_daisy,         true},
 #endif
       {PSTR("CPU Diagnostic"),             prog_tools_copy_diag,          true},
       {PSTR("CPU Exerciser"),              prog_tools_copy_exerciser,     true},
-      {PSTR("Status lights test"),         prog_tools_copy_statustest,    false},
-      {PSTR("Serial echo using IRQ"),      prog_tools_copy_serialirqtest, false},
-      {PSTR("16k ROM Basic"),              prog_basic_copy_16k,           true},
+      //{PSTR("Status lights test"),         prog_tools_copy_statustest,    false},
+      //{PSTR("Serial echo using IRQ"),      prog_tools_copy_serialirqtest, false},
       {NULL, NULL, false}
     };
 

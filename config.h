@@ -1,23 +1,14 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+
 // Allowing breakpoints significantly reduces performance but is helpful
 // for debugging.  Also uses 2*MAX_BREAKPOINTS+1 bytes of RAM
 #define MAX_BREAKPOINTS 0
 
 
-// Setting this to 1 enables profiling.  To use profiling, enable
-// serial debug input (switch 5 on during reset) and then send 'F'
-// (without quotes) over serial. From that point, every second a
-// message will be printed to serial indicating the number of executed 
-// instructions, 8080 cycles, time and performance in MHz.
-// Reduces performance and uses 14 bytes of RAM when enabled.
-#define USE_PROFILING 1
-
-
-// If USE_PROFILING is enabled, setting USE_PROFILING_DETAIL to 1 
-// will (every 10 seconds) show a list of which opcodes were executed 
-// how many times.
+// Setting USE_PROFILING_DETAIL to 1 will (every 10 seconds) show a 
+// list of which opcodes were executed how many times (if profiling is enabled).
 // Reduces performance and uses 1k of RAM
 #define USE_PROFILING_DETAIL 0
 
@@ -38,16 +29,11 @@
 // of memory. Set to 0 to completely disable drive support.
 #define NUM_DRIVES 4
 
+
 // If enabled, Address switch state will be set by issuing the '/'
 // serial command.  Actual switches will be ignored.
 // Useful when operating while not connected to the front panel hardware.
 #define STANDALONE 0
-
-
-// Two slightly different versions of the CPU core implementation are
-// provided. Second version was supposed to be significantly faster
-// but turns out that there is only a minor difference.
-#define CPUCORE_VERSION 2
 
 
 // ------------------------------------------------------------------------------
@@ -60,6 +46,7 @@
 #define CF_SERIAL_INPUT 0x08
 #define CF_SERIAL_DEBUG 0x10
 #define CF_CLEARMEM     0x20
+#define CF_HAVE_VI      0x40
 
 #define CSM_SIO         0
 #define CSM_ACR         1
@@ -70,28 +57,35 @@
 #define CSF_ON          1
 #define CSF_AUTO        2
 
+#define CSFB_NONE       0
+#define CSFB_UNDERSCORE 1
+#define CSFB_RUBOUT     3
+#define CSFB_AUTO       2
+
 extern uint32_t config_flags;
 extern uint32_t config_serial_settings;
+extern byte     config_interrupt_mask;
+extern byte     config_interrupt_vi_mask[8];
 
 void config_setup();
 void config_edit();
 void config_defaults(bool apply);
 
-#if USE_PROFILING>0
-#define config_profiling_enabled() ((config_flags & CF_PROFILE)!=0)
+#if USE_THROTTLE>0
+int     config_throttle(); // 0=off, <0=auto delay, >0=manual delay
 #else
-#define config_profiling_enabled() false
-#endif
-#if USE_THROTTLE
-#define config_throttle_enabled()  ((config_flags & CF_THROTTLE)!=0)
-#else
-#define config_throttle_enabled() false
+#define config_throttle() 0
 #endif
 
+inline bool config_profiling_enabled()        { return (config_flags & CF_PROFILE)!=0; }
 inline bool config_clear_memory()             { return (config_flags & CF_CLEARMEM)!=0; }
 inline bool config_serial_panel_enabled()     { return (config_flags & CF_SERIAL_PANEL)!=0; }
 inline bool config_serial_input_enabled()     { return (config_flags & CF_SERIAL_INPUT)!=0; }
 inline bool config_serial_debug_enabled()     { return (config_flags & CF_SERIAL_DEBUG)!=0; }
+inline bool config_have_vi()                  { return (config_flags & CF_HAVE_VI)!=0; }
+
+float    config_rtc_rate();
+byte     config_aux1_program();
 
 uint32_t config_host_serial_baud_rate(byte iface);
 byte     config_host_serial_primary();

@@ -23,13 +23,10 @@ bool     host_read_function_switch_edge(byte i);
 uint16_t host_read_function_switches_edge();
 void     host_reset_function_switch_state();
 
-typedef void (*HostTimerFnTp)();
-void host_interrupt_timer_setup(byte tid, uint32_t microseconds, HostTimerFnTp timer_fn);
-void host_interrupt_timer_start(byte tid);
-void host_interrupt_timer_stop(byte tid);
-bool host_interrupt_timer_running(byte tid);
+void     host_copy_flash_to_ram(void *dst, const void *src, uint32_t len);
 
-void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len);
+bool     host_file_exists(const char *filename);
+int      host_get_file_size(const char *filename);
 
 uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, void *buffer);
 uint32_t host_write_file(const char *filename, uint32_t offset, uint32_t len, void *buffer);

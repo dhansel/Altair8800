@@ -2,11 +2,15 @@
 #include "config.h"
 #include "host.h"
 #include "cpucore.h"
+#include "Altair8800.h"
+#include "timer.h"
 
 #if NUM_DRIVES == 0
 
 void drive_setup() {}
 void drive_dir() {}
+const char *drive_disk_filename(byte disk_num) { return NULL; }
+const char *drive_disk_description(byte disk_num) { return NULL; }
 bool drive_mount(byte drive_num, byte disk_num) { return false; }
 bool drive_unmount(byte drive_num) { return false; }
 void drive_reset() {}
@@ -22,6 +26,7 @@ void drive_out(byte addr, byte data) {}
 #define DRIVE_STATUS_HAVEDISK    1
 #define DRIVE_STATUS_HEADLOAD    2
 #define DRIVE_STATUS_WRITE       4
+#define DRIVE_STATUS_INT_EN      8
 
 static byte drive_selected = 0xff;
 static char drive_file_name[NUM_DRIVES][13];
@@ -31,6 +36,43 @@ static byte drive_current_sector[NUM_DRIVES];
 static byte drive_current_byte[NUM_DRIVES];
 static byte drive_sector_buffer[NUM_DRIVES][DRIVE_SECTOR_LENGTH];
 
+#define DRIVE_SECTOR_TRUE_DELAY       5200
+#define DRIVE_SECTOR_NOT_TRUE_DELAY     30
+static bool drive_sector_true = false;
+
+static const char *get_dir_content()
+{
+  const char *dirfilename = "DISKDIR.TXT";
+  static char *content = NULL;
+
+  if( content==NULL )
+    {
+      int dirlen = host_get_file_size(dirfilename);
+      if( dirlen>0 )
+        {
+          content = (char *) malloc(dirlen+1);
+          if( content!=NULL )
+            {
+              if( host_read_file(dirfilename, 0, dirlen, content) )
+                content[dirlen] = 0;
+              else
+                {
+                  free(content);
+                  content = (char *) "";
+                }
+            }
+          else
+            {
+              free(content);
+              content = (char *) "";
+            }
+        }
+      else
+        content = (char *) "";
+    }
+
+  return content;
+}
 
 static uint32_t drive_get_file_pos(byte drive_num)
 {
@@ -42,10 +84,43 @@ static void drive_flush(byte drive_num)
 {
   if( (drive_status[drive_num] & DRIVE_STATUS_WRITE) && drive_current_byte[drive_num]>0 )
     {
+      drive_sector_true = false;
+
+      //Serial.print(F("Writing disk: ")); Serial.println(drive_get_file_pos(drive_selected));
       host_write_file(drive_file_name[drive_num], drive_get_file_pos(drive_num), drive_current_byte[drive_num], drive_sector_buffer[drive_num]);
       drive_status[drive_num] &= ~DRIVE_STATUS_WRITE;
       drive_current_byte[drive_num] = 0xff;
     }
+}
+
+
+static void drive_sector_interrupt()
+{
+  uint32_t d;
+
+  if( drive_sector_true )
+    {
+      // sector was true => reset to not true
+      drive_sector_true = false;
+      d = DRIVE_SECTOR_TRUE_DELAY;
+    }
+  else
+    {
+      // advance current sector
+      drive_current_sector[drive_selected]++;
+      if( drive_current_sector[drive_selected] >= DRIVE_NUM_SECTORS )
+        drive_current_sector[drive_selected] = 0;
+      
+      drive_current_byte[drive_selected] = 0xff;
+      drive_sector_true = true;
+      d = DRIVE_SECTOR_NOT_TRUE_DELAY;
+    }
+  
+  // update Altair interrupt line
+  altair_interrupt(INT_DRIVE, drive_sector_true);
+
+  // start timer again with new delay
+  timer_start(TIMER_DRIVE, d);
 }
 
 
@@ -59,19 +134,15 @@ void drive_setup()
       drive_current_sector[i] = 0;
       drive_current_byte[i] = 0;
     }
+  
+  // prepare sector change timer interrupt 
+  timer_setup(TIMER_DRIVE, DRIVE_SECTOR_TRUE_DELAY, drive_sector_interrupt);
 }
 
 
 void drive_dir()
 {
-  char buf[33];
-  uint32_t offset = 0, len;
-  while( (len=host_read_file("DISKDIR.TXT", offset, 32, buf))>0 )
-    {
-      buf[len]=0;
-      Serial.print(buf);
-      offset+=len;
-    }
+  Serial.print(get_dir_content());
 }
 
 
@@ -81,9 +152,54 @@ bool drive_unmount(byte drive_num)
     {
       drive_flush(drive_num);
       drive_status[drive_num] = 0;
+      altair_interrupt(INT_DRIVE, false);
     }
 
   return true;
+}
+
+
+static const char *get_filename(byte disk_num, char *filename)
+{
+  sprintf(filename, "DISK%02X.DSK", disk_num);
+  return host_file_exists(filename) ? filename : NULL;
+}
+
+
+const char *drive_disk_description(byte disk_num)
+{
+  static char *buf = NULL;
+  const char *fname = drive_disk_filename(disk_num);
+
+  if( fname!=NULL )
+    {
+      const char *c = strstr(get_dir_content(), fname);
+      if( c )
+        {
+          if( buf ) free(buf);
+          buf = (char *) malloc(strlen(c)+1);
+          if( buf )
+            {
+              char *b = buf;
+              while(*c != 13 && *c!=10 && *c!=0) *b++ = *c++;
+              *b = 0;
+              return buf;
+            }
+          else
+            return fname;
+        }
+      else
+        return fname;
+    }
+  else
+    return fname;
+}
+
+
+const char *drive_disk_filename(byte disk_num)
+{
+  static char buf[13];
+  return get_filename(disk_num, buf);
 }
 
 
@@ -92,12 +208,15 @@ bool drive_mount(byte drive_num, byte disk_num)
   if( drive_num<NUM_DRIVES )
     {
       if( drive_status[drive_num] & DRIVE_STATUS_HAVEDISK ) drive_unmount(drive_num);
-      sprintf(drive_file_name[drive_num], "DISK%02X.DSK", disk_num);
-      drive_status[drive_num] |= DRIVE_STATUS_HAVEDISK;
-      return true;
+      
+      if( get_filename(disk_num, drive_file_name[drive_num]) )
+        {
+          drive_status[drive_num] |= DRIVE_STATUS_HAVEDISK;
+          return true;
+        }
     }
-  else
-    return false;
+
+  return false;
 }
 
 
@@ -123,7 +242,7 @@ byte drive_in(byte addr)
            W - When 0, write circuit ready to write another byte.
            M - When 0, head movement is allowed
            H - When 0, indicates head is loaded for read/write
-           I - When 0, indicates interrupts enabled (not used)
+           I - When 0, indicates interrupts enabled
            Z - When 0, indicates head is on track 0
            R - When 0, indicates that read circuit has new byte to read
         */
@@ -136,12 +255,15 @@ byte drive_in(byte addr)
             if( drive_status[drive_selected] & DRIVE_STATUS_HEADLOAD )
               {
                 data |= 0x04; // head is loaded
-                if( (drive_status[drive_selected] & DRIVE_STATUS_WRITE) )
+                if( drive_status[drive_selected] & DRIVE_STATUS_WRITE )
                   data |= 0x01; // ready to write
                 else
                   data |= 0x80; // ready to read
+
+                if( drive_status[drive_selected] & DRIVE_STATUS_INT_EN )
+                  data |= 0x20; // interrupts enabled
               }
-            
+
             if( drive_current_track[drive_selected]==0 )
               data |= 0x40; // on track 0
 
@@ -164,15 +286,21 @@ byte drive_in(byte addr)
 
         if( drive_selected<NUM_DRIVES )
           {
-            // advance current sector every time this register is queried
-            drive_current_sector[drive_selected]++;
-            if( drive_current_sector[drive_selected] >= DRIVE_NUM_SECTORS )
-              drive_current_sector[drive_selected] = 0;
+            if( !(drive_status[drive_selected] & DRIVE_STATUS_INT_EN) )
+              {
+                // if interrupts are not enabled, advance current sector every time this register is queried
+                drive_current_sector[drive_selected]++;
+                if( drive_current_sector[drive_selected] >= DRIVE_NUM_SECTORS )
+                  drive_current_sector[drive_selected] = 0;
+                drive_current_byte[drive_selected] = 0xff;
+              }
+            else if( !drive_sector_true )
+              {
+                data |= 0x01;
+              }
             
             if( (drive_status[drive_selected] & DRIVE_STATUS_HAVEDISK) && (drive_status[drive_selected] & DRIVE_STATUS_HEADLOAD) )
-              data = 0xC0 | (drive_current_sector[drive_selected] * 2);
-            
-            drive_current_byte[drive_selected] = 0xff;
+              data |= 0xC0 | (drive_current_sector[drive_selected] * 2);
           }
 
         break;
@@ -186,7 +314,10 @@ byte drive_in(byte addr)
             if( drive_current_byte[drive_selected] >= DRIVE_SECTOR_LENGTH )
               {
                 // read new sector from file
-                byte n = host_read_file(drive_file_name[drive_selected], drive_get_file_pos(drive_selected), DRIVE_SECTOR_LENGTH, drive_sector_buffer[drive_selected]);
+                //Serial.print(F("Reading disk: ")); Serial.println(drive_get_file_pos(drive_selected));
+
+                byte n = host_read_file(drive_file_name[drive_selected], drive_get_file_pos(drive_selected), 
+                                        DRIVE_SECTOR_LENGTH, drive_sector_buffer[drive_selected]);
                 if( n<DRIVE_SECTOR_LENGTH ) memset(drive_sector_buffer[drive_selected]+n, 0, DRIVE_SECTOR_LENGTH-n);
                 drive_current_byte[drive_selected] = 0;
               }
@@ -198,7 +329,7 @@ byte drive_in(byte addr)
       }
     }
 
-  //printf("reading disk %04x: %02x -> %02x\n", regPC, addr, data);
+  //if( drive_status[drive_selected]&DRIVE_STATUS_INT_EN ) printf("reading disk %04x: %02x -> %02x\n", regPC, addr, data);
   return data;
 }
 
@@ -206,7 +337,7 @@ byte drive_in(byte addr)
 
 void drive_out(byte addr, byte data)
 {
-  //printf("writing disk %04x: %02x -> %02x\n", regPC, addr, data);
+  //if( drive_status[drive_selected]&DRIVE_STATUS_INT_EN ) printf("writing disk %04x: %02x -> %02x\n", regPC, addr, data);
 
   // we were writing and now are doing something else then flush write buffer
   if( addr!=0012 && drive_selected<NUM_DRIVES && (drive_status[drive_selected]&DRIVE_STATUS_WRITE) )
@@ -225,16 +356,24 @@ void drive_out(byte addr, byte data)
                device being controlled by subsequent I/O operations.
         */
         byte drive = data & 0x0f;
+
         if( drive < NUM_DRIVES )
           {
+            // stop timer interrupts
+            timer_stop(TIMER_DRIVE);
+
             if( data & 0x80 )
               {
                 drive_flush(drive);
-                drive_status[drive] &= DRIVE_STATUS_HAVEDISK;
+                drive_status[drive] &= (DRIVE_STATUS_HAVEDISK|DRIVE_STATUS_HEADLOAD);
                 drive_current_byte[drive] = 0xff;
               }
             else
               drive_selected = drive;
+
+            // start timer interrupts if interrupts for the selected drive are enabled
+            if( drive_status[drive_selected]&DRIVE_STATUS_INT_EN )
+              timer_start(TIMER_DRIVE, DRIVE_SECTOR_TRUE_DELAY);
           }
 
         break;
@@ -272,12 +411,19 @@ void drive_out(byte addr, byte data)
             
             if( data & 0x04 ) drive_status[drive_selected] |=  DRIVE_STATUS_HEADLOAD;
             if( data & 0x08 ) drive_status[drive_selected] &= ~DRIVE_STATUS_HEADLOAD;
+            if( data & 0x10 ) drive_status[drive_selected] |=  DRIVE_STATUS_INT_EN;
+            if( data & 0x20 ) drive_status[drive_selected] &= ~DRIVE_STATUS_INT_EN;
             
             if( data & 0x80 ) 
               {
                 drive_status[drive_selected] |=  DRIVE_STATUS_WRITE;
                 drive_current_byte[drive_selected] = 0;
               }
+
+            if( !timer_running(TIMER_DRIVE) && (drive_status[drive_selected]&DRIVE_STATUS_INT_EN) )
+              timer_start(TIMER_DRIVE, DRIVE_SECTOR_TRUE_DELAY);
+            else if( timer_running(TIMER_DRIVE) && !(drive_status[drive_selected]&DRIVE_STATUS_INT_EN) )
+              timer_stop(TIMER_DRIVE); altair_interrupt(INT_DRIVE, false); 
           }
 
         break;
