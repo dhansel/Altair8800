@@ -611,6 +611,7 @@ static bool load_config(byte fileno)
 #if STANDALONE>0
       config_flags |= CF_SERIAL_INPUT;      
 #endif
+      ok = true;
     }
 
   return ok;
@@ -940,5 +941,5 @@ void config_setup()
 {
   config_defaults(true);
   if( load_config(0) )
-    config_serial_settings = new_config_serial_settings;
+    apply_host_serial_settings(new_config_serial_settings);
 }
