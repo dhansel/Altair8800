@@ -58,7 +58,7 @@ void set_serial_status(byte dev, byte status)
       byte data = 0x00;
       if( status & SST_OVRN ) data |= 0x10;
       if( status & SST_RDRF ) data |= 0x20; else data |= 0x01;
-      if( status & SST_TDRE ) data |= 0x80; else data |= 0x02;
+      if( status & SST_TDRE ) data |= 0x02; else data |= 0x80;
       serial_status_dev[dev] = data;
     }
 
@@ -540,6 +540,7 @@ byte serial_2sio_in_ctrl(byte dev)
 
   // if transmit interrupts are enabled then the TDRE flag is handled
   // by the timer. If not, we need to determine the flag setting here
+  // (the RDRF flag is handled separately in serial_receive_data)
   if( !(serial_ctrl[dev] & SSC_INTTX) )
     {
       if( fid>0 && fid<0xff && filesys_is_write(fid) )
@@ -649,6 +650,7 @@ byte serial_sio_in_ctrl()
 
   // if transmit interrupts are enabled then the TDRE flag is handled
   // by the timer. If not, we need to determine the flag setting here
+  // (the RDRF flag is handled separately in serial_receive_data)
   if( !(serial_ctrl[CSM_SIO] & SSC_INTTX) )
     {
       byte fid  = serial_fid[CSM_SIO];
@@ -919,6 +921,7 @@ byte serial_acr_in_ctrl()
 
   // if transmit interrupts are enabled then the TDRE flag is handled
   // by the timer. If not, we need to determine the flag setting here
+  // (the RDRF flag is handled separately in serial_receive_data)
   if( !(serial_ctrl[CSM_ACR] & SSC_INTTX) )
     {
       byte fid  = serial_fid[CSM_ACR];
@@ -934,9 +937,10 @@ byte serial_acr_in_ctrl()
     {
       // This is ALTAIR Extended BASIC loading from or saving to ACR
       // our BASIC CSAVE/CLOAD tape emulation is a continuous loop so we always
-      // have data available (i.e. bit 0 NOT set) 
-      data &= ~0x01;
-      serial_status[CSM_ACR] |= SST_RDRF;
+      // have data available (i.e. bit 0 NOT set and bit 5 set) and can always write
+      // (i.e. bit 7 NOT set and bit 1 set)
+      data = 0x22;
+      serial_status[CSM_ACR] |= (SST_RDRF | SST_TDRE);
       
       serial_acr_check_cload_timeout();
       if( serial_status[CSM_ACR] & SST_FNF )
