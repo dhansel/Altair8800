@@ -57,8 +57,8 @@ void set_serial_status(byte dev, byte status)
     {
       byte data = 0x00;
       if( status & SST_OVRN ) data |= 0x10;
-      if( status & SST_RDRF ) data |= 0x20; else data |= 0x01;
-      if( status & SST_TDRE ) data |= 0x02; else data |= 0x80;
+      if( !(status & SST_RDRF) ) data |= 0x01;
+      if( !(status & SST_TDRE) ) data |= 0x80;
       serial_status_dev[dev] = data;
     }
 
@@ -653,13 +653,13 @@ byte serial_sio_in_ctrl()
   // (the RDRF flag is handled separately in serial_receive_data)
   if( !(serial_ctrl[CSM_SIO] & SSC_INTTX) )
     {
-      byte fid  = serial_fid[CSM_SIO];
+      byte fid = serial_fid[CSM_SIO];
       
-      data &= ~0x82;
+      data &= ~0x80;
       if( fid>0 && fid<0xff && filesys_is_write(fid) )
-        data |= filesys_eof(fid) ? 0x80 : 0x02;
+        { if( filesys_eof(fid) ) data |= 0x80; }
       else
-        data |= host_serial_available_for_write(config_serial_map_sim_to_host(CSM_SIO)) ? 0x02 : 0x80;
+        { if( !host_serial_available_for_write(config_serial_map_sim_to_host(CSM_SIO)) ) data |= 0x80; }
     }
 
   return data;
@@ -924,13 +924,13 @@ byte serial_acr_in_ctrl()
   // (the RDRF flag is handled separately in serial_receive_data)
   if( !(serial_ctrl[CSM_ACR] & SSC_INTTX) )
     {
-      byte fid  = serial_fid[CSM_ACR];
+      byte fid = serial_fid[CSM_ACR];
       
-      data &= ~0x82;
+      data &= ~0x80;
       if( fid>0 && fid<0xff && filesys_is_write(fid) )
-        data |= filesys_eof(fid) ? 0x80 : 0x02;
+        { if( filesys_eof(fid) ) data |= 0x80; }
       else
-        data |= host_serial_available_for_write(config_serial_map_sim_to_host(CSM_ACR)) ? 0x02 : 0x80;
+        { if( !host_serial_available_for_write(config_serial_map_sim_to_host(CSM_ACR)) ) data |= 0x80; }
     }
       
   if( (regPC==0xE299 || regPC==0xE2A7) && config_serial_trap_CLOAD() )
