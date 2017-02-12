@@ -806,6 +806,7 @@ static byte altair_interrupt_handler()
   else
     host_set_data_leds(opcode);
   
+  host_clr_status_led_HLTA();
   host_clr_status_led_INT();
   host_clr_status_led_M1();
 
@@ -863,8 +864,6 @@ void altair_hlt()
           TIMER_ADD_CYCLES(1);
         }
     }
-
-  host_clr_status_led_HLTA();
 }
 
 
@@ -1133,7 +1132,7 @@ void loop()
   
   // only check for interrupts not related to front-panel switches (e.g. serial)
   host_check_interrupts();
-  if( altair_interrupts )
+  if( altair_interrupts & INT_DEVICE )
     opcode = altair_interrupt_handler();
   else
     { opcode = MEM_READ(regPC); regPC++; }
