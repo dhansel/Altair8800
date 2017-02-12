@@ -6,6 +6,7 @@
 #include "prog_games.h"
 #include "prog_ps2.h"
 #include "numsys.h"
+#include "host.h"
 
 
 struct prog_info_struct {
