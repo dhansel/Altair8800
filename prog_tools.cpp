@@ -438,11 +438,9 @@ static const byte PROGMEM calc[] = {
   B11100110, B10000000,             // 0x0005       ANI  0x80           // isolate highest bit
   B01010111,                        // 0x0007       MOV  D, A           // remember in D
   B00001010,                        // 0x0008 loop: LDAX BC             // show content of B on A8-A15 leds
-  B00001010,                        // 0x0009       LDAX BC             // (C shows on A0-A7 but is always 0)
-  B00001010,                        // 0x000A       LDAX BC
-  B00001010,                        // 0x000B       LDAX BC
-  B00001010,                        // 0x000C       LDAX BC
-  B00001010,                        // 0x000D       LDAX BC
+  B00001010,                        // 0x0009       LDAX BC
+  B00001100,                        // 0x000A       INR  C
+  B11000010, B00001000, B00000000,  // 0x000B       JNZ  loop
   B11011011, B11111111,             // 0x000E       IN   0xff           // read sense switches
   B10101010,                        // 0x0010       XRA  D              // has highest bit changed?
   B11110010, B00001000, B00000000,  // 0x0011       JP   loop [0x0008]  // loop if no change
