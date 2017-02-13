@@ -1,5 +1,7 @@
+Altair8800
 Altair8800.exe
 AltairStorage.dat
-obj
+obj-linux
+obj-msys
 *~
 Schematics.pdf

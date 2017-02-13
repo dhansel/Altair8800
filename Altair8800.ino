@@ -348,9 +348,16 @@ void read_inputs_serial()
   else if( data == 's' )
     cswitch |= BIT(SW_AUX2UP);
   else if( data == 'l' )
-    // must run immediately because otherwise the debugging 
-    // console will consume the replayed characters
-    cswitch |= BIT(SW_AUX2DOWN) | BIT(SW_RUN);
+    {
+      cswitch |= BIT(SW_AUX2DOWN);
+      if( (dswitch & 0xF000)!=0x1000 )
+	{
+	  // if we're replaying (i.e. NOT mounting a disk) then we
+	  // must run immediately because otherwise the debugging 
+	  // console will consume the replayed characters
+	  cswitch |= BIT(SW_AUX2DOWN) | BIT(SW_RUN);
+	}
+    }
   else if( data == 'Q' )
     cswitch |= BIT(SW_PROTECT);
   else if( data == 'q' )
@@ -1129,11 +1136,12 @@ void loop()
   p_regPC = regPC;
 
   host_set_status_led_M1();
-  
+
   // only check for interrupts not related to front-panel switches (e.g. serial)
   host_check_interrupts();
+
   if( altair_interrupts & INT_DEVICE )
-    opcode = altair_interrupt_handler();
+    { opcode = altair_interrupt_handler(); }
   else
     { opcode = MEM_READ(regPC); regPC++; }
 

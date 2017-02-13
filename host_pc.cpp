@@ -1,4 +1,4 @@
-#ifdef _WIN32
+#if defined(__GNUC__)
 
 #include <Arduino.h>
 #include <time.h>
@@ -8,8 +8,13 @@
 #include "serial.h"
 #include "cpucore.h"
 #include "host_pc.h"
-#include "Windows.h"
 #include "profile.h"
+
+#ifdef _WIN32
+#include <Windows.h>
+#else
+#include <signal.h>
+#endif
 
 byte data_leds;
 uint16_t status_leds;
@@ -105,7 +110,7 @@ void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
 static FILE *open_file(const char *filename)
 {
   char fnamebuf[30];
-  sprintf(fnamebuf, "disks\\%s", filename);
+  sprintf(fnamebuf, "disks/%s", filename);
   return fopen(fnamebuf, "rb");
 }
 
@@ -177,6 +182,13 @@ uint32_t host_write_file(const char *filename, uint32_t offset, uint32_t len, vo
 
 // ----------------------------------------------------------------------------------
 
+static int ctrlC = 0;
+
+void sig_handler(int signum)
+{
+  ctrlC++;
+}
+
 
 uint32_t host_get_random()
 {
@@ -186,10 +198,19 @@ uint32_t host_get_random()
 
 void host_check_interrupts()
 {
+  static byte ctr = 0;
   static unsigned long prevCtrlC = 0;
-  if( Serial.available() )
+
+  // Serial.available() is slow, only check it every 256 calls 
+  // if program is running
+  if( ((host_read_status_led_WAIT() || ++ctr==0) && Serial.available()) || ctrlC>0 )
     {
-      byte c = Serial.read();
+      byte c;
+      if( ctrlC>0 )
+	{ c = 3; ctrlC--; }
+      else
+	c = Serial.read();
+
       if( c == 3 )
         {
           // CTRL-C was pressed.  If we receive two CTRL-C in short order
@@ -236,6 +257,7 @@ void host_setup()
       storagefile = fopen("AltairStorage.dat", "r+b");
     }
 
+#ifdef _WIN32
   // send CTRL-C to input instead of processing it (otherwise the
   // emulator would immediately quit if CTRL-C is pressed) and we
   // could not use CTRL-C to stop a running BASIC example.
@@ -245,6 +267,9 @@ void host_setup()
   HANDLE hstdin = GetStdHandle(STD_INPUT_HANDLE);
   GetConsoleMode(hstdin, &mode);
   SetConsoleMode(hstdin, mode & ~ENABLE_PROCESSED_INPUT);
+#else
+  signal(SIGINT, sig_handler);
+#endif
 
   // initialize random number generator
   srand(time(NULL));

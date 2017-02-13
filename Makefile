@@ -1,21 +1,32 @@
-OBJ=obj
+ifeq ($(OSTYPE),msys)
+  CFLAGS=-O3
+  LFLAGS=-O3
+  OBJ=obj-msys
+  EXT=.exe
+else
+  CFLAGS=-O3
+  LFLAGS=-O3 -lncurses
+  OBJ=obj-linux
+  EXT=
+endif
+
 
 OBJECTS=$(OBJ)/cpucore.o $(OBJ)/mem.o $(OBJ)/serial.o $(OBJ)/profile.o $(OBJ)/breakpoint.o $(OBJ)/numsys.o $(OBJ)/filesys.o $(OBJ)/drive.o $(OBJ)/disassembler.o $(OBJ)/prog_basic.o $(OBJ)/prog_ps2.o $(OBJ)/prog_examples.o $(OBJ)/prog_tools.o $(OBJ)/prog_games.o $(OBJ)/host_pc.o $(OBJ)/config.o $(OBJ)/timer.o $(OBJ)/prog.o
 
-Altair8800.exe: $(OBJ) $(OBJECTS) $(OBJ)/Altair8800.o $(OBJ)/Arduino.o 
-	g++ $(OBJECTS) $(OBJ)/Altair8800.o $(OBJ)/Arduino.o -o Altair8800.exe
+Altair8800$(EXT): $(OBJ) $(OBJECTS) $(OBJ)/Altair8800.o $(OBJ)/Arduino.o 
+	g++ $(OBJECTS) $(OBJ)/Altair8800.o $(OBJ)/Arduino.o $(LFLAGS) -o Altair8800$(EXT)
 
 $(OBJ):
 	mkdir $(OBJ)
 
 $(OBJECTS): $(OBJ)/%.o: %.cpp
-	g++ -c $< -I Arduino -o $@
+	g++ $(CFLAGS) -c $< -I Arduino -o $@
 
 $(OBJ)/Altair8800.o: Altair8800.ino
-	g++ -c -o $(OBJ)/Altair8800.o -I Arduino -x c++ Altair8800.ino
+	g++ $(CFLAGS) -c -o $(OBJ)/Altair8800.o -I Arduino -x c++ Altair8800.ino
 
 $(OBJ)/Arduino.o: Arduino/Arduino.cpp
-	g++ -c -o $(OBJ)/Arduino.o -I Arduino Arduino/Arduino.cpp
+	g++ $(CFLAGS) -c -o $(OBJ)/Arduino.o -I Arduino Arduino/Arduino.cpp
 
 clean:
 	rm -rf $(OBJ) Altair8800.exe
@@ -30,6 +41,7 @@ deps:
 # The following list of dependencies can be created by typing "make deps"
 # --------------------------------------------------------------------------------------------------
 
+
 $(OBJ)/Altair8800.o: Altair8800.ino Altair8800.h Arduino/Arduino.h config.h \
  cpucore.h host.h host_pc.h mem.h prog_basic.h breakpoint.h serial.h \
  profile.h disassembler.h numsys.h filesys.h drive.h timer.h prog.h
@@ -40,8 +52,6 @@ $(OBJ)/config.o: config.cpp Altair8800.h Arduino/Arduino.h config.h mem.h host.h
  prog.h
 $(OBJ)/cpucore.o: cpucore.cpp cpucore.h Arduino/Arduino.h timer.h mem.h config.h \
  host.h host_pc.h prog_basic.h breakpoint.h Altair8800.h
-$(OBJ)/cpucore_v1.o: cpucore_v1.cpp cpucore.h Arduino/Arduino.h timer.h mem.h \
- config.h host.h host_pc.h prog_basic.h breakpoint.h Altair8800.h
 $(OBJ)/disassembler.o: disassembler.cpp Arduino/Arduino.h disassembler.h \
  numsys.h mem.h config.h host.h host_pc.h prog_basic.h breakpoint.h
 $(OBJ)/drive.o: drive.cpp drive.h Arduino/Arduino.h config.h host.h host_pc.h \
@@ -59,7 +69,7 @@ $(OBJ)/numsys.o: numsys.cpp Arduino/Arduino.h numsys.h mem.h config.h host.h \
 $(OBJ)/profile.o: profile.cpp Arduino/Arduino.h profile.h config.h \
  disassembler.h timer.h host.h host_pc.h
 $(OBJ)/prog.o: prog.cpp Arduino/Arduino.h prog.h Altair8800.h prog_basic.h \
- prog_tools.h prog_games.h prog_ps2.h numsys.h
+ prog_tools.h prog_games.h prog_ps2.h numsys.h host.h config.h host_pc.h
 $(OBJ)/prog_basic.o: prog_basic.cpp Arduino/Arduino.h prog_basic.h host.h \
  config.h host_pc.h mem.h breakpoint.h
 $(OBJ)/prog_examples.o: prog_examples.cpp Arduino/Arduino.h config.h \

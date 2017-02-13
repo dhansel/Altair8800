@@ -3,9 +3,45 @@
 #include <stdio.h>
 #include <iostream>
 #include <sys/timeb.h>
+using namespace std;
+
+#ifdef _WIN32
 #include <conio.h>
 #include <Windows.h>
-using namespace std;
+#define FixNewline(s) s
+#else
+
+#include <ncurses.h>
+#include <termios.h>
+#define endl "\n\r" << flush
+
+bool kbhit()
+{
+  int ch = getch();
+  if (ch != ERR) {
+    ungetch(ch);
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
+string FixNewline(string subject)
+{
+  size_t pos = 0;
+  while ((pos = subject.find("\n", pos)) != string::npos) {
+    subject.replace(pos, 1, "\n\r");
+    pos += 2;
+  }
+  return subject;
+}
+
+void ncurses_exit()
+{
+  endwin();
+}
+
+#endif
 
 SerialClass Serial;
 
@@ -30,19 +66,18 @@ void delay(unsigned long i)
   while(millis() < m);
 }
 
-
 void SerialClass::print(char c) { write(c); }
-void SerialClass::print(const char *s) { cout << s; }
-void SerialClass::print(int i) { cout << i; }
-void SerialClass::print(unsigned int i) { cout << i; }
-void SerialClass::print(long int i) { cout << i; }
-void SerialClass::print(unsigned long i) { cout << i; }
-void SerialClass::print(float f) { cout << f; }
-void SerialClass::print(double d)  { cout << d; }
+void SerialClass::print(const char *s) { cout << FixNewline(s) << flush; }
+void SerialClass::print(int i) { cout << i << flush; }
+void SerialClass::print(unsigned int i) { cout << i << flush; }
+void SerialClass::print(long int i) { cout << i << flush; }
+void SerialClass::print(unsigned long i) { cout << i << flush; }
+void SerialClass::print(float f) { cout << f << flush; }
+void SerialClass::print(double d)  { cout << d << flush; }
 
 void SerialClass::println() { cout << endl; }
-void SerialClass::println(char c) { cout << c << endl; }
-void SerialClass::println(const char *s) { cout << s << endl; }
+void SerialClass::println(char c) { write(c); cout << endl; }
+void SerialClass::println(const char *s) { cout << FixNewline(s) << endl; }
 void SerialClass::println(int i) { cout << i << endl; }
 void SerialClass::println(unsigned int i) { cout << i << endl; }
 void SerialClass::println(long int i) { cout << i << endl; }
@@ -53,8 +88,8 @@ void SerialClass::println(double d)  { cout << d << endl; }
 static bool kbhit_prev_result = false;
 static unsigned long kbhit_next_check = 0;
 
-void SerialClass::write(char c) { if( c==127 ) cout << "\b \b"; else cout << c; }
-char SerialClass::read() { kbhit_prev_result = false; kbhit_next_check = 0; if( kbhit() ) return getch(); else return 0; }
+void SerialClass::write(char c) { cout << (c=='\n' ? "\n\r" : (c==127 ? "\b \b" : string(1,c))) << flush; }
+char SerialClass::read() { kbhit_prev_result = false; kbhit_next_check = 0; if( kbhit() ) {char c = getch(); return c==10?13:c; }else return 0; }
 char SerialClass::peek() { if( kbhit() ) { char c =  getch(); ungetch(c); return c; } else return 0; }
 bool SerialClass::availableForWrite() { return true; }
 
@@ -76,6 +111,17 @@ void setup();
 void loop();
 int main(int argc, char **argv)
 {
+#ifndef _WIN32
+  // initialize ncurses library
+  initscr();
+  scrollok(stdscr, TRUE);
+  nodelay(stdscr, TRUE);
+  cbreak();
+  noecho();
+  getch();
+  atexit(ncurses_exit);
+#endif
+
   setup();
   while(1) loop();
 }

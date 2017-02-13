@@ -8,7 +8,7 @@
 #include "host_mega.h"
 #elif defined(__SAM3X8E__)
 #include "host_due.h"
-#elif defined(_WIN32)
+#elif defined(__GNUC__)
 #include "host_pc.h"
 #else
 #error requires Arduino Mega2560, Arduino Due or Windows PC
