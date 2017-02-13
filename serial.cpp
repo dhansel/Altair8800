@@ -764,9 +764,10 @@ bool serial_acr_mount_ps2()
 
 bool serial_acr_check_cload_timeout()
 {
-  if( acr_cload_timeout>0 && millis() > acr_cload_timeout )
+  // timeout is 0.1 (simulated) seconds, i.e. 200000 cycles (at 2MHz)
+  if( acr_cload_timeout>0 && (timer_get_cycles()-acr_cload_timeout)>200000 )
     {
-      // if the last write or read from BASIC was more than .1 seconds ago
+      // if the last write or read from BASIC was more than 0.1 seconds ago
       // then this is a new read/write operation => close the previous file
       if( acr_cload_fid>0 )
         {
@@ -840,7 +841,7 @@ static void acr_read_next_cload_byte()
         }
     }
 
-  acr_cload_timeout = millis() + 100;
+  acr_cload_timeout = timer_get_cycles();
 }
 
 
@@ -891,7 +892,7 @@ static void acr_write_next_csave_byte(byte data)
         }
     }
 
-  acr_cload_timeout = millis() + 100;
+  acr_cload_timeout = timer_get_cycles();
 }
 
 
@@ -939,7 +940,7 @@ byte serial_acr_in_ctrl()
       // our BASIC CSAVE/CLOAD tape emulation is a continuous loop so we always
       // have data available (i.e. bit 0 NOT set and bit 5 set) and can always write
       // (i.e. bit 7 NOT set and bit 1 set)
-      data = 0x22;
+      data = 0x00;
       serial_status[CSM_ACR] |= (SST_RDRF | SST_TDRE);
       
       serial_acr_check_cload_timeout();
