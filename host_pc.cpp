@@ -1,4 +1,4 @@
-#if defined(__GNUC__)
+#if defined(_WIN32) || defined(__linux__)
 
 #include <Arduino.h>
 #include <time.h>

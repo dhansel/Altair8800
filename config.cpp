@@ -779,7 +779,7 @@ void config_edit()
           Serial.print(F("Clear (m)emory on powerup   : ")); print_flag(CF_CLEARMEM); Serial.println(); r_clearmem = row++;
           Serial.print(F("A(u)x1 shortcut program     : ")); print_aux1_program(); Serial.println(); r_aux1 = row++;
           Serial.print(F("Configure (I)nterrupts      : ")); print_vi_flag(); Serial.println(); r_interrupt = row++;
-#if !defined(__GNUC__)
+#if !defined(_WIN32) && !defined(__linux__)
           Serial.print(F("Host Serial (b)aud rate     : ")); print_host_serial_baud_rate(0); Serial.println(); r_baud0 = row++;
 #endif
 #if defined(__SAM3X8E__)
