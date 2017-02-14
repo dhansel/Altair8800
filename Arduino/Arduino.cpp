@@ -89,9 +89,26 @@ static bool kbhit_prev_result = false;
 static unsigned long kbhit_next_check = 0;
 
 void SerialClass::write(char c) { cout << (c=='\n' ? "\n\r" : (c==127 ? "\b \b" : string(1,c))) << flush; }
-char SerialClass::read() { kbhit_prev_result = false; kbhit_next_check = 0; if( kbhit() ) {char c = getch(); return c==10?13:c; }else return 0; }
 char SerialClass::peek() { if( kbhit() ) { char c =  getch(); ungetch(c); return c; } else return 0; }
 bool SerialClass::availableForWrite() { return true; }
+
+char SerialClass::read()
+{
+  kbhit_prev_result = false;
+  kbhit_next_check  = 0;
+  if( kbhit() )
+    {
+#ifdef _WIN32
+      return getch();
+#else
+      // on linux, getch() returns 127 for backspace (we need 8) and 10 for linefeed/CR (we need 13)
+      char c = getch();
+      return c==10 ? 13 : (c==127 ? 8 : c);
+#endif
+    }
+  else
+    return 0;
+}
 
 // the kbhit() functions is very inefficient and slows
 // down emulation if called too often. 100 times a second is enough.
