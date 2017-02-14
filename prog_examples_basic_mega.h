@@ -1,4 +1,14 @@
-// this gets included from prog_examples.cpp
+// -----------------------------------------------------------------------------
+// Altair 8800 Simulator
+//
+// This file contains copies of a number of BASIC examples found in various
+// places on the net, created by various authors.
+//
+// While the Altair 8800 simulator code itself is released under GPLv3, 
+// the contents of this file are excluded from that license for obvious reasons.
+// -----------------------------------------------------------------------------
+
+// [this gets included from prog_examples.cpp]
 
 const char PROGMEM craps_bas[] = 
   "NEW\r "

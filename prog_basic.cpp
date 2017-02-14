@@ -1,3 +1,14 @@
+// -----------------------------------------------------------------------------
+// Altair 8800 Simulator
+//
+// This file contains copies of the following programs:
+// - Altair 4K Basic (C) MITS 1975
+// - Altair Extended ROM Basic (C) MITS 1975
+//
+// While the Altair 8800 simulator code itself is released under GPLv3, 
+// the contents of this file are excluded from that license for obvious reasons.
+// -----------------------------------------------------------------------------
+
 #include <Arduino.h>
 
 #include "prog_basic.h"
@@ -5,6 +16,7 @@
 #include "mem.h"
 
 
+// Altair 4K BASIC (C) MITS 1975
 const byte PROGMEM basic4k[4096] = {
   0363, 0303, 0041, 0015, 0220, 0004, 0371, 0007, 0176, 0343, 0276, 0043, 0343, 0302, 0320, 0001,
   0043, 0176, 0376, 0072, 0320, 0303, 0136, 0004, 0365, 0072, 0047, 0000, 0303, 0156, 0003, 0000,
@@ -265,6 +277,7 @@ const byte PROGMEM basic4k[4096] = {
 };
 
 
+// Altair Extended ROM Basic (C) MITS 1975
 const byte PROGMEM basic16k[0x4000] = {
   0xF3,0xC3,0x08,0xC0,0x24,0xED,0x42,0xED,0x06,0x9E,0x21,0x40,0x00,0x11,0x64,0xC5,
   0x1A,0x77,0x23,0x13,0x05,0xC2,0x10,0xC0,0xF9,0xCD,0x9B,0xC8,0x21,0x00,0x00,0xCD,

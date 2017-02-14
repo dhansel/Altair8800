@@ -1,3 +1,13 @@
+// -----------------------------------------------------------------------------
+// Altair 8800 Simulator
+//
+// This file contains copies of the following programs:
+// - MITS Programming System II (C) MITS 1976
+//
+// While the Altair 8800 simulator code itself is released under GPLv3, 
+// the contents of this file are excluded from that license for obvious reasons.
+// -----------------------------------------------------------------------------
+
 #include <Arduino.h>
 
 #include "prog_tools.h"

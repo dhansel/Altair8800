@@ -1,3 +1,16 @@
+// -----------------------------------------------------------------------------
+// Altair 8800 Simulator
+//
+// This file contains copies of the following programs:
+// - Kill-the-Bit game (C) Dean McDaniel 1975
+// - 'Daisy, Daisy...' music (C) Steve Dompier 1975
+// - Pong on Altair front panel (C) Unknown
+// - Pong on Altair via terminal (C) David Hansel 2017
+//
+// While the Altair 8800 simulator code itself is released under GPLv3, 
+// the contents of this file are excluded from that license for obvious reasons.
+// -----------------------------------------------------------------------------
+
 #include <Arduino.h>
 
 #include "prog_games.h"

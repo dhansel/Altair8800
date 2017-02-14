@@ -1,4 +1,15 @@
-// this gets included from prog_examples.cpp
+// -----------------------------------------------------------------------------
+// Altair 8800 Simulator
+//
+// This file contains copies of a the following assembler programs:
+// - DUMP program from MITS Programming System II manual (C) MITS 1976
+// - Pong on Altair via terminal (C) David Hansel 2017
+//
+// While the Altair 8800 simulator code itself is released under GPLv3, 
+// the contents of this file are excluded from that license for obvious reasons.
+// -----------------------------------------------------------------------------
+
+// [this gets included from prog_examples.cpp]
 
 const char asm_dump[] =
   "\tORG\t20000Q\t;SET LOCATION COUNTER\r"
@@ -108,76 +119,6 @@ const char asm_dump[] =
   "\tDB\t12Q\t;ASCII LINE FEED\r"
   "\tBEG\tDUMP\t;SETS ADDRESS OF PLACE TO START PROGRAM\r"
   "\tEND\tDMP\r";
-
-
-/* this can't work with PS2: It HAS to be located in first
-   page (0x0000-0x00FF). Otherwise the result lights A8-A15 will 
-   light up incorrectly because instructions are read from that 
-   region. However, PS2 does not allow any program to be loaded 
-   in the same memory space as the monitor (0x0000-0x0A40). */
-const char asm_calc[] =
-  "\tORG\t0H\r" 
-  "\tORR\t2000H\r"
-  "START:\tLXI\tB,0H\t;CLEAR B (SUM) AND C\r"
-  "DISP:\tIN\t0FFH\t;READ SENSE SWITCHES\r"
-  "\tANI\t80H\t;ISOLATE HIGHEST BIT\r"
-  "\tMOV\tD,A\t;REMEMBER IN D\r"
-  "LOOP:\tLDAX\tB\t;SHOW CONTENT OF B ON A8-A15 LEDS\r"
-  "\tLDAX\tB\t;(C SHOWS ON A0-A7 BUT IS ALWAYS 0)\r"
-  "\tLDAX\tB\r"
-  "\tLDAX\tB\r"
-  "\tLDAX\tB\r"
-  "\tLDAX\tB\r"
-  "\tIN\t0FFH\t;READ SENSE SWITCHES\r"
-  "\tXRA\tD\t;HAS HIGHEST BIT CHANGED?\r"
-  "\tJP\tLOOP\t;LOOP IF NO CHANGE\r"
-  "\tMOV\tE,A\t;SAVE FULL INPUT IN E\r"
-  "\tANI\t2FH\t;ISOLATE LOWER 5 BITS\r"
-  "\tMOV\tD,A\t;SAVE INPUT VALUE IN D\r"
-  "\tMOV\tA,E\t;GET FULL INPUT BACK\r"
-  "\tANI\t60H\t;ISOLATE BITS 5+6\r"
-  "\tCPI\t00H\t;BITS 5/6 = 00?\r"
-  "\tJZ\tADD\t;=> ADDITION\r"
-  "\tCPI\t20H\t;BITS 5/6 = 01?\r"
-  "\tJZ\tSUB\t;=> SUBTRACTION\r"
-  "\tCPI\t40H\t;BITS 5/6 = 10?\r"
-  "\tJZ\tMLT\t;=> MULTIPLICATION\r"
-  "\tINR\tD\r"
-  "\tDCR\tD\r"
-  "\tJNZ\tDIV\t;DIVISOR = 0?\r"
-  "\tJMP\tMON\t;DIVISION BY ZERO => RETURN TO MONITOR\r"
-  "\tJMP\tDISP\t;START OVER\r"
-  "DIV:\tMOV\tA,B     ;MOVE DIVIDENT TO A\r"
-  "\tMVI\tE,00H\t;RESULT <- 0\r"
-  "DIVL:\tINR\tE\t;INCREMENT RESULT\r"
-  "\tSUB\tD\t;SUBTRACT DIVISOR\r"
-  "\tJZ\tDIVD\t;IF =0 THEN WE'RE DONE\r"
-  "\tJNC\tDIVL\t;IF >0 (NO UNDERFLOW) THEN SUBTRACT AGAIN\r"
-  "\tADD\tD\t;ADD BACK DIVISOR TO GET REMAINDER\r"
-  "\tDCR\tE\t;DECREMENT RESULT (SINCE WE OVERSHOT)\r"
-  "\tCMC\t\t;CLEAR CARRY (IS SET AT THIS POINT)\r"
-  "\tRLC\t\t;MULTIPLY REMAINDER BY 2\r"
-  "\tCMP\tD\t;COMPARE REMAINDER TO DIVISOR\r"
-  "\tJM\tDIVD\t;IF 2*REMAINDER < DIVISOR THEN WE'RE DONE (ROUNDED DOWN)\r"
-  "\tINR\tE\t;OTHERWISE WE ROUND UP\r"
-  "DIVD:\tMOV\tB,E\t;MOVE RESULT TO B\r"
-  "\tJMP\tDISP\t;START OVER\r"
-  "SUB:\tMOV\tA,B\t;MOVE MINUEND TO A\r"
-  "\tSUB\tD\t;SUBTRACT (SUBTRAHEND IS IN D)\r"
-  "\tJMP\tDONE\t;FINISH UP\r"
-  "ADD:\tMOV\tA,B\t;MOVE ADDEND 1 TO A\r"
-  "\tADD\tD\t;ADD (ADDEND 2 IS IN D)\r"
-  "\tJMP\tDONE\t;FINISH UP\r"
-  "MLT:\tMVI\tA,00H\t;RESULT IS 0\r"
-  "\tCMP\tD\t;IF MULTIPLICATOR IS 0\r"
-  "\tJZ\tDONE\t;THEN WE'RE DONE\r"
-  "MLTL:\tADD\tB\t;ADD MULTIPLICANT\r"
-  "\tDCR\tD\t;DECREMENT MULTIPLICATOR\r"
-  "\tJNZ\tMLTL\t;REPEAT IF MULTIPLICATOR>0\r"
-  "DONE:\tMOV\tB,A\t;MOVE RESULT TO B\r"
-  "\tJMP\tDISP\t;START OVER\r"
-  "\tBEG\tSTART\r"
-  "\tEND\tCALC\r";
 
 
 const char asm_pong[] =
@@ -476,15 +417,14 @@ const char asm_pong[] =
   "STCK:\tBEG\tSTART\r"
   "\tEND\tPONG\r";
 
+
 const char asm_dir[] =
   "10000000) [this directory]\r"
-  //"10000001) calculator\r" // see comment for asm_calc
   "10000001) pong\r"
   "10000010) memory dump\r";
 
 
 const char * const asm_programs[]  = {
   asm_dir,
-  //asm_calc, // see comment for asm_calc
   asm_pong,
   asm_dump};
