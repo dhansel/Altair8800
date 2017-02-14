@@ -1,16 +1,11 @@
+// -----------------------------------------------------------------------------
+// Altair 8800 Simulator
+// Copyright (C) 2017 David Hansel
+// -----------------------------------------------------------------------------
+
 #ifndef HOST_DUE_H
 #define HOST_DUE_H
 
-
-/* 
-Due has 96k SRAM, we can use 64k for emulated RAM.
-However, ALTAIR 4k BASIC will hang if 64K of memory are installed
-(the check for available memory gets into an infinite loop).
-ALTAIR DOS will always report INSUFFICIENT MEMORY (for the same
-sort of issue).
-Solution: Have 64k minus one byte of memory. That will stop the
-          memory check from overflow and provide maximum memory.
-*/
 #define MEMSIZE 0x10000
 
 #define HOST_STORAGESIZE due_storagesize

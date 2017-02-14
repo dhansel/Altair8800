@@ -1,5 +1,10 @@
-#ifndef PROG_CPUTEST_H
-#define PROG_CPUTEST_H
+// -----------------------------------------------------------------------------
+// Altair 8800 Simulator
+// Copyright (C) 2017 David Hansel
+// -----------------------------------------------------------------------------
+
+#ifndef PROG_TOOLS_H
+#define PROG_TOOLS_H
 
 #include <Arduino.h>
 

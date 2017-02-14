@@ -1,3 +1,22 @@
+// -----------------------------------------------------------------------------
+// Altair 8800 Simulator
+// Copyright (C) 2017 David Hansel
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation; either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program; if not, write to the Free Software Foundation,
+// Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
+// -----------------------------------------------------------------------------
+
 #include <Arduino.h>
 #include "profile.h"
 #include "disassembler.h"
@@ -68,7 +87,7 @@ void prof_print()
       uint32_t d   = now - prof_time;
       uint32_t c   = timer_get_cycles() - prof_cycles;
       float mhz = ((float) c) / ((float) d);
-      Serial.print(F("Performance: "));
+      Serial.print(F("\033[s\033[H\033[32mPerformance: "));
       Serial.print(c);
       Serial.print(F(" cycles in "));
       Serial.print(((float) d)/1000.0);
@@ -76,7 +95,7 @@ void prof_print()
       Serial.print(mhz);
       Serial.print(F(" MHz = "));
       Serial.print(int(mhz/0.02+.5));
-      Serial.println(F("%"));
+      Serial.print(F("%\033[K\033[37m\033[u"));
       
 #if USE_PROFILING_DETAIL>0
       if( ++prof_detail_counter == 10 )

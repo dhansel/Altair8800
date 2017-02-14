@@ -1,7 +1,12 @@
+// -----------------------------------------------------------------------------
+// Altair 8800 Simulator
+// Copyright (C) 2017 David Hansel
+// -----------------------------------------------------------------------------
+
 #ifndef HOST_PC_H
 #define HOST_PC_H
 
-#define MEMSIZE          0x10000 /* 64k minus */
+#define MEMSIZE          0x10000 /* 64k */
 #define HOST_STORAGESIZE 0x80000 /* 512k */
 #define HOST_BUFFERSIZE  0x400   /* 1k */
 
