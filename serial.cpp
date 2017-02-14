@@ -810,7 +810,7 @@ static void acr_read_next_cload_byte()
   static byte tape_fname = 0;
   bool go = true;
   byte data;
-      
+
   // check for timeout from previous operation
   serial_acr_check_cload_timeout();
   
@@ -957,10 +957,8 @@ byte serial_acr_in_ctrl()
     {
       // This is ALTAIR Extended BASIC loading from or saving to ACR
       // our BASIC CSAVE/CLOAD tape emulation is a continuous loop so we always
-      // have data available (i.e. bit 0 NOT set and bit 5 set) and can always write
-      // (i.e. bit 7 NOT set and bit 1 set)
+      // have data available (i.e. bit 0 NOT set) and can always write (i.e. bit 7 NOT set)
       data = 0x00;
-      serial_status[CSM_ACR] |= (SST_RDRF | SST_TDRE);
       
       serial_acr_check_cload_timeout();
       if( serial_status[CSM_ACR] & SST_FNF )
@@ -973,6 +971,11 @@ byte serial_acr_in_ctrl()
           Serial.println(F("FILE NOT FOUND"));
           regPC = 0xC0A0;
           serial_status[CSM_ACR] &= ~SST_FNF;
+        }
+      else if( acr_cload_fid==0 && regPC==0xE299 )
+        {
+          // loading from ACR and CLOAD file is not open => read first byte
+          acr_read_next_cload_byte();
         }
     }
 
@@ -994,6 +997,8 @@ byte serial_acr_in_data()
       if( !(serial_ctrl[CSM_ACR] & SSC_INTRX) )
         acr_read_next_byte();
     }
+
+  DBG_FILEOPS2(5, "ACR reading data: ", int(data));
 
   return data;
 }
