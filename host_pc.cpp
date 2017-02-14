@@ -182,7 +182,7 @@ uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, voi
 uint32_t host_write_file(const char *filename, uint32_t offset, uint32_t len, void *buffer)
 {
   char fnamebuf[30];
-  sprintf(fnamebuf, "disks\\%s", filename);
+  sprintf(fnamebuf, "disks/%s", filename);
   uint32_t res = 0;
   FILE *f = fopen(fnamebuf, "r+b");
   if( !f ) f = fopen(fnamebuf, "w+b");
