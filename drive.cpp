@@ -307,14 +307,29 @@ byte drive_in(byte addr)
           {
             if( !(drive_status[drive_selected] & DRIVE_STATUS_INT_EN) )
               {
-                // if interrupts are not enabled, advance current sector every time this register is queried
-                drive_current_sector[drive_selected]++;
-                if( drive_current_sector[drive_selected] >= DRIVE_NUM_SECTORS )
-                  drive_current_sector[drive_selected] = 0;
-                drive_current_byte[drive_selected] = 0xff;
+                // if interrupts are not enabled, alternate "sector true" bit
+                // every time this register is queried and advance current sector
+                // every time "sector true" goes to true (some applications need
+                // "sector true" to go false, e.g. MBASIC under CP/M when saving)
+                if( drive_sector_true )
+                  {
+                    drive_sector_true = false;
+                    data |= 0x01;
+                  }
+                else
+                  {
+                    drive_current_sector[drive_selected]++;
+                    if( drive_current_sector[drive_selected] >= DRIVE_NUM_SECTORS )
+                      drive_current_sector[drive_selected] = 0;
+                    drive_current_byte[drive_selected] = 0xff;
+                    drive_sector_true = true;
+                  }
               }
             else if( !drive_sector_true )
               {
+                // if interrupts are enabled then the drive_sector_true flag and
+                // the drive_current_sector setting are handled in the interrupt
+                // routine.
                 data |= 0x01;
               }
             
