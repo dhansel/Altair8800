@@ -979,6 +979,7 @@ byte altair_in(byte addr)
     case 0007: data = serial_acr_in_data(); break;
     case 0021: data = serial_2sio1_in_data(); break;
     case 0023: data = serial_2sio2_in_data(); break;
+    default:   data = 0xff; break;
     }
 
   if( host_read_status_led_WAIT() )
