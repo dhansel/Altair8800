@@ -278,7 +278,7 @@ void process_inputs()
   if( cswitch & BIT(SW_RUN) )
     {
       if( config_serial_debug_enabled() && config_serial_input_enabled() )
-        Serial.print(F("\n\n--- RUNNING (press ESC to stop) ---\n\n"));
+        Serial.print(F("\n\n--- RUNNING (press ESC twice to stop) ---\n\n"));
       host_clr_status_led_WAIT();
     }
   if( cswitch & (BIT(SW_PROTECT)) )
