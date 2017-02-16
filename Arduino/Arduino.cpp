@@ -13,7 +13,7 @@ using namespace std;
 
 #include <ncurses.h>
 #include <termios.h>
-#define endl "\n\r" << flush
+#define endl "\r\n" << flush
 
 bool kbhit()
 {
@@ -30,7 +30,7 @@ string FixNewline(string subject)
 {
   size_t pos = 0;
   while ((pos = subject.find("\n", pos)) != string::npos) {
-    subject.replace(pos, 1, "\n\r");
+    subject.replace(pos, 1, "\r\n");
     pos += 2;
   }
   return subject;
@@ -88,9 +88,15 @@ void SerialClass::println(double d)  { cout << d << endl; }
 static bool kbhit_prev_result = false;
 static unsigned long kbhit_next_check = 0;
 
-void SerialClass::write(char c) { cout << (c=='\n' ? "\n\r" : (c==127 ? "\b \b" : string(1,c))) << flush; }
 char SerialClass::peek() { if( kbhit() ) { char c =  getch(); ungetch(c); return c; } else return 0; }
 bool SerialClass::availableForWrite() { return true; }
+
+#ifdef _WIN32
+void SerialClass::write(char c) { cout << (c==127 ? "\b \b" : string(1,c)) << flush; }
+#else
+void SerialClass::write(char c) { cout << (c=='\n' ? "\r\n" : (c==127 ? "\b \b" : string(1,c))) << flush; }
+#endif
+
 
 char SerialClass::read()
 {
