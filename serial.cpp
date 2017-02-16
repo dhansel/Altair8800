@@ -276,8 +276,21 @@ void serial_receive_host_data(byte host_interface, byte b)
 {
   if( b==27 && config_serial_input_enabled() && !host_read_status_led_WAIT() )
     {
-      // if we have serial input enabled then the the ESC key works as STOP
-      altair_interrupt(INT_SW_STOP);
+      static unsigned long prevESC = 0;
+      if( millis()-prevESC<250 )
+        {
+          // if we have serial input enabled then hitting 
+          // the ESC key twice works as STOP
+          altair_interrupt(INT_SW_STOP);
+        }
+      else
+        {
+          for(byte dev=0; dev<4; dev++)
+            if( config_serial_map_sim_to_host(dev)==host_interface )
+              serial_receive_data(dev, b);
+        }
+
+      prevESC = millis();
     }
   else
     {
