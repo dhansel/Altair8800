@@ -957,8 +957,10 @@ byte serial_acr_in_ctrl()
       else
         { if( !host_serial_available_for_write(config_serial_map_sim_to_host(CSM_ACR)) ) data |= 0x80; }
     }
-      
-  if( (regPC==0xE299 || regPC==0xE2A7) && config_serial_trap_CLOAD() )
+
+  // do the following only if no regular file is currently open on fht ACR
+  // that way we can override the automated mechanism with manual control
+  if( serial_fid[CSM_ACR]==0 && (regPC==0xE299 || regPC==0xE2A7) && config_serial_trap_CLOAD() )
     {
       // This is ALTAIR Extended BASIC loading from or saving to ACR
       // our BASIC CSAVE/CLOAD tape emulation is a continuous loop so we always
