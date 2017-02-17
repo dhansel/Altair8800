@@ -28,6 +28,7 @@
 #include "cpucore.h"
 #include "host_pc.h"
 #include "profile.h"
+#include "timer.h"
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -215,6 +216,7 @@ uint32_t host_get_random()
 }
 
 
+static uint32_t cycles_per_char = 1, prev_char_cycles = 0;
 void host_check_interrupts()
 {
   static byte ctr = 0;
@@ -224,11 +226,15 @@ void host_check_interrupts()
   // if program is running
   if( ((host_read_status_led_WAIT() || ++ctr==0) && Serial.available()) || ctrlC>0 )
     {
-      byte c;
+      int c = -1;
+
       if( ctrlC>0 )
 	{ c = 3; ctrlC--; }
-      else
-	c = Serial.read();
+      else if( (host_read_status_led_WAIT() || (timer_get_cycles()-prev_char_cycles) >= cycles_per_char) )
+	{
+	  c = Serial.read();
+	  prev_char_cycles = timer_get_cycles();
+	}
 
       if( c == 3 )
         {
@@ -240,14 +246,20 @@ void host_check_interrupts()
             exit(0);
         }
       
-      serial_receive_host_data(0, c);
+      if( c>=0 ) serial_receive_host_data(0, c);
+      ctr=0;
     }
 }
 
 
 void host_serial_setup(byte iface, unsigned long baud, bool set_primary_interface)
 {
-  // no setup to be done
+  // assuming 9 bits per character
+  if( iface==0 )
+    {
+      cycles_per_char  = (9*2000000)/baud;
+      prev_char_cycles = timer_get_cycles();
+    }
 }
 
 

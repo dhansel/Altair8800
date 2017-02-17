@@ -414,9 +414,25 @@ static void print_aux1_program(byte row=0, byte col=0)
 // --------------------------------------------------------------------------------
 
 
+static bool apply_host_serial_settings(uint32_t settings)
+{
+  config_serial_settings = settings;
+  host_serial_setup(0, config_host_serial_baud_rate(0), config_host_serial_primary()==0);
+  host_serial_setup(1, config_host_serial_baud_rate(1), config_host_serial_primary()==1);
+}
+
+
 static void toggle_host_serial_baud_rate(byte iface, byte row, byte col)
 {
+  byte min_rate;
+
+#ifdef HOST_PC_H
+  new_config_serial_settings = toggle_bits(new_config_serial_settings, iface==0 ? 0 : 4, 4, BAUD_110, BAUD_115200);
+  apply_host_serial_settings(new_config_serial_settings);
+#else
   new_config_serial_settings = toggle_bits(new_config_serial_settings, iface==0 ? 0 : 4, 4, BAUD_1200, BAUD_115200);
+#endif
+
   print_host_serial_baud_rate(iface, row, col);
 }
 
@@ -546,14 +562,6 @@ static void toggle_flag(uint32_t value, byte row, byte col)
 {
   config_flags = (config_flags & ~value) | (~(config_flags & value) & value);
   print_flag(value, row, col);
-}
-
-
-static bool apply_host_serial_settings(uint32_t settings)
-{
-  config_serial_settings = settings;
-  host_serial_setup(0, config_host_serial_baud_rate(0), config_host_serial_primary()==0);
-  host_serial_setup(1, config_host_serial_baud_rate(1), config_host_serial_primary()==1);
 }
 
 
@@ -798,9 +806,7 @@ void config_edit()
           Serial.print(F("Clear (m)emory on powerup   : ")); print_flag(CF_CLEARMEM); Serial.println(); r_clearmem = row++;
           Serial.print(F("A(u)x1 shortcut program     : ")); print_aux1_program(); Serial.println(); r_aux1 = row++;
           Serial.print(F("Configure (I)nterrupts      : ")); print_vi_flag(); Serial.println(); r_interrupt = row++;
-#if !defined(_WIN32) && !defined(__linux__)
           Serial.print(F("Host Serial (b)aud rate     : ")); print_host_serial_baud_rate(0); Serial.println(); r_baud0 = row++;
-#endif
 #if defined(__SAM3X8E__)
           Serial.print(F("Host Serial1 baud (r)ate    : ")); print_host_serial_baud_rate(1); Serial.println(); r_baud1 = row++;
           Serial.print(F("(P)rimary host serial       : ")); print_host_primary_interface(); Serial.println(); r_primary = row++;
@@ -814,13 +820,15 @@ void config_edit()
 
           Serial.println();
           Serial.println(F("(M)anage Filesystem"));
-          Serial.println(F("(A)pply host serial settings"));
+#ifndef HOST_PC_H
+          Serial.println(F("(A)pply host serial settings")); row++;
+#endif
           Serial.println(F("(C)lear memory"));
           Serial.println(F("(S)ave configuration"));
           Serial.println(F("(L)oad configuration"));
           Serial.println(F("(R)eset to defaults"));
           Serial.println(F("\nE(x)it"));
-          row += 9;
+          row += 8;
 
           Serial.print(F("\n\nCommand: ")); r_cmd = row+2;
         }
