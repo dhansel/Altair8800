@@ -43,12 +43,18 @@ uint32_t acr_cload_timeout = 0;
 volatile byte serial_ctrl[4], serial_data[4];
 volatile byte serial_status[4], serial_status_dev[4];
 byte serial_fid[4];
-byte last_active_primary_device = 0xff;
+static byte last_active_primary_device = CSM_SIO;
 static const byte serial_device_interrupts[4] = {INT_SIO, INT_ACR, INT_2SIO1, INT_2SIO2};
 
 static void serial_replay(byte dev);
 static void acr_read_next_byte();
 static void serial_timer_interrupt_check_enable(byte dev = 0xff);
+
+
+byte serial_last_active_primary_device()
+{
+  return last_active_primary_device;
+}
 
 
 void set_serial_status(byte dev, byte status)
@@ -99,76 +105,38 @@ void serial_update_hlda_led()
 }
 
 
-static byte get_device(byte switches)
-{
-  byte dev;
-  if ( (switches & 0x80)==0 ) 
-    dev = last_active_primary_device;
-  else
-    dev = (switches & 0x60) >> 5;
-
-  return dev;
-}
-
-
-void serial_replay_start(byte switches, byte filenum)
+void serial_replay_start(byte dev, bool example, byte filenum)
 {
   serial_acr_check_cload_timeout();
 
-  byte dev = get_device(switches);
-
-  if( serial_fid[dev]==0xfe )
+  switch( dev )
     {
-      DBG_FILEOPS(3, "ejecting PS2 tape");
-      serial_fid[dev] = 0;
+    case CSM_SIO:   DBG_FILEOPS(3, "replaying to 88-SIO");    break;
+    case CSM_2SIO1: DBG_FILEOPS(3, "replaying to 88-2SIO-1"); break;
+    case CSM_2SIO2: DBG_FILEOPS(3, "replaying to 88-2SIO-2"); break;
+    case CSM_ACR:   DBG_FILEOPS(3, "replaying to ACR");       break;
+    default:        DBG_FILEOPS(1, "invalid replay device");  break;
     }
-  else if( serial_fid[dev]==0xff )
+  
+  if( example )
     {
-      DBG_FILEOPS(3, "stopping BASIC example load");
-      serial_fid[dev] = 0;
-    }
-  else if( serial_fid[dev]>0 )
-    {
-      if( filesys_is_read(serial_fid[dev]) )
+      // load example
+      if( prog_examples_read_start(filenum) )
         {
-          DBG_FILEOPS(3, "stopping data replay");
-          filesys_close(serial_fid[dev]);
-          serial_fid[dev] = 0;
+          serial_fid[dev] = 0xff;
+          DBG_FILEOPS2(3, "loading example ", int(filenum));
         }
       else
-        DBG_FILEOPS(1, "unable to replay data (capture operation in progress)");
+        DBG_FILEOPS2(2, "example does not exist: ", int(filenum));
     }
   else
     {
-      switch( dev )
-        {
-        case CSM_SIO:   DBG_FILEOPS(3, "replaying to 88-SIO");    break;
-        case CSM_2SIO1: DBG_FILEOPS(3, "replaying to 88-2SIO-1"); break;
-        case CSM_2SIO2: DBG_FILEOPS(3, "replaying to 88-2SIO-2"); break;
-        case CSM_ACR:   DBG_FILEOPS(3, "replaying to ACR");       break;
-        default:        DBG_FILEOPS(1, "invalid replay device");  break;
-        }
-
-      if( switches & 0x01 )
-        {
-          // load from file
-          serial_fid[dev] = filesys_open_read('D', filenum);
-          if( serial_fid[dev]>0 )
-            DBG_FILEOPS2(3, "replaying data, file ", int(filenum));
-          else
-            DBG_FILEOPS2(2, "unable to replay data (file not found), file ", int(filenum));
-        }
+      // load from file
+      serial_fid[dev] = filesys_open_read('D', filenum);
+      if( serial_fid[dev]>0 )
+	DBG_FILEOPS2(3, "replaying data, file ", int(filenum));
       else
-        {
-          // load example
-          if( prog_examples_read_start(filenum) )
-            {
-              serial_fid[dev] = 0xff;
-              DBG_FILEOPS2(3, "loading example ", int(filenum));
-            }
-          else
-            DBG_FILEOPS2(2, "example does not exist: ", int(filenum));
-        }
+	DBG_FILEOPS2(2, "unable to replay data (file not found), file ", int(filenum));
     }
 
   // either start interrupt timer or prepare first byte for replay
@@ -181,51 +149,73 @@ void serial_replay_start(byte switches, byte filenum)
 }
 
 
-void serial_capture_start(byte switches, byte filenum)
+void serial_capture_start(byte dev, byte filenum)
 {
   serial_acr_check_cload_timeout();
 
-  byte dev = get_device(switches);
-
-  if( serial_fid[dev]>0 )
+  serial_fid[dev] = filesys_open_write('D', filenum);
+  if( serial_fid[dev] )
     {
-      // end capture (0xff is special fid for BASIC example replay)
-      if( serial_fid[dev] < 0xff && filesys_is_write(serial_fid[dev]) )
-        {
-          DBG_FILEOPS(3, "ending capture");
-          filesys_close(serial_fid[dev]);
-          serial_fid[dev] = 0;
-        }
-      else
-        DBG_FILEOPS(1, "cannot start capture (replay operation in progress)");
+      switch( dev )
+	{
+	case CSM_SIO:   DBG_FILEOPS(3, "capturing from 88-SIO");    break;
+	case CSM_2SIO1: DBG_FILEOPS(3, "capturing from 88-2SIO-1"); break;
+	case CSM_2SIO2: DBG_FILEOPS(3, "capturing from 88-2SIO-2"); break;
+	case CSM_ACR:   DBG_FILEOPS(3, "capturing from ACR");       break;
+	default:        DBG_FILEOPS(1, "invalid capture device");  break;
+	}
     }
   else
-    {
-      // start capture
-      serial_fid[dev] = filesys_open_write('D', filenum);
-      if( serial_fid[dev] )
-        DBG_FILEOPS2(3, "starting data capture, file ", filenum);
-      else
-        DBG_FILEOPS(1, "unable to start capturing (storage full?)");
-    }
-
+    DBG_FILEOPS(1, "unable to start capturing (storage full?)");
+  
   serial_update_hlda_led();
+}
+    
+
+bool serial_replay_running(byte dev)
+{
+  return serial_fid[dev]>=0xfe || serial_fid[dev]>0 && filesys_is_read(serial_fid[dev]);
+}
+
+
+bool serial_capture_running(byte dev)
+{
+  return serial_fid[dev]<0xfe && serial_fid[dev]>0 && filesys_is_write(serial_fid[dev]);
+}
+
+
+void serial_stop(byte dev)
+{
+  if( serial_fid[dev]==0xfe )
+    {
+      DBG_FILEOPS(3, "ejecting PS2 tape");
+      serial_fid[dev] = 0;
+    }
+  else if( serial_fid[dev]==0xff )
+    {
+      DBG_FILEOPS(3, "stopping example load");
+      serial_fid[dev] = 0;
+   }
+  else if( serial_fid[dev]>0 )
+    {
+      if( filesys_is_read(serial_fid[dev]) )
+	DBG_FILEOPS(3, "stopping data replay");
+      else if( filesys_is_write(serial_fid[dev]) )
+	DBG_FILEOPS(3, "ending capture");
+
+      filesys_close(serial_fid[dev]);
+      serial_fid[dev] = 0;
+     }
 }
 
 
 void serial_close_files()
 {
   for(byte dev=0; dev<3; dev++)
-    {
-      if( serial_fid[dev]>0 && serial_fid[dev]<0xff ) 
-        {
-          filesys_close(serial_fid[dev]);
-          serial_fid[dev] = 0;
-        }
+    if( serial_fid[dev]>0 ) serial_stop(dev);
 
-      if( acr_cload_fid>0 ) filesys_close(acr_cload_fid);
-      acr_cload_fid = 0;
-    }
+  if( acr_cload_fid>0 ) filesys_close(acr_cload_fid);
+  acr_cload_fid = 0;
 
   serial_timer_interrupt_check_enable();
   serial_update_hlda_led();
@@ -371,7 +361,9 @@ int serial_read()
         if( (serial_status[dev] & SST_RDRF) )
           {
             res = serial_data[dev];
-            for(dev=dev; dev<0xff; dev--) set_serial_status(dev, 0);
+            for(dev=dev; dev<0xff; dev--) 
+              if( config_serial_map_sim_to_host(dev)==config_host_serial_primary() )
+                set_serial_status(dev, 0);
           }
 
         return res;
@@ -776,7 +768,7 @@ void serial_sio_out_data(byte data)
 
 bool serial_acr_mount_ps2()
 {
-  if( serial_fid[CSM_ACR] && serial_fid[CSM_ACR]!=0xff )
+  if( serial_fid[CSM_ACR] && serial_fid[CSM_ACR]!=0xfe )
     {
       DBG_FILEOPS(2, "cannot mount PS2 tape (other operation in progress)");
       return false;

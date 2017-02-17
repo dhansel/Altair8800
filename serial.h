@@ -26,11 +26,14 @@
 
 void serial_setup();
 
-void serial_replay_start(byte device, byte filenum);
+void serial_replay_start(byte device, bool example, byte filenum);
 void serial_capture_start(byte device, byte filenum);
+bool serial_replay_running(byte device);
+bool serial_capture_running(byte device);
+void serial_stop(byte devoce);
+
 bool serial_acr_mount_ps2();
 bool serial_acr_check_cload_timeout();
-bool serial_file_open();
 void serial_close_files();
 
 void serial_timer_interrupt_setup(byte dev = 0xff);
@@ -38,6 +41,7 @@ void serial_receive_host_data(byte host_interface, byte b);
 bool serial_available();
 int  serial_read();
 void serial_reset();
+byte serial_last_active_primary_device();
 
 byte serial_2sio1_in_ctrl();
 byte serial_2sio1_in_data();

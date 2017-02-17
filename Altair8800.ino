@@ -121,6 +121,18 @@ void read_inputs()
 }
 
 
+byte get_device(byte switches)
+{
+  byte dev;
+  if ( (switches & 0x80)==0 )
+    dev = serial_last_active_primary_device();
+  else
+    dev = (switches & 0x60) >> 5;
+
+  return dev;
+}
+
+
 void process_inputs()
 {  
   if( cswitch & BIT(SW_DEPOSIT) )
@@ -238,31 +250,49 @@ void process_inputs()
         }
     }
 
-  if( (cswitch & BIT(SW_AUX2DOWN)) && (dswitch&0xF000)==0x1000 )
+  if( cswitch & BIT(SW_AUX2DOWN) )
     {
-      if( (dswitch & 0xff)==0 )
-        drive_dir();
-      else if( drive_mount((dswitch >> 8) & 0x0f, dswitch & 0xff) )
-        DBG_FILEOPS4(2, "mounted disk ", dswitch&0xff, " in drive ", (dswitch>>8) & 0x0f);
+      if( (dswitch&0xF000)==0x1000 )
+	{
+	  if( (dswitch & 0xff)==0 )
+	    drive_dir();
+	  else if( drive_mount((dswitch >> 8) & 0x0f, dswitch & 0xff) )
+	    DBG_FILEOPS4(2, "mounted disk ", dswitch&0xff, " in drive ", (dswitch>>8) & 0x0f);
+	  else
+	    DBG_FILEOPS4(1, "error mounting disk ", dswitch&0xff, " in drive ", (dswitch>>8) & 0x0f);
+	}
       else
-        DBG_FILEOPS4(1, "error mounting disk ", dswitch&0xff, " in drive ", (dswitch>>8) & 0x0f);
-    }
-  else if( (cswitch & BIT(SW_AUX2UP)) && (dswitch&0xF000)==0x1000 )
-    {
-      if( drive_unmount((dswitch >> 8) & 0x0f) )
-        DBG_FILEOPS2(2, "unmounted drive ", (dswitch>>8) & 0x0f);
-      else
-        DBG_FILEOPS2(1, "error unmounting drive ", (dswitch>>8) & 0x0f);
+	{
+	  print_panel_serial();
+	  byte dev = get_device(dswitch >> 8);
+	  if( serial_capture_running(dev) )
+	    DBG_FILEOPS(1, "unable to replay data (capture operation in progress)");
+	  else if( serial_replay_running(dev) )
+	    serial_stop(dev);
+	  else
+	    serial_replay_start(dev, (dswitch & 0x100)==0, dswitch & 0xff);
+	}
     }
   else if( cswitch & BIT(SW_AUX2UP) )
     {
-      print_panel_serial();
-      serial_capture_start(dswitch>>8, dswitch & 0xff);
-    }
-  else if( cswitch & BIT(SW_AUX2DOWN) )
-    {
-      print_panel_serial();
-      serial_replay_start(dswitch>>8, dswitch & 0xff);
+      if( (dswitch&0xF000)==0x1000 )
+	{
+	  if( drive_unmount((dswitch >> 8) & 0x0f) )
+	    DBG_FILEOPS2(2, "unmounted drive ", (dswitch>>8) & 0x0f);
+	  else
+	    DBG_FILEOPS2(1, "error unmounting drive ", (dswitch>>8) & 0x0f);
+	}
+      else
+	{
+	  print_panel_serial();
+          byte dev = get_device(dswitch >> 8);
+	  if( serial_replay_running(dev) )
+	    DBG_FILEOPS(1, "cannot start capture (replay operation in progress)");
+          else if( serial_capture_running(dev) )
+            serial_stop(dev);
+          else
+	    serial_capture_start(dev, dswitch & 0xff);
+	}
     }
 
   if( cswitch & BIT(SW_RESET) )
@@ -320,6 +350,33 @@ void read_inputs_panel()
 }
 
 
+byte read_device()
+{
+  byte dev = 0xff;
+
+  Serial.print(F("(s=SIO,a=ACR,1=2SIO-1, 2=2SIO-2, ESC=abort): "));
+
+  int c = -1;
+  while( c!='s' && c!='a' && c!='1' && c!='2' && c!=27)
+    c = serial_read();
+
+  if( c!=27 )
+    {
+      switch(c)
+	{
+	case 's': dev = CSM_SIO;   break;
+	case 'a': dev = CSM_ACR;   break;
+	case '1': dev = CSM_2SIO1; break;
+	case '2': dev = CSM_2SIO2; break;
+	}
+
+      Serial.print((char) c);
+    }
+
+  return dev;
+}
+
+
 void read_inputs_serial()
 {
   byte b;
@@ -365,17 +422,58 @@ void read_inputs_serial()
   else if( data == 'u' )
     cswitch |= BIT(SW_AUX1DOWN);
   else if( data == 's' )
-    cswitch |= BIT(SW_AUX2UP);
+    {
+      Serial.print(F("\nCapture from "));
+      byte dev = read_device();
+      if( dev < 0xff )
+	{
+	  cswitch |=BIT(SW_AUX2UP);
+	  dswitch = 0x8000 | (dev << 13);
+	  if( !serial_capture_running(dev) )
+	    {
+	      Serial.print(F(" File #: "));
+	      dswitch |= numsys_read_word() & 0xff;
+	    }
+	}
+      Serial.println();
+    }
   else if( data == 'l' )
     {
+      Serial.print(F("\nReplay to "));
+      byte dev = read_device();
+      if( dev < 0xff )
+        {
+          cswitch |= BIT(SW_AUX2DOWN);
+
+	  // if the replay device is mapped to the primary host console
+	  // then we must run immediately because otherwise the debugging
+          // console will consume the replayed characters
+	  if( config_serial_map_sim_to_host(dev)==config_host_serial_primary() )
+	    cswitch |= BIT(SW_RUN);
+
+          dswitch = 0x8000 | (dev << 13);
+          if( !serial_replay_running(dev) )
+            {
+	      char c;
+	      Serial.print(F(" (e)xample/(f)ile: "));
+	      do { c=serial_read(); } while(c!='e' && c!='f');
+	      if( c=='f' ) dswitch |= 0x100;
+	      Serial.print(c);
+              Serial.print(c=='f' ? F(" File #: ") : F(" Example #: "));
+              dswitch |= numsys_read_word() & 0xff;
+            }
+        }
+      Serial.println();
+    }
+  else if( data == 'm' )
+    {
+      dswitch = 0x1000;
+      Serial.print(F("\nDrive number: "));
+      dswitch |= (numsys_read_word() & 0x0f) << 8;
+      Serial.print(F(" Disk number: "));
+      dswitch |= numsys_read_word() & 0xff;
       cswitch |= BIT(SW_AUX2DOWN);
-      if( (dswitch & 0xF000)!=0x1000 )
-	{
-	  // if we're replaying (i.e. NOT mounting a disk) then we
-	  // must run immediately because otherwise the debugging 
-	  // console will consume the replayed characters
-	  cswitch |= BIT(SW_AUX2DOWN) | BIT(SW_RUN);
-	}
+      Serial.println();
     }
   else if( data == 'Q' )
     cswitch |= BIT(SW_PROTECT);
