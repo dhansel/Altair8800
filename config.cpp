@@ -638,6 +638,9 @@ static bool load_config(byte fileno)
 #if STANDALONE>0
       config_flags |= CF_SERIAL_INPUT;      
 #endif
+#ifdef HOST_PC_H
+      apply_host_serial_settings(new_config_serial_settings);
+#endif
       ok = true;
     }
 
