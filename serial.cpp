@@ -509,8 +509,13 @@ static byte serial_map_characters_in(byte dev, byte data)
     }
 
   byte b = config_serial_backspace(dev);
-  if( b==CSFB_AUTO && (regPC == 0x038A || regPC == 0x0726 || regPC == 0x08e5 || regPC == 0x00A0) ) 
-    b = CSFB_UNDERSCORE;
+  if( b==CSFB_AUTO )
+    {
+      if( regPC == 0x038A || regPC == 0x00A0 )
+        b = CSFB_UNDERSCORE;
+      else if( regPC == 0x0726 || regPC == 0x08e5 )
+        b = CSFB_RUBOUT;
+    }
 
   switch( b ) 
     {
@@ -530,7 +535,6 @@ static byte serial_map_characters_in(byte dev, byte data)
 static byte serial_map_characters_out(byte dev, byte data)
 {
   // ALTAIR 4k BASIC I/O routine has "OUT" instruction at 0x037F
-  // MITS Programming System II has OUT instruction at 0x071B
   // ALTAIR EXTENDED BASIC I/O routine has "OUT" instruction at 0x00AB
 
   if( config_serial_7bit(dev)==CSF_ON ||
@@ -541,7 +545,7 @@ static byte serial_map_characters_out(byte dev, byte data)
     }
 
   byte b = config_serial_backspace(dev);
-  if( b==CSFB_AUTO && (regPC == 0x0380 || regPC == 0x071C || regPC == 0x00AC) )
+  if( b==CSFB_AUTO && (regPC == 0x0380 || regPC == 0x00AC) )
     b = CSFB_UNDERSCORE;
   
   if( b==CSFB_UNDERSCORE )
