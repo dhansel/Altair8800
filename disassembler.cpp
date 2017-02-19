@@ -25,676 +25,588 @@
 
 typedef byte (*DAFUN)(byte, byte *, uint16_t);
 
-#define PRINT(x) Serial.print(x)
 
-void PRINTPS(const char PROGMEM *s)
-{
-  byte b;
-  while( (b=pgm_read_byte(s++))!=0 ) Serial.write(b);
-}
-
-void printRegName(byte regname)
+static void printRegName(byte regname)
 {
   switch(regname)
     {
-    case 0: PRINT('B'); break; 
-    case 1: PRINT('C'); break; 
-    case 2: PRINT('D'); break; 
-    case 3: PRINT('E'); break; 
-    case 4: PRINT('H'); break; 
-    case 5: PRINT('L'); break; 
-    case 6: PRINT('M'); break; 
-    case 7: PRINT('A'); break; 
-    default: PRINT('?'); break; 
+    case 0: Serial.print('B'); break; 
+    case 1: Serial.print('C'); break; 
+    case 2: Serial.print('D'); break; 
+    case 3: Serial.print('E'); break; 
+    case 4: Serial.print('H'); break; 
+    case 5: Serial.print('L'); break; 
+    case 6: Serial.print('M'); break; 
+    case 7: Serial.print('A'); break; 
+    default: Serial.print('?'); break; 
     }
 }
 
-void printDblRegName(byte regname)
+static void printDblRegName(byte regname)
 {
   switch(regname)
     {
-    case 0: { PRINT('B'); PRINT('C'); break; }
-    case 1: { PRINT('D'); PRINT('E'); break; }
-    case 2: { PRINT('H'); PRINT('L'); break; }
-    case 3: { PRINT('S'); PRINT('P'); break; }
-    default: PRINT('?'); break; 
+    case 0: { Serial.print('B'); Serial.print('C'); break; }
+    case 1: { Serial.print('D'); Serial.print('E'); break; }
+    case 2: { Serial.print('H'); Serial.print('L'); break; }
+    case 3: { Serial.print('S'); Serial.print('P'); break; }
+    default: Serial.print('?'); break; 
     }
 }
 
-byte da_ADC(byte opcode, byte *Mem, uint16_t PC)
+static byte da_ADC(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "ADC ";
-  PRINTPS(nm);
+  Serial.print(F("ADC "));
   printRegName(opcode&0007);
   return 1;
 }
 
-byte da_ADD(byte opcode, byte *Mem, uint16_t PC)
+static byte da_ADD(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "ADD ";
-  PRINTPS(nm);
+  Serial.print(F("ADD "));
   printRegName(opcode&0007);
   return 1;
 }
 
-byte da_SBB(byte opcode, byte *Mem, uint16_t PC)
+static byte da_SBB(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "SBB ";
-  PRINTPS(nm);
+  Serial.print(F("SBB "));
   printRegName(opcode&0007);
   return 1;
 }
 
-byte da_SUB(byte opcode, byte *Mem, uint16_t PC)
+static byte da_SUB(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "SUB ";
-  PRINTPS(nm);
+  Serial.print(F("SUB "));
   printRegName(opcode&0007);
   return 1;
 }
 
-byte da_ANA(byte opcode, byte *Mem, uint16_t PC)
+static byte da_ANA(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "ANA ";
-  PRINTPS(nm);
+  Serial.print(F("ANA "));
   printRegName(opcode&0007);
   return 1;
 }
 
-byte da_XRA(byte opcode, byte *Mem, uint16_t PC)
+static byte da_XRA(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "XRA ";
-  PRINTPS(nm);
+  Serial.print(F("XRA "));
   printRegName(opcode&0007);
   return 1;
 }
 
-byte da_ORA(byte opcode, byte *Mem, uint16_t PC)
+static byte da_ORA(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "ORA ";
-  PRINTPS(nm);
+  Serial.print(F("ORA "));
   printRegName(opcode&0007);
   return 1;
 }
 
-byte da_CMP(byte opcode, byte *Mem, uint16_t PC)
+static byte da_CMP(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "CMP ";
-  PRINTPS(nm);
+  Serial.print(F("CMP "));
   printRegName(opcode&0007);
   return 1;
 }
 
-byte da_CALL(byte opcode, byte *Mem, uint16_t PC)
+static byte da_CALL(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "CALL ";
-  PRINTPS(nm);
+  Serial.print(F("CALL "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_DCR(byte opcode, byte *Mem, uint16_t PC)
+static byte da_DCR(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "DCR ";
-  PRINTPS(nm);
+  Serial.print(F("DCR "));
   printRegName((opcode&0070)>>3);
   return 1;
 }
 
-byte da_ADI(byte opcode, byte *Mem, uint16_t PC)
+static byte da_ADI(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "ADI ";
-  PRINTPS(nm);
+  Serial.print(F("ADI "));
   numsys_print_byte(MREAD(PC+1));
   return 2;
 }
 
-byte da_ACI(byte opcode, byte *Mem, uint16_t PC)
+static byte da_ACI(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "ACI ";
-  PRINTPS(nm);
+  Serial.print(F("ACI "));
   numsys_print_byte(MREAD(PC+1));
   return 2;
 }
 
-byte da_SUI(byte opcode, byte *Mem, uint16_t PC)
+static byte da_SUI(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "SUI ";
-  PRINTPS(nm);
+  Serial.print(F("SUI "));
   numsys_print_byte(MREAD(PC+1));
   return 2;
 }
 
-byte da_SBI(byte opcode, byte *Mem, uint16_t PC)
+static byte da_SBI(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "SBI ";
-  PRINTPS(nm);
+  Serial.print(F("SBI "));
   numsys_print_byte(MREAD(PC+1));
   return 2;
 }
 
-byte da_ANI(byte opcode, byte *Mem, uint16_t PC)
+static byte da_ANI(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "ANI ";
-  PRINTPS(nm);
+  Serial.print(F("ANI "));
   numsys_print_byte(MREAD(PC+1));
   return 2;
 }
 
-byte da_XRI(byte opcode, byte *Mem, uint16_t PC)
+static byte da_XRI(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "XRI ";
-  PRINTPS(nm);
+  Serial.print(F("XRI "));
   numsys_print_byte(MREAD(PC+1));
   return 2;
 }
 
-byte da_ORI(byte opcode, byte *Mem, uint16_t PC)
+static byte da_ORI(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "ORI ";
-  PRINTPS(nm);
+  Serial.print(F("ORI "));
   numsys_print_byte(MREAD(PC+1));
   return 2;
 }
 
-byte da_CPI(byte opcode, byte *Mem, uint16_t PC)
+static byte da_CPI(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "CPI ";
-  PRINTPS(nm);
+  Serial.print(F("CPI "));
   numsys_print_byte(MREAD(PC+1));
   return 2;
 }
 
-byte da_CMA(byte opcode, byte *Mem, uint16_t PC)
+static byte da_CMA(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "CMA";
-  PRINTPS(nm);
+  Serial.print(F("CMA"));
   return 1;
 }
 
-byte da_CMC(byte opcode, byte *Mem, uint16_t PC)
+static byte da_CMC(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "CMC";
-  PRINTPS(nm);
+  Serial.print(F("CMC"));
   return 1;
 }
 
-byte da_DAA(byte opcode, byte *Mem, uint16_t PC)
+static byte da_DAA(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "DAA";
-  PRINTPS(nm);
+  Serial.print(F("DAA"));
   return 1;
 }
 
-byte da_DAD(byte opcode, byte *Mem, uint16_t PC)
+static byte da_DAD(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "DAD ";
-  PRINTPS(nm);
+  Serial.print(F("DAD "));
   printDblRegName((opcode & 0060)>>4);
   return 1;
 }
 
-byte da_DCX(byte opcode, byte *Mem, uint16_t PC)
+static byte da_DCX(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "DCX ";
-  PRINTPS(nm);
+  Serial.print(F("DCX "));
   printDblRegName((opcode & 0060)>>4);
   return 1;
 }
 
-byte da_DI(byte opcode, byte *Mem, uint16_t PC)
+static byte da_DI(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "DI";
-  PRINTPS(nm);
+  Serial.print(F("DI"));
   return 1;
 }
 
-byte da_EI(byte opcode, byte *Mem, uint16_t PC)
+static byte da_EI(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "EI";
-  PRINTPS(nm);
+  Serial.print(F("EI"));
   return 1;
 }
 
-byte da_HLT(byte opcode, byte *Mem, uint16_t PC)
+static byte da_HLT(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "HLT";
-  PRINTPS(nm);
+  Serial.print(F("HLT"));
   return 1;
 }
 
-byte da_INR(byte opcode, byte *Mem, uint16_t PC)
+static byte da_INR(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "INR ";
-  PRINTPS(nm);
+  Serial.print(F("INR "));
   printRegName((opcode&0070)>>3);
   return 1;
 }
 
-byte da_INX(byte opcode, byte *Mem, uint16_t PC)
+static byte da_INX(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "INX ";
-  PRINTPS(nm);
+  Serial.print(F("INX "));
   printDblRegName((opcode & 0060)>>4);
   return 1;
 }
 
-byte da_LDA(byte opcode, byte *Mem, uint16_t PC)
+static byte da_LDA(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "LDA ";
-  PRINTPS(nm);
+  Serial.print(F("LDA "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_LDAX(byte opcode, byte *Mem, uint16_t PC)
+static byte da_LDAX(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "LDAX ";
-  PRINTPS(nm);
+  Serial.print(F("LDAX "));
   printDblRegName((opcode & 0060)>>4);
   return 1;
 }
 
-byte da_LHLD(byte opcode, byte *Mem, uint16_t PC)
+static byte da_LHLD(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "LHLD ";
-  PRINTPS(nm);
+  Serial.print(F("LHLD "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_LXI(byte opcode, byte *Mem, uint16_t PC)
+static byte da_LXI(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "LXI ";
-  PRINTPS(nm);
+  Serial.print(F("LXI "));
   printDblRegName((opcode & 0060)>>4);
-  PRINT(',');
+  Serial.print(',');
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
   
-byte da_MOV(byte opcode, byte *Mem, uint16_t PC)
+static byte da_MOV(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "MOV ";
-  PRINTPS(nm);
+  Serial.print(F("MOV "));
   printRegName((opcode&0070)>>3);
-  PRINT(',');
+  Serial.print(',');
   printRegName(opcode&0007);
   return 1;
 }
 
-byte da_MVI(byte opcode, byte *Mem, uint16_t PC)
+static byte da_MVI(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "MVI ";
-  PRINTPS(nm);
+  Serial.print(F("MVI "));
   printRegName((opcode&0070)>>3);
-  PRINT(',');
+  Serial.print(',');
   numsys_print_byte(MREAD(PC+1));
   return 2;
 }
 
-byte da_MVR(byte opcode, byte *Mem, uint16_t PC)
+static byte da_MVR(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "MVR ";
-  PRINTPS(nm);
+  Serial.print(F("MVR "));
   printRegName((opcode&0070)>>3);
-  PRINT(',');
+  Serial.print(',');
   printDblRegName(2);
   return 1;
 }
 
-byte da_NOP(byte opcode, byte *Mem, uint16_t PC)
+static byte da_NOP(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "NOP";
-  PRINTPS(nm);
+  Serial.print(F("NOP"));
   return 1;
 }
 
-byte da_NUL(byte opcode, byte *Mem, uint16_t PC)
+static byte da_NUL(byte opcode, byte *Mem, uint16_t PC)
 {
-  PRINT('<');
+  Serial.print('<');
   numsys_print_byte(opcode);
-  PRINT('>');
+  Serial.print('>');
   return 1;
 }
 
-byte da_PCHL(byte opcode, byte *Mem, uint16_t PC)
+static byte da_PCHL(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "PCHL";
-  PRINTPS(nm);
+  Serial.print(F("PCHL"));
   return 1;
 }
 
-byte da_POP(byte opcode, byte *Mem, uint16_t PC)
+static byte da_POP(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "POP ";
-  PRINTPS(nm);
+  Serial.print(F("POP "));
   printDblRegName((opcode&0060)>>4);
   return 1;
 }
 
-byte da_POPA(byte opcode, byte *Mem, uint16_t PC)
+static byte da_POPA(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "POP AS";
-  PRINTPS(nm);
+  Serial.print(F("POP AS"));
   return 1;
 }
 
-byte da_PUSH(byte opcode, byte *Mem, uint16_t PC)
+static byte da_PUSH(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "PUSH ";
-  PRINTPS(nm);
+  Serial.print(F("PUSH "));
   printDblRegName((opcode&0060)>>4);
   return 1;
 }
 
-byte da_PUSA(byte opcode, byte *Mem, uint16_t PC)
+static byte da_PUSA(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "PUSH AS";
-  PRINTPS(nm);
+  Serial.print(F("PUSH AS"));
   return 1;
 }
 
-byte da_RLC(byte opcode, byte *Mem, uint16_t PC)
+static byte da_RLC(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "RLC";
-  PRINTPS(nm);
+  Serial.print(F("RLC"));
   return 1;
 }
 
-byte da_RRC(byte opcode, byte *Mem, uint16_t PC)
+static byte da_RRC(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "RRC";
-  PRINTPS(nm);
+  Serial.print(F("RRC"));
   return 1;
 }
 
-byte da_RAL(byte opcode, byte *Mem, uint16_t PC)
+static byte da_RAL(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "RAL";
-  PRINTPS(nm);
+  Serial.print(F("RAL"));
   return 1;
 }
 
-byte da_RAR(byte opcode, byte *Mem, uint16_t PC)
+static byte da_RAR(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "RAR";
-  PRINTPS(nm);
+  Serial.print(F("RAR"));
   return 1;
 }
 
-byte da_RET(byte opcode, byte *Mem, uint16_t PC)
+static byte da_RET(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "RET";
-  PRINTPS(nm);
+  Serial.print(F("RET"));
   return 1;
 }
 
-byte da_RST(byte opcode, byte *Mem, uint16_t PC)
+static byte da_RST(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "RST ";
-  PRINTPS(nm);
+  Serial.print(F("RST "));
   numsys_print_word(opcode & 0070);
   return 1;
 }
 
-byte da_RNZ(byte opcode, byte *Mem, uint16_t PC)
+static byte da_RNZ(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "RNZ";
-  PRINTPS(nm);
+  Serial.print(F("RNZ"));
   return 1;
 }
 
-byte da_RZ(byte opcode, byte *Mem, uint16_t PC)
+static byte da_RZ(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "RZ";
-  PRINTPS(nm);
+  Serial.print(F("RZ"));
   return 1;
 }
 
-byte da_RNC(byte opcode, byte *Mem, uint16_t PC)
+static byte da_RNC(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "RNC";
-  PRINTPS(nm);
+  Serial.print(F("RNC"));
   return 1;
 }
 
-byte da_RC(byte opcode, byte *Mem, uint16_t PC)
+static byte da_RC(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "RC";
-  PRINTPS(nm);
+  Serial.print(F("RC"));
   return 1;
 }
 
-byte da_RPO(byte opcode, byte *Mem, uint16_t PC)
+static byte da_RPO(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "RPO";
-  PRINTPS(nm);
+  Serial.print(F("RPO"));
   return 1;
 }
 
-byte da_RPE(byte opcode, byte *Mem, uint16_t PC)
+static byte da_RPE(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "RPE";
-  PRINTPS(nm);
+  Serial.print(F("RPE"));
   return 1;
 }
 
-byte da_RP(byte opcode, byte *Mem, uint16_t PC)
+static byte da_RP(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "RP";
-  PRINTPS(nm);
+  Serial.print(F("RP"));
   return 1;
 }
 
-byte da_RM(byte opcode, byte *Mem, uint16_t PC)
+static byte da_RM(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "RM";
-  PRINTPS(nm);
+  Serial.print(F("RM"));
   return 1;
 }
 
-byte da_JMP(byte opcode, byte *Mem, uint16_t PC)
+static byte da_JMP(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "JMP ";
-  PRINTPS(nm);
+  Serial.print(F("JMP "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_JNZ(byte opcode, byte *Mem, uint16_t PC)
+static byte da_JNZ(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "JNZ ";
-  PRINTPS(nm);
+  Serial.print(F("JNZ "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_JZ(byte opcode, byte *Mem, uint16_t PC)
+static byte da_JZ(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "JZ ";
-  PRINTPS(nm);
+  Serial.print(F("JZ "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_JNC(byte opcode, byte *Mem, uint16_t PC)
+static byte da_JNC(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "JNC ";
-  PRINTPS(nm);
+  Serial.print(F("JNC "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_JC(byte opcode, byte *Mem, uint16_t PC)
+static byte da_JC(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "JC ";
-  PRINTPS(nm);
+  Serial.print(F("JC "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_JPO(byte opcode, byte *Mem, uint16_t PC)
+static byte da_JPO(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "JPO ";
-  PRINTPS(nm);
+  Serial.print(F("JPO "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_JPE(byte opcode, byte *Mem, uint16_t PC)
+static byte da_JPE(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "JPE ";
-  PRINTPS(nm);
+  Serial.print(F("JPE "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_JP(byte opcode, byte *Mem, uint16_t PC)
+static byte da_JP(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "JP ";
-  PRINTPS(nm);
+  Serial.print(F("JP "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_JM(byte opcode, byte *Mem, uint16_t PC)
+static byte da_JM(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "JM ";
-  PRINTPS(nm);
+  Serial.print(F("JM "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_CNZ(byte opcode, byte *Mem, uint16_t PC)
+static byte da_CNZ(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "CNZ ";
-  PRINTPS(nm);
+  Serial.print(F("CNZ "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_CZ(byte opcode, byte *Mem, uint16_t PC)
+static byte da_CZ(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "CZ ";
-  PRINTPS(nm);
+  Serial.print(F("CZ "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_CNC(byte opcode, byte *Mem, uint16_t PC)
+static byte da_CNC(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "CNC ";
-  PRINTPS(nm);
+  Serial.print(F("CNC "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_CC(byte opcode, byte *Mem, uint16_t PC)
+static byte da_CC(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "CC ";
-  PRINTPS(nm);
+  Serial.print(F("CC "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_CPO(byte opcode, byte *Mem, uint16_t PC)
+static byte da_CPO(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "CPO ";
-  PRINTPS(nm);
+  Serial.print(F("CPO "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_CPE(byte opcode, byte *Mem, uint16_t PC)
+static byte da_CPE(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "CPE ";
-  PRINTPS(nm);
+  Serial.print(F("CPE "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_CP(byte opcode, byte *Mem, uint16_t PC)
+static byte da_CP(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "CP ";
-  PRINTPS(nm);
+  Serial.print(F("CP "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_CM(byte opcode, byte *Mem, uint16_t PC)
+static byte da_CM(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "CM ";
-  PRINTPS(nm);
+  Serial.print(F("CM "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_SHLD(byte opcode, byte *Mem, uint16_t PC)
+static byte da_SHLD(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "SHLD ";
-  PRINTPS(nm);
+  Serial.print(F("SHLD "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_SPHL(byte opcode, byte *Mem, uint16_t PC)
+static byte da_SPHL(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "SPHL";
-  PRINTPS(nm);
+  Serial.print(F("SPHL"));
   return 1;
 }
 
-byte da_STA(byte opcode, byte *Mem, uint16_t PC)
+static byte da_STA(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "STA ";
-  PRINTPS(nm);
+  Serial.print(F("STA "));
   numsys_print_word(MREAD(PC+1) | (MREAD(PC+2) << 8));
   return 3;
 }
 
-byte da_STAX(byte opcode, byte *Mem, uint16_t PC)
+static byte da_STAX(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "STAX ";
-  PRINTPS(nm);
+  Serial.print(F("STAX "));
   printDblRegName((opcode&0060)>>4);
   return 1;
 }
 
-byte da_STC(byte opcode, byte *Mem, uint16_t PC)
+static byte da_STC(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "STC";
-  PRINTPS(nm);
+  Serial.print(F("STC"));
   return 1;
 }
 
-byte da_XTHL(byte opcode, byte *Mem, uint16_t PC)
+static byte da_XTHL(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "XTHL";
-  PRINTPS(nm);
+  Serial.print(F("XTHL"));
   return 1;
 }
 
-byte da_XCHG(byte opcode, byte *Mem, uint16_t PC)
+static byte da_XCHG(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "XCHG";
-  PRINTPS(nm);
+  Serial.print(F("XCHG"));
   return 1;
 }
 
-byte da_OUT(byte opcode, byte *Mem, uint16_t PC)
+static byte da_OUT(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "OUT ";
-  PRINTPS(nm);
+  Serial.print(F("OUT "));
   numsys_print_byte(MREAD(PC+1));  
   return 2;
 }
 
 
-byte da_IN(byte opcode, byte *Mem, uint16_t PC)
+static byte da_IN(byte opcode, byte *Mem, uint16_t PC)
 {
-  static const char PROGMEM nm[] = "IN ";
-  PRINTPS(nm);
+  Serial.print(F("IN "));
   numsys_print_byte(MREAD(PC+1));
   return 2;
 }
