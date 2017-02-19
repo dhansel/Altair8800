@@ -307,14 +307,6 @@ static byte da_NOP(byte opcode, byte *Mem, uint16_t PC)
   return 1;
 }
 
-static byte da_NUL(byte opcode, byte *Mem, uint16_t PC)
-{
-  Serial.print('<');
-  numsys_print_byte(opcode);
-  Serial.print('>');
-  return 1;
-}
-
 static byte da_PCHL(byte opcode, byte *Mem, uint16_t PC)
 {
   Serial.print(F("PCHL"));
@@ -611,6 +603,38 @@ static byte da_IN(byte opcode, byte *Mem, uint16_t PC)
   return 2;
 }
 
+
+static byte da_NUL(byte opcode, byte *Mem, uint16_t PC)
+{
+  byte res = 1;
+
+  Serial.print('<');
+  numsys_print_byte(opcode);
+  Serial.print(F("> ["));
+
+  // the following opcodes are not official but (at least on 
+  // the Intel 8080) behave like other opcodes. 
+  // => show the actual behavior when disassembling
+  switch( opcode )
+    {
+    case 0010:
+    case 0020:
+    case 0030:
+    case 0040:
+    case 0050:
+    case 0060:
+    case 0070: res = da_NOP(opcode, Mem, PC); break;
+    case 0313: res = da_JMP(opcode, Mem, PC); break;
+    case 0331: res = da_RET(opcode, Mem, PC); break;
+    case 0335:
+    case 0355:
+    case 0375: res = da_CALL(opcode, Mem, PC); break;
+    default:   res = 1; Serial.print(F("???")); break;
+    }
+
+  Serial.print(']');
+  return res;
+}
 
 const DAFUN da_opcodes[] PROGMEM = {
   da_NOP, da_LXI, da_STAX,da_INX, da_INR, da_DCR, da_MVI, da_RLC,		// 000-007 (0X00-0X07)
