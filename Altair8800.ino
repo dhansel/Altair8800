@@ -257,9 +257,15 @@ void process_inputs()
 	  if( (dswitch & 0xff)==0 )
 	    drive_dir();
 	  else if( drive_mount((dswitch >> 8) & 0x0f, dswitch & 0xff) )
-	    DBG_FILEOPS4(2, "mounted disk ", dswitch&0xff, F(" in drive "), (dswitch>>8) & 0x0f);
+	    {
+	      const char *desc = drive_disk_description(dswitch&0xff);
+	      if( desc==NULL )
+                DBG_FILEOPS4(2, "mounted new disk ", drive_disk_filename(dswitch&0xff, false), F(" in drive "), (dswitch>>8) & 0x0f);
+	      else
+		DBG_FILEOPS4(2, "mounted disk '", desc, F("' in drive "), (dswitch>>8) & 0x0f);
+	    }
 	  else
-	    DBG_FILEOPS4(1, "error mounting disk ", dswitch&0xff, F(" in drive "), (dswitch>>8) & 0x0f);
+	    DBG_FILEOPS4(1, "error mounting disk ", drive_disk_filename(dswitch&0xff, false), F(" in drive "), (dswitch>>8) & 0x0f);
 	}
       else
 	{

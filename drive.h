@@ -10,7 +10,7 @@
 
 void drive_setup();
 void drive_dir();
-const char *drive_disk_filename(byte disk_num);
+const char *drive_disk_filename(byte disk_num, bool check_exist = true);
 const char *drive_disk_description(byte disk_num);
 bool drive_mount(byte drive_num, byte disk_num);
 bool drive_unmount(byte drive_num);
