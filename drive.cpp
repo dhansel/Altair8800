@@ -28,7 +28,7 @@
 
 void drive_setup() {}
 void drive_dir() {}
-const char *drive_disk_filename(byte disk_num) { return NULL; }
+const char *drive_disk_filename(byte disk_num, bool check_exist) { return NULL; }
 const char *drive_disk_description(byte disk_num) { return NULL; }
 bool drive_mount(byte drive_num, byte disk_num) { return false; }
 bool drive_unmount(byte drive_num) { return false; }
