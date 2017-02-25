@@ -19,6 +19,8 @@
 
 #include <Arduino.h>
 #include "config.h"
+#include "prog_basic.h"
+#include "mem.h"
 
 #if defined(__AVR_ATmega2560__)
 
@@ -43,11 +45,20 @@ static byte     NULs     = 0;
 bool prog_examples_read_start(byte idx)
 {
   if( idx < sizeof(basic_programs)/sizeof(char *) ||
-      idx >= 0x80 && idx < 0x80+(sizeof(asm_programs)/sizeof(char *)) )
+      idx >= 0x80 && idx < 0x80+(sizeof(asm_programs)/sizeof(char *)) ||
+      idx == 0xc0 )
     {
       prog_idx = idx;
       prog_ctr = 0;
       NULs     = 0;
+
+      if( idx == 0xc0 )
+        {
+          // 4k BASIC will get into an infinite loop if a full 64k RAM are
+          // available => purposely reduce the RAM size by 1 byte
+          mem_set_ram_limit(0xfffe);
+        }
+
       return true;
     }
   else
@@ -65,6 +76,8 @@ bool prog_examples_read_next(byte dev, byte *b)
     }
   else if( prog_idx < 0x80 )
     *b = READ_EX_BYTE(basic_programs, prog_idx, prog_ctr);
+  else if( prog_idx == 0xC0 )
+    return prog_basic_read_4k(prog_ctr++, b);
   else
     *b = READ_EX_BYTE(asm_programs, prog_idx-0x80, prog_ctr);
 

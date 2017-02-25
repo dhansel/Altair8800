@@ -61,7 +61,8 @@ $(OBJ)/filesys.o: filesys.cpp filesys.h Arduino/Arduino.h host.h config.h \
 $(OBJ)/host_due.o: host_due.cpp
 $(OBJ)/host_mega.o: host_mega.cpp
 $(OBJ)/host_pc.o: host_pc.cpp Arduino/Arduino.h Altair8800.h mem.h config.h \
- host.h host_pc.h prog_basic.h breakpoint.h serial.h cpucore.h profile.h
+ host.h host_pc.h prog_basic.h breakpoint.h serial.h cpucore.h profile.h \
+ timer.h
 $(OBJ)/mem.o: mem.cpp Altair8800.h Arduino/Arduino.h mem.h config.h host.h \
  host_pc.h prog_basic.h breakpoint.h
 $(OBJ)/numsys.o: numsys.cpp Arduino/Arduino.h numsys.h mem.h config.h host.h \
@@ -69,10 +70,12 @@ $(OBJ)/numsys.o: numsys.cpp Arduino/Arduino.h numsys.h mem.h config.h host.h \
 $(OBJ)/profile.o: profile.cpp Arduino/Arduino.h profile.h config.h \
  disassembler.h timer.h host.h host_pc.h
 $(OBJ)/prog.o: prog.cpp Arduino/Arduino.h prog.h Altair8800.h prog_basic.h \
- prog_tools.h prog_games.h prog_ps2.h numsys.h host.h config.h host_pc.h
+ prog_tools.h prog_games.h prog_ps2.h numsys.h host.h config.h host_pc.h \
+ mem.h breakpoint.h
 $(OBJ)/prog_basic.o: prog_basic.cpp Arduino/Arduino.h prog_basic.h host.h \
- config.h host_pc.h mem.h breakpoint.h
+ config.h host_pc.h prog.h mem.h breakpoint.h
 $(OBJ)/prog_examples.o: prog_examples.cpp Arduino/Arduino.h config.h \
+ prog_basic.h mem.h host.h host_pc.h breakpoint.h \
  prog_examples_basic_due.h prog_examples_asm.h
 $(OBJ)/prog_games.o: prog_games.cpp Arduino/Arduino.h prog_games.h host.h \
  config.h host_pc.h

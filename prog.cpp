@@ -26,6 +26,7 @@
 #include "prog_ps2.h"
 #include "numsys.h"
 #include "host.h"
+#include "mem.h"
 
 
 struct prog_info_struct {
@@ -81,6 +82,7 @@ uint16_t prog_print_dir(byte *mem)
 
   Serial.println(F("10nnnnnn) [load memory page, nnnnnn=file number]"));
   Serial.println(F("11nnnnnn) [save memory page, nnnnnn=file number]"));
+  return 0;
 }
 
 
@@ -124,4 +126,56 @@ bool prog_load(byte n, uint16_t *pc, byte *mem)
     }
   else
     return false;
+}
+
+
+// C implementation of the Altair checksum loader
+// returns 0xffff on failure, otherwise returns the start address
+uint16_t prog_checksum_loader(const byte *tape, unsigned int tape_length)
+{
+  byte d, n, cs;
+  uint16_t addr;
+  
+  while( 1 )
+    {
+      if( tape_length<1 ) return 0xffff; else tape_length--;
+      d = pgm_read_byte(tape++);
+      switch( d )
+        {
+        case 0074:
+          {
+            // program load record
+            if( tape_length < 3 ) return 0xffff; else tape_length -= 3;
+            n     = pgm_read_byte(tape++);
+            cs    = pgm_read_byte(tape++);
+            d     = pgm_read_byte(tape++);
+            addr  = cs + d * 256;
+            cs    = cs + d;
+            if( tape_length < n+1 ) return 0xffff; else tape_length -= n+1;
+            do {
+              d = pgm_read_byte(tape++);
+              cs += d;
+              MWRITE(addr, d);
+              if( MREAD(addr) != d ) return 0xffff; // no memory at this address
+              addr++;
+              n--;
+            }
+            while( n>0 );
+            d = pgm_read_byte(tape++);
+            if( cs != d ) return 0xffff; // checksum error
+            break;
+          }
+
+        case 0170:
+          {
+            // EOF Record
+            if( tape_length < 2 ) return 0xffff; else tape_length -= 2;
+            addr  = pgm_read_byte(tape++);
+            addr += pgm_read_byte(tape++) * 256;
+            return addr;
+          }
+        }
+    }
+  
+  return 0xffff; // should never get here
 }

@@ -18,5 +18,6 @@
 byte  prog_find(const char *name);
 PGM_P prog_get_name(byte n);
 bool  prog_load(byte n, uint16_t *pc, byte *mem);
+uint16_t prog_checksum_loader(const byte *tape, unsigned int tape_length);
 
 #endif
