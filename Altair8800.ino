@@ -64,7 +64,7 @@ uint16_t  throttle_delay  = 0;
 void update_throttle()
 {
   uint32_t now   = micros();
-  uint32_t ratio = (200*THROTTLE_TIMER_PERIOD) / (now-throttle_micros);
+  uint32_t ratio = now==throttle_micros ? 0xffffffff : (200*THROTTLE_TIMER_PERIOD) / (now-throttle_micros);
 
   if( ratio>201 )
     throttle_delay += (uint16_t) HOST_PERFORMANCE_FACTOR;
@@ -360,10 +360,10 @@ byte read_device()
 {
   byte dev = 0xff;
 
-  Serial.print(F("(s=SIO,a=ACR,1=2SIO-1, 2=2SIO-2, ESC=abort): "));
+  Serial.print(F("(s=SIO,a=ACR,1=2SIO-1, 2=2SIO-2, SPACE=last, ESC=abort): "));
 
   int c = -1;
-  while( c!='s' && c!='a' && c!='1' && c!='2' && c!=27)
+  while( c!='s' && c!='a' && c!='1' && c!='2' && c!=' ' && c!=27 )
     c = serial_read();
 
   if( c!=27 )
@@ -374,6 +374,7 @@ byte read_device()
 	case 'a': dev = CSM_ACR;   break;
 	case '1': dev = CSM_2SIO1; break;
 	case '2': dev = CSM_2SIO2; break;
+        case ' ': dev = 0x80;      break;
 	}
 
       Serial.print((char) c);
@@ -385,8 +386,6 @@ byte read_device()
 
 void read_inputs_serial()
 {
-  byte b;
-
   if( !config_serial_input_enabled() )
     return;
 
@@ -434,7 +433,7 @@ void read_inputs_serial()
       if( dev < 0xff )
 	{
 	  cswitch |=BIT(SW_AUX2UP);
-	  dswitch = 0x8000 | (dev << 13);
+	  dswitch = dev==0x80 ? 0 : 0x8000 | (dev << 13);
 	  if( !serial_capture_running(dev) )
 	    {
 	      Serial.print(F(" File #: "));
@@ -454,10 +453,10 @@ void read_inputs_serial()
 	  // if the replay device is mapped to the primary host console
 	  // then we must run immediately because otherwise the debugging
           // console will consume the replayed characters
-	  if( config_serial_map_sim_to_host(dev)==config_host_serial_primary() )
+	  if( dev==0x80 || config_serial_map_sim_to_host(dev)==config_host_serial_primary() )
 	    cswitch |= BIT(SW_RUN);
 
-          dswitch = 0x8000 | (dev << 13);
+	  dswitch = dev==0x80 ? 0 : 0x8000 | (dev << 13);
           if( !serial_replay_running(dev) )
             {
 	      char c;
@@ -540,7 +539,7 @@ void read_inputs_serial()
       while( len>0 )
         {
           Serial.write(' ');
-          Mem[addr] = numsys_read_word();
+          Mem[addr] = (byte) numsys_read_word();
           ++addr;
           --len;
         }
@@ -582,7 +581,7 @@ void read_inputs_serial()
 
 void print_panel_serial(bool force)
 {
-  byte i, dbus;
+  byte dbus;
   static uint16_t p_dswitch = 0, p_cswitch = 0, p_abus = 0xffff, p_dbus = 0xffff, p_status = 0xffff;
   uint16_t status, abus;
 
@@ -808,7 +807,7 @@ void rtc_setup()
     }
   else
     {
-      timer_setup(TIMER_RTC, 1000000.0/rate, altair_rtc_interrupt);
+      timer_setup(TIMER_RTC, (uint32_t) (1000000.0/rate), altair_rtc_interrupt);
       if( altair_rtc_running ) timer_start(TIMER_RTC, 0, true);
       //printf("RTC enabled: %f %i\n", rate, (int) (1000000.0/rate));
     }
@@ -1101,8 +1100,6 @@ byte altair_in(byte addr)
 
 void setup() 
 {
-  int i;
-
   cswitch = 0;
   dswitch = 0;
 
@@ -1181,11 +1178,11 @@ void loop()
         {
           timer_setup(TIMER_THROTTLE, 0, update_throttle);
           timer_start(TIMER_THROTTLE, THROTTLE_TIMER_PERIOD, true);
-          throttle_delay  = 10 * HOST_PERFORMANCE_FACTOR;
+          throttle_delay  = (uint16_t) (10.0 * HOST_PERFORMANCE_FACTOR);
           throttle_micros = micros();
         }
       else
-        throttle_delay = config_throttle() * HOST_PERFORMANCE_FACTOR;
+        throttle_delay = (uint16_t) (config_throttle() * HOST_PERFORMANCE_FACTOR);
 #endif
 
       while( true )
