@@ -53,7 +53,7 @@ static byte dir_get_num_entries()
   return n;
 }
 
-static bool dir_set_num_entries(byte n)
+static void dir_set_num_entries(byte n)
 {
   host_write_data(&n, HOST_STORAGESIZE-4, 1);
   dir_start = HOST_STORAGESIZE-4-(n*sizeof(struct DirEntryStruct));
@@ -376,6 +376,8 @@ bool filesys_eof(byte fid)
       return entry->pos + entry->len + 1 >= dir_start;
 #endif
     }
+  else
+	return true;
 }
 
 
@@ -568,7 +570,7 @@ void filesys_manage()
         case 'd':
           {
             Serial.print(F("\nDelete file with id: "));
-            byte i = numsys_read_word();
+            byte i = (byte) numsys_read_word();
             Serial.print(F("\nReally delete file with id "));
             numsys_print_byte(i);
             Serial.print(F(" (y/n)? "));
@@ -581,7 +583,7 @@ void filesys_manage()
         case 'r':
           {
             Serial.print(F("\nRead file with id: "));
-            byte i = numsys_read_word();
+            byte i = (byte) numsys_read_word();
             Serial.println();
             
             struct DirEntryStruct entry;
@@ -590,10 +592,9 @@ void filesys_manage()
             byte fid = filesys_open_read(entry.name1, entry.name2);
             if( fid )
               {
-                char *c;
-                uint16_t addr = 0, n;
-                byte i, buf[16];
-                while( (n=filesys_read_data(fid, &buf, 16))>0 )
+                uint16_t addr = 0;
+                byte n, i, buf[16];
+                while( (n=(byte) filesys_read_data(fid, &buf, 16))>0 )
                   {
                     numsys_print_word(addr); Serial.print(':'); Serial.print(' ');
                     for(i=0; i<n; i++)
