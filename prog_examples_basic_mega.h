@@ -11,7 +11,6 @@
 // [this gets included from prog_examples.cpp]
 
 const char PROGMEM craps_bas[] = 
-  "NEW\r "
   "100 REM  NAME--CRAPS\r"
   "110 REM\r"
   "120 REM  DESCRIPTIONS--A SESSION AT THE CRAPS TABLE.\r"
@@ -110,7 +109,6 @@ const char PROGMEM craps_bas[] =
   "1050 END\r";
 
 const char PROGMEM primes_bas[] = 
-  "NEW\r "
   "100 PRINT \"Interface Age Prime-Number Benchmark Program\"\r"
   "110 FOR N=1 TO 200\r"
   "120 FOR K=2 TO 100\r"
@@ -129,7 +127,6 @@ const char PROGMEM primes_bas[] =
   "250 END\r";
 
 const char PROGMEM primes_sieve_bas[] = 
-  "NEW\r "
   "100 REM  NAME--SIEVE\r"
   "110 REM\r"
   "120 REM  DISCRIPTION--DEMONSTRATES SIEVE METHOD OF FINDING PRIMES.\r"
@@ -166,7 +163,6 @@ const char PROGMEM primes_sieve_bas[] =
   "430 END\r";
 
 const char PROGMEM nim_bas[] = 
-  "NEW\r "
   "100 REM  NAME--NIM\r"
   "110 REM\r"
   "120 REM  DESCRIPTION--PLAYS THE ANCIENT GAME OF NIM.\r"
@@ -267,7 +263,6 @@ const char PROGMEM nim_bas[] =
   "1060 END\r";
 
 const char PROGMEM rock_paper_scissors_bas[] = 
-  "NEW\r "
   "1 PRINT \"THIS PROGRAM ALLOWS YOU TO PLAY THE OLD GAME OF\"\r"
   "2 PRINT \"ROCKS, PAPER, AND SISSORS AGAINST THE COMPUTER.\"\r"
   "6 PRINT \"HOW MANY GAMES DO YOU WANT \";:INPUT Q\r"
@@ -306,7 +301,6 @@ const char PROGMEM rock_paper_scissors_bas[] =
   "200 END\r";
 
 const char PROGMEM tic_tac_toe_bas[] = 
-  "NEW\r "
   "1 DATA 2,3,4,9,1,5,8,7,6 \r"
   "2 DATA 2,3,4,9,1,5,8,7,6,2,9,8,3,1,7 \r"
   "3 DATA 4,5,6,2,1,6,4,1,8 \r"
@@ -446,7 +440,6 @@ const char PROGMEM tic_tac_toe_bas[] =
   "999 END\r";
 
 const char PROGMEM hamurabi_bas[] = 
-  "NEW\r "
   "10 REM ORIGINAL HAMURABI IN IMSAI 4K BASIC\r"
   "20 REM FROM REVISION REWRITTEN 12/11/77\r"
   "310 PRINT \"HAMURABI - \";\r"
@@ -554,7 +547,6 @@ const char PROGMEM hamurabi_bas[] =
   "9040 RETURN\r";
 
 const char PROGMEM histogram_bas[] = 
-  "NEW\r "
   "100 REM  NAME--HISTGRAM\r"
   "110 REM\r"
   "120 REM  DESCRIPTION--PLOTS A HISTOGRAM OF SCORES ON A TEST.\r"
@@ -600,7 +592,6 @@ const char PROGMEM histogram_bas[] =
   "2000 END\r";
 
 const char PROGMEM power_bas[] = 
-  "NEW\r "
   "10 REM RECURSIVE INTEGERAL POWER\r"
   "20 PRINT \"ENTER A NUMBER TO RAISE TO A POWER:\";\r"
   "30 INPUT X\r"
@@ -617,7 +608,6 @@ const char PROGMEM power_bas[] =
   "140 RETURN\r";
 
 const char PROGMEM sin_bas[] = 
-  "NEW\r "
   "10 PRINT \"Y = SIN X\"\r"
   "20 PRINT\r"
   "30 LET L=20\r"
@@ -656,7 +646,6 @@ const char PROGMEM sin_bas[] =
 
 /*
 const char PROGMEM snoopy_bas[] = 
-  "NEW\r "
   "100 REM PORT FROM BP-80 SYSTEM (NO CHANGES)\r"
   "110 DIM L(80)\r"
   "120 FOR T=1 TO 63\r"
@@ -774,7 +763,6 @@ const char PROGMEM snoopy_bas[] =
 */
 
 const char PROGMEM birthday_bas[] = 
-  "NEW\r "
   "100 REM BIRTHDAY UPDATED 5-5-77 TO \"MITS\" BY D. NIXON \r"
   "110   DIM Z$(12),L(12),N(60),Y$(7)   \r"
   "120   DIM G$(12),H$(32)  \r"
@@ -928,7 +916,6 @@ const char PROGMEM birthday_bas[] =
   "1600 END\r";
 
 const char PROGMEM mastermind_bas[] = 
-  "NEW\r "
   "2 PRINT TAB(30);\"MASTERMIND\"\r"
   "4 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "6 PRINT: PRINT: PRINT\r"
@@ -1163,7 +1150,6 @@ const char PROGMEM mastermind_bas[] =
   "9999 END\r";
 
 const char PROGMEM golf_bas[] = 
-  "NEW\r "
   "1 PRINT TAB(34);\"GOLF\"\r"
   "2 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "3 PRINT:PRINT:PRINT\r"
@@ -1410,7 +1396,6 @@ const char PROGMEM golf_bas[] =
   "1770 END\r";
 
 const char PROGMEM dir[] = 
-  "NEW\r "
   "0  \"0000) [this directory]\"\r"
   "1  \"0001) CRAPS GAME\"\r"
   "2  \"0010) NIM GAME\"\r"
@@ -1426,7 +1411,7 @@ const char PROGMEM dir[] =
   "12 \"1100) SIN\"\r"
   "13 \"1101) BIRTHDAY\"\r"
   //"14 \"1110) SNOOPY\"\r"
-  "NEW\r";
+  ;
 
 
 

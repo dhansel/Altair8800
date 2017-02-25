@@ -16,7 +16,6 @@
 #ifdef USE_SHORT_EXAMPLE_LIST
 
 const char PROGMEM primes_bas[] = 
-  "NEW\r "
   "100 PRINT \"Interface Age Prime-Number Benchmark Program\"\r"
   "110 FOR N=1 TO 200\r"
   "120 FOR K=2 TO 100\r"
@@ -36,10 +35,8 @@ const char PROGMEM primes_bas[] =
 
 
 const char dir[] = 
-  "NEW\r "
   "0  \"0000) [this directory]\"\r"
-  "1  \"0001) PRIMES\"\r"
-  "NEW\r";
+  "1  \"0001) PRIMES\"\r";
 
 
 const char * const basic_programs[]  = { 
@@ -52,7 +49,6 @@ const char * const basic_programs[]  = {
 
 
 const char basic_23_match[] =
-  "NEW\r "
   "20 PRINT TAB(31);\"23 MATCHES\"\r"
   "30 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "40 PRINT:PRINT:PRINT\r"
@@ -120,7 +116,6 @@ const char basic_23_match[] =
   "";
 
 const char basic_amazing[] =
-  "NEW\r "
   "10 PRINT TAB(28);\"AMAZING PROGRAM\"\r"
   "20 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "30 PRINT:PRINT:PRINT:PRINT\r"
@@ -262,7 +257,6 @@ const char basic_amazing[] =
   "";
 
 const char basic_baccarat[] =
-  "NEW\r "
   "100 REM (SOURCE UNKNOWN) EDITED SLIGHTLY BY D. KURLAND 11/6/75\r"
   "110 PRINT \"WELCOME TO CASINO UNIVAC 1108\" \r"
   "120 PRINT \"THE GAME IS BACCARAT\"  \r"
@@ -420,7 +414,6 @@ const char basic_baccarat[] =
   "";
 
 const char basic_baseball[] =
-  "NEW\r "
   "100 REM BASEBALL SIMULATION PROGRAM\r"
   "110 REM WRITTEN BY JOEL LIND & KEN BIRKMAN - NYU - JULY 1973\r"
   "120 REM STOLEN AND ENHANCED DECEMBER 1973 BY R. D. KURLAND - NYU\r"
@@ -978,7 +971,6 @@ const char basic_baseball[] =
   "";
 
 const char basic_basketbl[] =
-  "NEW\r "
   "5 PRINT TAB(31);\"BASKETBALL\"\r"
   "7 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "8 PRINT:PRINT:PRINT\r"
@@ -1178,7 +1170,6 @@ const char basic_basketbl[] =
   "";
 
 const char basic_battle[] =
-  "NEW\r "
   "5 PRINT TAB(33);\"BATTLE\"\r"
   "7 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "10 REM -- BATTLE WRITTEN BY RAY WESTERGARD  10/70\r"
@@ -1378,7 +1369,6 @@ const char basic_battle[] =
   "";
 
 const char basic_birthday[] =
-  "NEW\r "
   "100 REM BIRTHDAY UPDATED 5-5-77 TO \"MITS\" BY D. NIXON \r"
   "110   DIM Z$(12),L(12),N(60),Y$(7)   \r"
   "120   DIM G$(12),H$(32)  \r"
@@ -1533,7 +1523,6 @@ const char basic_birthday[] =
   "";
 
 const char basic_blackjack[] =
-  "NEW\r "
   "100 REM *** B L A C K J A C K ***\r"
   "101 WIDTH 80\r"
   "110 DIM D(208),H(16),O(16),P(16,11),Q(11),S(16),X(16)\r"
@@ -1701,7 +1690,6 @@ const char basic_blackjack[] =
   "";
 
 const char basic_bombard[] =
-  "NEW\r "
   "10 PRINT TAB(33);\"BOMBARDMENT\"\r"
   "20 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "30 PRINT:PRINT:PRINT\r"
@@ -1798,7 +1786,6 @@ const char basic_bombard[] =
   "";
 
 const char basic_budget[] =
-  "NEW\r "
   "100 REM TYPED BY CONNIE FOSTER ,CORRECTED BY C.FOSTER ,PROG BY O.E.DIAL\r"
   "110 REM ALL REM STATEMENTS CAN BE CHANGED TO ALLOW USE OF TWO TERMINALS\r"
   "120 REM SEE ARTICLE IN PERSONAL COMPUTING MAY/JUNE 77\r"
@@ -2018,7 +2005,6 @@ const char basic_budget[] =
   "";
 
 const char basic_chase[] =
-  "NEW\r "
   "100 PRINT \"THIS IS THE GAME OF CHASE\"\r"
   "110 PRINT \"WANT INSTRUCTIONS\";\r"
   "120 INPUT C$\r"
@@ -2130,7 +2116,6 @@ const char basic_chase[] =
   "";
 
 const char basic_checkers[] =
-  "NEW\r "
   "5 PRINT TAB(32);\"CHECKERS\"\r"
   "10 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "15 PRINT:PRINT:PRINT\r"
@@ -2216,7 +2201,6 @@ const char basic_checkers[] =
   "";
 
 const char basic_chess[] =
-  "NEW\r "
   "100 REM--CHESS BY RANDY MILLER, JAN, 1976\r"
   "110 DEFINT A-Z:DEFSNG E:DEFSNG M:DEFSNG P\r"
   "120 DIM PS(70,3),MV(35,2),V(32)\r"
@@ -2716,7 +2700,6 @@ const char basic_chess[] =
   "";
 
 const char basic_civilwar[] =
-  "NEW\r "
   "100 LET L=0:LET W=0:LET R1=0:LET P1=0\r"
   "110 LET Q1=0:LET M3=0:LET M4=0\r"
   "120 LET P2=0:LET T1=0:LET T2=0\r"
@@ -2959,7 +2942,6 @@ const char basic_civilwar[] =
   "";
 
 const char basic_climates[] =
-  "NEW\r "
   "100 REM--E.A.GALLETTA,PATCHOGUE-H.S.,4/22/69 EARTH SIENCE (BIICAC)\r"
   "110 REM--PROGRAM ON CLIMATES  \r"
   "120 REM--REWRITTEN--7/28/69--BASIC--<ROD> \r"
@@ -3160,7 +3142,6 @@ const char basic_climates[] =
   "";
 
 const char basic_cloud_9[] =
-  "NEW\r "
   "10 REM--A.C.CAGGIANO+E.A.GALLETTA, PATCHOGUE H.S., 11-20-68 \r"
   "11 REM--REVISED BY CHARLES LOSIK AND TONY PEREZ 7/18/69 \r"
   "12 REM RE-REVISED BY C.LOSIK 8-26-70\r"
@@ -3362,7 +3343,6 @@ const char basic_cloud_9[] =
   "";
 
 const char basic_craps[] =
-  "NEW\r "
   "100 REM  NAME--CRAPS\r"
   "110 REM\r"
   "120 REM  DESCRIPTIONS--A SESSION AT THE CRAPS TABLE.\r"
@@ -3462,7 +3442,6 @@ const char basic_craps[] =
   "";
 
 const char basic_crazy_8[] =
-  "NEW\r "
   "100  REM SOURCE UNKNOWN:  REVISED BY D. KURLAND  11/16/75 \r"
   "110 PRINT \"THIS IS THE GAME OF CRAZY EIGHTS\" \r"
   "120 DIM A(52),D(52),G(52),H(52) \r"
@@ -3730,7 +3709,6 @@ const char basic_crazy_8[] =
   "";
 
 const char basic_cube[] =
-  "NEW\r "
   "10 PRINT TAB(34);\"CUBE\"\r"
   "20 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "30 PRINT : PRINT : PRINT\r"
@@ -3895,7 +3873,6 @@ const char basic_cube[] =
   "";
 
 const char basic_evenwin[] =
-  "NEW\r "
   "1 PRINT TAB(31);\"EVEN WINS\"\r"
   "2 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "3 PRINT:PRINT\r"
@@ -4027,7 +4004,6 @@ const char basic_evenwin[] =
   "";
 
 const char basic_flipflop[] =
-  "NEW\r "
   "2 PRINT TAB(32);\"FLIPFLOP\"\r"
   "4 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "6 PRINT\r"
@@ -4110,7 +4086,6 @@ const char basic_flipflop[] =
   "";
 
 const char basic_football[] =
-  "NEW\r "
   "10 REM   THIS DEMONSTRATION IS CONVERTED FROM PDP-11 BASIC\r"
   "20 PRINT \"IF YOU NEED INSTRUCTIONS FOR PLAYING FOOTBALL, TYPE A 1\";\r"
   "30 INPUT I\r"
@@ -4494,7 +4469,6 @@ const char basic_football[] =
   "";
 
 const char basic_galaxy[] =
-  "NEW\r "
   "100 REM		<< GALAXY >>\r"
   "101 WIDTH 79\r"
   "102 DIM G$(15)\r"
@@ -4545,7 +4519,6 @@ const char basic_galaxy[] =
   "";
 
 const char basic_hamurabi[] =
-  "NEW\r "
   "10 REM ORIGINAL HAMURABI IN IMSAI 4K BASIC\r"
   "20 REM FROM REVISION REWRITTEN 12/11/77\r"
   "310 PRINT \"HAMURABI - \";\r"
@@ -4655,7 +4628,6 @@ const char basic_hamurabi[] =
   "";
 
 const char basic_hangman[] =
-  "NEW\r "
   "10 PRINT TAB(32);\"HANGMAN\"\r"
   "20 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "25 PRINT:PRINT:PRINT\r"
@@ -4740,7 +4712,6 @@ const char basic_hangman[] =
   "";
 
 const char basic_histogram[] =
-  "NEW\r "
   "100 REM  NAME--HISTGRAM\r"
   "110 REM\r"
   "120 REM  DESCRIPTION--PLOTS A HISTOGRAM OF SCORES ON A TEST.\r"
@@ -4786,7 +4757,6 @@ const char basic_histogram[] =
   "2000 END\r";
 
 const char basic_isprime[] =
-  "NEW\r "
   "100 PRINT \"Interface Age Prime-Number Benchmark Program\"\r"
   "110 FOR N=1 TO 1000\r"
   "120 FOR K=2 TO 500\r"
@@ -4806,7 +4776,6 @@ const char basic_isprime[] =
   "";
 
 const char basic_king[] =
-  "NEW\r "
   "1 REM JIM STORER\r"
   "2 PRINT \"HOW MANY TIMES HAVE YOU PLAYED\";\r"
   "3 INPUT Z\r"
@@ -5058,7 +5027,6 @@ const char basic_king[] =
   "2046 END\r";
 
 const char basic_lander[] =
-  "NEW\r "
   "100 REM----------------------------------------------------\r"
   "101 REM       L  A  N  D  E  R\r"
   "102 REM----------------------------------------------------\r"
@@ -5206,7 +5174,6 @@ const char basic_lander[] =
   "";
 
 const char basic_life[] =
-  "NEW\r "
   "2 PRINT TAB(33);\"LIFE2\"\r"
   "4 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "6 PRINT: PRINT: PRINT\r"
@@ -5293,7 +5260,6 @@ const char basic_life[] =
   "";
 
 const char basic_mastermind[] =
-  "NEW\r "
   "2 PRINT TAB(30);\"MASTERMIND\"\r"
   "4 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "6 PRINT: PRINT: PRINT\r"
@@ -5529,7 +5495,6 @@ const char basic_mastermind[] =
   "";
 
 const char basic_monoply[] =
-  "NEW\r "
   "10 DIM P$(41),S(41),R(41),V(41),J(41),M(41),K(21),L(41),C(41),B(41),O(41)\r"
   "20 PRINT \"HOW MANY PLAYERS\";\r"
   "30 PRINT \"(TYPE '0' FOR INSTRUCTIONS)\";\r"
@@ -6581,7 +6546,6 @@ const char basic_monoply[] =
   "";
 
 const char basic_orbit[] =
-  "NEW\r "
   "2 PRINT TAB(33);\"ORBIT\"\r"
   "4 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "6 PRINT:PRINT:PRINT\r"
@@ -6681,7 +6645,6 @@ const char basic_orbit[] =
   "";
 
 const char basic_pizza[] =
-  "NEW\r "
   "5 PRINT TAB(33);\"PIZZA\"\r"
   "10 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "15 PRINT: PRINT: PRINT\r"
@@ -6753,7 +6716,6 @@ const char basic_pizza[] =
   "";
 
 const char basic_poker[] =
-  "NEW\r "
   "2 PRINT TAB(33);\"POKER\"\r"
   "4 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "6 PRINT: PRINT: PRINT\r"
@@ -7173,7 +7135,6 @@ const char basic_poker[] =
   "";
 
 const char basic_power[] =
-  "NEW\r "
   "10 REM RECURSIVE INTEGERAL POWER\r"
   "20 PRINT \"ENTER A NUMBER TO RAISE TO A POWER:\";\r"
   "30 INPUT X\r"
@@ -7191,7 +7152,6 @@ const char basic_power[] =
   "";
 
 const char basic_powers[] =
-  "NEW\r "
   "10 REM :GENERATE LOTS OF POWERS OF X.\r"
   "20 REM :\"X\" IS GIVEN BY THE USER.\r"
   "30 REM :THE ARRAY -N\" STORES LARGE NUMBERS, ONE \r"
@@ -7268,7 +7228,6 @@ const char basic_powers[] =
   "";
 
 const char basic_qubic[] =
-  "NEW\r "
   "50 PRINT CHR$(26):WIDTH 80\r"
   "100 PRINT TAB(33);\"QUBIC\":PRINT\r"
   "110 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
@@ -7553,7 +7512,6 @@ const char basic_qubic[] =
   "";
 
 const char basic_rock_paper_scissors[] =
-  "NEW\r "
   "1 PRINT \"THIS PROGRAM ALLOWS YOU TO PLAY THE OLD GAME OF\"\r"
   "2 PRINT \"ROCKS, PAPER, AND SISSORS AGAINST THE COMPUTER.\"\r"
   "6 PRINT \"HOW MANY GAMES DO YOU WANT \";:INPUT Q\r"
@@ -7593,7 +7551,6 @@ const char basic_rock_paper_scissors[] =
   "";
 
 const char basic_rose[] =
-  "NEW\r "
   "1 REM CLEAR SCREEN & VERT TAB 10\r"
   "10  PRINT  TAB( 6)\"** PETALS AROUND THE ROSE **\"\r"
   "20  FOR ZZ = 1 TO 3000: NEXT \r"
@@ -7713,7 +7670,6 @@ const char basic_rose[] =
   "";
 
 const char basic_seawar[] =
-  "NEW\r "
   "5 REM *** DEBUGGED AND CONVERTED TO BASIC-PLUS (PDP-11) BY DAVE AHL\r"
   "6 REM *** CONVERTED TO 4K BASIC BY D GILLIS\r"
   "10 PRINT \"YOU COMMAND A FLEET OF SHIPS OPERATING IN ENEMY TERRITORY!!!\"\r"
@@ -7958,7 +7914,6 @@ const char basic_seawar[] =
   "";
 
 const char basic_sieve[] =
-  "NEW\r "
   "100 REM  NAME--SIEVE\r"
   "110 REM\r"
   "120 REM  DISCRIPTION--DEMONSTRATES SIEVE METHOD OF FINDING PRIMES.\r"
@@ -7996,7 +7951,6 @@ const char basic_sieve[] =
   "";
 
 const char basic_sin[] =
-  "NEW\r "
   "10 PRINT \"Y = SIN X\"\r"
   "20 PRINT\r"
   "30 LET L=20\r"
@@ -8033,7 +7987,6 @@ const char basic_sin[] =
   "260 END\r";
 
 const char basic_snoopy[] =
-  "NEW\r "
   "100 REM PORT FROM BP-80 SYSTEM (NO CHANGES)\r"
   "110 DIM L(80)\r"
   "120 FOR T=1 TO 63\r"
@@ -8151,7 +8104,6 @@ const char basic_snoopy[] =
   "";
 
 const char basic_square[] =
-  "NEW\r "
   "100 REM  ** SQUARE **\r"
   "110 REM\r"
   "120 REM  WRITTEN BY MAC OGLESBY\r"
@@ -8352,7 +8304,6 @@ const char basic_square[] =
   "";
 
 const char basic_startrek[] =
-  "NEW\r "
   "10 REM: MODIFIED FOR ALTAIR BASIC BY ROGER AMIDON AND DOUG MOSER.\r"
   "20 PRINT:PRINT:PRINT TAB(15);\"******  S T A R   T R E K  ******\"\r"
   "25 PRINT:PRINT\r"
@@ -8884,7 +8835,6 @@ const char basic_startrek[] =
   "";
 
 const char basic_swarms[] =
-  "NEW\r "
   "100 'SWARMS2 - YET ANOTHER GEM FROM 'ZOSO'\r"
   "110 CLEAR : CLEAR 1000\r"
   "120 PRINT CHR$(26);\"!!!!! ATTENTION: THE BEES ARE ATTACKING !!!!!!\"\r"
@@ -9404,7 +9354,6 @@ const char basic_swarms[] =
   "";
 
 const char basic_tic_tac_toe[] =
-  "NEW\r "
   "1 DATA 2,3,4,9,1,5,8,7,6 \r"
   "2 DATA 2,3,4,9,1,5,8,7,6,2,9,8,3,1,7 \r"
   "3 DATA 4,5,6,2,1,6,4,1,8 \r"
@@ -9545,7 +9494,6 @@ const char basic_tic_tac_toe[] =
   "";
 
 const char basic_towers[] =
-  "NEW\r "
   "10 PRINT TAB(33);\"TOWERS\"\r"
   "20 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "30 PRINT:PRINT:PRINT\r"
@@ -9674,7 +9622,6 @@ const char basic_towers[] =
   "";
 
 const char basic_weather[] =
-  "NEW\r "
   "100 DIM S$(10)\r"
   "110 PRINT\"THIS PROGRAM WILL ATTEMPT TO PREDICT TOMORROWS WEATHER IF\"   \r"
   "120 PRINT\"GIVEN THE WEATHER STATISTICS FROM THE PAST TWO DAYS.\"\r"
@@ -9931,7 +9878,6 @@ const char basic_weather[] =
   "";
 
 const char basic_word_puzzle[] =
-  "NEW\r "
   "100 CLEAR 1200\r"
   "110 B$=\".\"\r"
   "120 INPUT\"INPUT X AND Y DIMENSIONS \";X,Y\r"
@@ -10153,7 +10099,6 @@ const char basic_word_puzzle[] =
   "";
 
 const char basic_wumpus[] =
-  "NEW\r "
   ""
   "1 REM WUMPUS 1/28/77\r"
   "2 REM MODIFIED FOR ALTAIR 4K BASIC 10/01\r"
@@ -10500,7 +10445,6 @@ const char basic_wumpus[] =
   "9000 END\r";
 
 const char basic_dir[] =
-  "NEW\r "
   "0  \"00000001) [this directory]\"\r"
   "1  \"00000001) 23-match\"\r"
   "2  \"00000010) amazing\"\r"
