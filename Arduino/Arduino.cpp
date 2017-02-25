@@ -1,6 +1,7 @@
 #include "Arduino.h"
 
 #include <stdio.h>
+#include <string>
 #include <iostream>
 #include <sys/timeb.h>
 using namespace std;
@@ -88,11 +89,11 @@ void SerialClass::println(double d)  { cout << d << endl; }
 static bool kbhit_prev_result = false;
 static unsigned long kbhit_next_check = 0;
 
-char SerialClass::peek() { if( kbhit() ) { char c =  getch(); ungetch(c); return c; } else return 0; }
+char SerialClass::peek() { if( _kbhit() ) { char c =  _getch(); _ungetch(c); return c; } else return 0; }
 bool SerialClass::availableForWrite() { return true; }
 
 #ifdef _WIN32
-void SerialClass::write(char c) { cout << (c==127 ? "\b \b" : string(1,c)) << flush; }
+void SerialClass::write(char c) { cout << (c==127 ? string("\b \b") : string(1,c)) << flush; }
 #else
 void SerialClass::write(char c) { cout << (c=='\n' ? "\r\n" : (c==127 ? "\b \b" : string(1,c))) << flush; }
 #endif
@@ -122,7 +123,7 @@ bool SerialClass::available()
 { 
   if( !kbhit_prev_result && millis()>kbhit_next_check )
     {
-      kbhit_prev_result = kbhit();
+      kbhit_prev_result = kbhit() ? true : false;
       kbhit_next_check  = millis()+10;
     }
 
