@@ -929,16 +929,21 @@ void host_setup()
 int host_get_file_size(const char *filename)
 {
   int res = -1;
-  bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
 
-  File f = SD.open(filename, FILE_READ);
-  if( f )
+  if( use_sd )
     {
-      res = f.size();
-      f.close();
+      bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
+      
+      File f = SD.open(filename, FILE_READ);
+      if( f )
+        {
+          res = f.size();
+          f.close();
+        }
+      
+      if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
     }
 
-  if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
   return res;
 }
 
@@ -946,16 +951,20 @@ int host_get_file_size(const char *filename)
 bool host_file_exists(const char *filename)
 {
   bool res = false;
-  bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
 
-  File f = SD.open(filename, FILE_READ);
-  if( f )
+  if( use_sd )
     {
-      f.close();
-      res = true;
+      bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
+      
+      File f = SD.open(filename, FILE_READ);
+      if( f )
+        {
+          f.close();
+          res = true;
+        }
+      if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
     }
 
-  if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
   return res;
 }
 
