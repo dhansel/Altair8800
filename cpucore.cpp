@@ -74,7 +74,6 @@ inline uint16_t MEM_READ_WORD(uint16_t addr)
   else
     {
       byte l, h;
-      uint16_t res;
       host_set_status_leds_READMEM();
       host_set_addr_leds(addr);
       l = MREAD(addr);
@@ -207,8 +206,8 @@ inline uint16_t popStackWord()
     if(regS & PS_CARRY) w++; \
     setHalfCarryBitAdd(regA, reg ## REG, w); \
     setCarryBit(w&0x100); \
-    setStatusBits(w); \
-    regA = w; \
+    setStatusBits((byte) w); \
+    regA = (byte) w; \
     TIMER_ADD_CYCLES(4); \
   }
 
@@ -227,8 +226,8 @@ CPU_ADC(A);
     uint16_t w = regA + reg ## REG; \
     setCarryBit(w&0x100); \
     setHalfCarryBitAdd(regA, reg ## REG, w); \
-    setStatusBits(w); \
-    regA = w; \
+    setStatusBits((byte) w); \
+    regA = (byte) w; \
     TIMER_ADD_CYCLES(4); \
   }
 
@@ -248,8 +247,8 @@ CPU_ADD(A);
     if(regS & PS_CARRY) w--; \
     setHalfCarryBitSub(regA, reg ## REG, w); \
     setCarryBit(w&0x100); \
-    setStatusBits(w); \
-    regA = w; \
+    setStatusBits((byte) w); \
+    regA = (byte) w; \
     TIMER_ADD_CYCLES(4); \
   }
 
@@ -268,8 +267,8 @@ CPU_SBB(A);
     uint16_t w = regA - reg ## REG; \
     setCarryBit(w&0x100); \
     setHalfCarryBitSub(regA, reg ## REG, w); \
-    setStatusBits(w); \
-    regA = w; \
+    setStatusBits((byte) w); \
+    regA = (byte) w; \
     TIMER_ADD_CYCLES(4); \
   }
 
@@ -346,8 +345,8 @@ void cpu_ADCM()
   if(regS & PS_CARRY) w++; 
   setHalfCarryBitAdd(regA, opd2, w);
   setCarryBit(w&0x100);
-  setStatusBits(w);
-  regA = w;
+  setStatusBits((byte) w);
+  regA = (byte) w;
   TIMER_ADD_CYCLES(7);
 }
 
@@ -357,8 +356,8 @@ void cpu_ADDM()
   uint16_t w    = regA + opd2;
   setCarryBit(w&0x100);
   setHalfCarryBitAdd(regA, opd2, w);
-  setStatusBits(w);
-  regA = w;
+  setStatusBits((byte) w);
+  regA = (byte) w;
   TIMER_ADD_CYCLES(7);
 }
 
@@ -369,8 +368,8 @@ void cpu_SBBM()
   if(regS & PS_CARRY) w--; 
   setHalfCarryBitSub(regA, opd2, w);
   setCarryBit(w&0x100);
-  setStatusBits(w);
-  regA = w;
+  setStatusBits((byte) w);
+  regA = (byte) w;
   TIMER_ADD_CYCLES(7);
 }
 
@@ -380,8 +379,8 @@ void cpu_SUBM()
   uint16_t w    = regA - opd2;
   setCarryBit(w&0x100);
   setHalfCarryBitSub(regA, opd2, w);
-  setStatusBits(w);
-  regA = w;
+  setStatusBits((byte) w);
+  regA = (byte) w;
   TIMER_ADD_CYCLES(7);
 }
 
@@ -427,7 +426,7 @@ void cpu_CALL()
     uint16_t w = regA - reg ## REG; \
     setCarryBit(w&0x100); \
     setHalfCarryBitSub(regA, reg ## REG, w); \
-    setStatusBits(w); \
+    setStatusBits((byte) w); \
     TIMER_ADD_CYCLES(4); \
   }
 
@@ -446,7 +445,7 @@ void cpu_CMPM()
   uint16_t w    = regA - opd2;
   setCarryBit(w&0x100);
   setHalfCarryBitSub(regA, opd2, w);
-  setStatusBits(w);
+  setStatusBits((byte) w);
   TIMER_ADD_CYCLES(7);
 }
 
@@ -483,8 +482,8 @@ void cpu_ADI()
   uint16_t w    = regA + opd2;
   setCarryBit(w & 0x100);
   setHalfCarryBitAdd(regA, opd2, w);
-  setStatusBits(w);
-  regA = w;
+  setStatusBits((byte) w);
+  regA = (byte) w;
   regPC++;
   TIMER_ADD_CYCLES(7);
 }
@@ -496,8 +495,8 @@ void cpu_ACI()
   if(regS & PS_CARRY) w++;
   setHalfCarryBitAdd(regA, opd2, w);
   setCarryBit(w&0x100);
-  setStatusBits(w);
-  regA = w;
+  setStatusBits((byte) w);
+  regA = (byte) w;
   regPC++;
   TIMER_ADD_CYCLES(7);
 }
@@ -508,8 +507,8 @@ void cpu_SUI()
   uint16_t w    = regA - opd2;
   setCarryBit(w&0x100);
   setHalfCarryBitSub(regA, opd2, w);
-  setStatusBits(w);
-  regA = w;
+  setStatusBits((byte) w);
+  regA = (byte) w;
   regPC++;
   TIMER_ADD_CYCLES(7);
 }
@@ -521,8 +520,8 @@ void cpu_SBI()
   if(regS & PS_CARRY) w--;
   setHalfCarryBitSub(regA, opd2, w);
   setCarryBit(w&0x100);
-  setStatusBits(w);
-  regA = w;
+  setStatusBits((byte) w);
+  regA = (byte) w;
   regPC++;
   TIMER_ADD_CYCLES(7);
 }
@@ -564,7 +563,7 @@ void cpu_CPI()
   uint16_t w = regA - opd2;
   setCarryBit(w&0x100);
   setHalfCarryBitSub(regA, opd2, w);
-  setStatusBits(w);
+  setStatusBits((byte) w);
   regPC++;
   TIMER_ADD_CYCLES(7);
 }
