@@ -9,7 +9,7 @@
 
 // Allowing breakpoints significantly reduces performance but is helpful
 // for debugging.  Also uses 2*MAX_BREAKPOINTS+1 bytes of RAM
-#define MAX_BREAKPOINTS 0
+#define MAX_BREAKPOINTS 10
 
 
 // Setting USE_PROFILING_DETAIL to 1 will (every 10 seconds) show a 
@@ -96,6 +96,7 @@ uint32_t config_host_serial_baud_rate(byte iface);
 byte     config_host_serial_primary();
 
 byte     config_serial_map_sim_to_host(byte dev); 
+bool     config_serial_realtime(byte dev);
 uint32_t config_serial_playback_baud_rate(byte dev);
 byte     config_serial_playback_example_nuls(byte dev);
 byte     config_serial_backspace(byte dev);

@@ -63,7 +63,7 @@ uint32_t config_serial_settings, new_config_serial_settings;
 
 
 // config_serial_device_settings[0-3]
-// xxxxxxxx xxxxxxxx TT77UUMM CNNNBBBB
+// xxxxxxxx xxxxxxxR TT77UUMM CNNNBBBB
 // BBBB = baud rate for serial playback (see baud rates above)
 // NNN  = NULs to send after a carriage return when playing back examples
 // C    = trap CLOAD/CSAVE in extended BASIC (for CSM_ACR device only)
@@ -71,6 +71,7 @@ uint32_t config_serial_settings, new_config_serial_settings;
 // UU   = only uppercase for inputs (00=off, 01=on, 10=autodetect)
 // 77   = use 7 bit for serial outputs (00=off [use 8 bit], 01=on, 10=autodetect)
 // TT   = translate backspace to (00=off, 01=underscore, 10=autodetect, 11=rubout)
+// R    = force realtime operation (use baud rate even if not using interrupts)
 uint32_t config_serial_device_settings[4];
 
 
@@ -91,13 +92,13 @@ byte config_aux1_prog;
 
 inline uint32_t get_bits(uint32_t v, byte i, byte n)
 {
-  return (v >> i) & ((1<<n)-1);
+  return (v >> ((uint32_t) i)) & ((1ul<<n)-1);
 }
 
 
 inline uint32_t set_bits(uint32_t v, byte i, byte n, uint32_t nv)
 {
-  uint32_t mask = ((1<<n)-1) << i;
+  uint32_t mask = ((1ul<<n)-1) << i;
   return (v & ~mask) | ((nv << i) & mask);
 }
 
@@ -142,14 +143,14 @@ float config_rtc_rate()
     {
       switch( value & 0x07 )
         {
-        case 0: res =     0.06; break;
-        case 1: res =     0.60; break;
-        case 2: res =     6.00; break;
-        case 3: res =    10.00; break;
-        case 4: res =    60.00; break;
-        case 5: res =   100.00; break;
-        case 6: res =  1000.00; break;
-        case 7: res = 10000.00; break;
+        case 0: res =     0.06f; break;
+        case 1: res =     0.60f; break;
+        case 2: res =     6.00f; break;
+        case 3: res =    10.00f; break;
+        case 4: res =    60.00f; break;
+        case 5: res =   100.00f; break;
+        case 6: res =  1000.00f; break;
+        case 7: res = 10000.00f; break;
         }
     }
 
@@ -219,6 +220,11 @@ byte config_serial_map_sim_to_host(byte dev)
   return 0xff;
 }
 
+bool config_serial_realtime(byte dev)
+{
+  return get_bits(config_serial_device_settings[dev], 16, 1) ? true : false;
+}
+
 byte config_host_serial_primary()
 {
   return get_bits(config_serial_settings, 8, 1);
@@ -249,10 +255,16 @@ static void set_cursor(byte row, byte col)
 }
 
 
-static void print_flag(int value, byte row=0, byte col=0)
+static void print_flag(uint32_t data, uint32_t value, byte row=0, byte col=0)
 {
   if( row!=0 || col!=0 ) set_cursor(row, col);
-  Serial.print((config_flags&value)!=0 ? F("yes") : F("no"));
+  Serial.print((data&value)!=0 ? F("yes") : F("no"));
+}
+
+
+static void print_flag(int value, byte row=0, byte col=0)
+{
+  print_flag(config_flags, value, row, col);
 }
 
 
@@ -414,7 +426,7 @@ static void print_aux1_program(byte row=0, byte col=0)
 // --------------------------------------------------------------------------------
 
 
-static bool apply_host_serial_settings(uint32_t settings)
+static void apply_host_serial_settings(uint32_t settings)
 {
   config_serial_settings = settings;
   host_serial_setup(0, config_host_serial_baud_rate(0), config_host_serial_primary()==0);
@@ -561,7 +573,7 @@ static void toggle_aux1_program(byte row, byte col)
 static void toggle_flag(uint32_t value, byte row, byte col)
 {
   config_flags = (config_flags & ~value) | (~(config_flags & value) & value);
-  print_flag(value, row, col);
+  print_flag(config_flags, value, row, col);
 }
 
 
@@ -604,7 +616,7 @@ static bool save_config(byte fileno)
   // better to write all data at once (will overwrite instead
   // of deleting/creating the file)
   byte s = sizeof(uint32_t);
-  byte data[6*s+10];
+  byte data[6*sizeof(uint32_t)+10];
   memcpy(data+0*s,   &config_flags, s);
   memcpy(data+1*s,   &new_config_serial_settings, s);
   memcpy(data+2*s,    config_serial_device_settings, 4*s);
@@ -635,6 +647,12 @@ static bool load_config(byte fileno)
       filesys_read_data(fid, &config_aux1_prog, 1);
       
       filesys_close(fid);
+#if defined(__AVR_ATmega2560__)
+      // on MEGA, early versions accidentally set bits 16-31 on serial settings
+      for(byte dev=0; dev<4; dev++)
+        if( (config_serial_device_settings[dev] & 0xFFFF0000)==0xFFFF0000 )
+          config_serial_device_settings[dev] &= 0x0000FFFF;
+#endif
 #if STANDALONE>0
       config_flags |= CF_SERIAL_INPUT;      
 #endif
@@ -736,6 +754,7 @@ void config_edit_serial_device(byte dev)
       Serial.print(F("Configure serial device ")); print_serial_device_sim(dev); Serial.println();
       Serial.print(F("\nMap to host (i)nterface    : ")); print_serial_device_mapped_to(settings); Serial.println();
       Serial.print(F("Simulated (b)aud rate      : ")); Serial.println(config_baud_rate(get_bits(settings, 0, 4)));
+      Serial.print(F("(F)orce baud rate          : ")); print_flag(settings, 1ul<<16, 0, 0); Serial.println();
       Serial.print(F("Example playback (N)ULs    : ")); Serial.println(get_bits(settings, 4, 3));
       Serial.print(F("Use (7) bits               : ")); print_serial_flag(settings, 12); Serial.println();
       Serial.print(F("Serial input (u)ppercase   : ")); print_serial_flag(settings, 10); Serial.println();
@@ -763,6 +782,7 @@ void config_edit_serial_device(byte dev)
         case '7': settings = toggle_serial_flag(settings, 12); break;
         case 'B': settings = toggle_serial_flag_backspace(settings); break;
         case 'N': settings = toggle_bits(settings, 4, 3); break;
+        case 'F': settings = toggle_bits(settings, 16, 1); break;
 
         case 27:
         case 'x': 
@@ -941,7 +961,7 @@ void config_defaults(bool apply)
   s |= (0         <<  8); // not mapped to any host interface
   s |= (2         << 10); // autodetect uppercase inputs
   s |= (2         << 12); // autodetect 7 bit 
-  s |= (2         << 14); // autodetect backspace translation
+  s |= (2ul       << 14); // autodetect backspace translation
 
   for(byte dev=0; dev<4; dev++)
     config_serial_device_settings[dev] = s;
