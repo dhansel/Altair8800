@@ -52,6 +52,7 @@
 #define CF_SERIAL_DEBUG 0x10
 #define CF_CLEARMEM     0x20
 #define CF_HAVE_VI      0x40
+#define CF_DRIVE_RT     0x80
 
 #define CSM_SIO         0
 #define CSM_ACR         1

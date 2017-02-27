@@ -32,7 +32,9 @@ const char *drive_disk_filename(byte disk_num, bool check_exist) { return NULL; 
 const char *drive_disk_description(byte disk_num) { return NULL; }
 bool drive_mount(byte drive_num, byte disk_num) { return false; }
 bool drive_unmount(byte drive_num) { return false; }
+byte drive_get_mounted_disk(byte drive_num) { return 0; }
 void drive_reset() {}
+void drive_set_realtime(bool b) {}
 byte drive_in(byte addr) { return 0; }
 void drive_out(byte addr, byte data) {}
 
@@ -46,9 +48,11 @@ void drive_out(byte addr, byte data) {}
 #define DRIVE_STATUS_HEADLOAD    2
 #define DRIVE_STATUS_WRITE       4
 #define DRIVE_STATUS_INT_EN      8
+#define DRIVE_STATUS_REALTIME   16
 
 static byte drive_selected = 0xff;
 static char drive_file_name[NUM_DRIVES][13];
+static byte drive_mounted_disk[NUM_DRIVES];
 static byte drive_status[NUM_DRIVES];
 static byte drive_current_track[NUM_DRIVES];
 static byte drive_current_sector[NUM_DRIVES];
@@ -57,6 +61,7 @@ static byte drive_sector_buffer[NUM_DRIVES][DRIVE_SECTOR_LENGTH];
 
 #define DRIVE_SECTOR_TRUE_DELAY       5200
 #define DRIVE_SECTOR_NOT_TRUE_DELAY     30
+#define DRIVE_HEAD_STEP_DELAY        40000
 static bool drive_sector_true = false;
 
 static const char *get_dir_content()
@@ -136,7 +141,8 @@ static void drive_sector_interrupt()
     }
   
   // update Altair interrupt line
-  altair_interrupt(INT_DRIVE, drive_sector_true);
+  if( drive_status[drive_selected] & DRIVE_STATUS_INT_EN )
+    altair_interrupt(INT_DRIVE, drive_sector_true);
 
   // start timer again with new delay
   timer_start(TIMER_DRIVE, d);
@@ -152,6 +158,7 @@ void drive_setup()
       drive_current_track[i] = 0;
       drive_current_sector[i] = 0;
       drive_current_byte[i] = 0;
+      drive_mounted_disk[i] = 0;
     }
   
   // prepare sector change timer interrupt 
@@ -170,13 +177,19 @@ bool drive_unmount(byte drive_num)
   if( drive_num<NUM_DRIVES && (drive_status[drive_num] & DRIVE_STATUS_HAVEDISK) )
     {
       drive_flush(drive_num);
-      drive_status[drive_num] = 0;
+      drive_status[drive_num] &= DRIVE_STATUS_REALTIME;
+      drive_mounted_disk[drive_num] = 0;
       altair_interrupt(INT_DRIVE, false);
     }
 
   return true;
 }
 
+
+byte drive_get_mounted_disk(byte drive_num)
+{
+  return drive_mounted_disk[drive_num];
+}
 
 static const char *get_filename(byte disk_num, char *filename, bool check_exist)
 {
@@ -227,13 +240,37 @@ bool drive_mount(byte drive_num, byte disk_num)
   if( drive_num<NUM_DRIVES )
     {
       if( drive_status[drive_num] & DRIVE_STATUS_HAVEDISK ) drive_unmount(drive_num);
-      
-      get_filename(disk_num, drive_file_name[drive_num], false);
-      drive_status[drive_num] |= DRIVE_STATUS_HAVEDISK;
-      return true;
+      if( disk_num>0 )
+        {
+          get_filename(disk_num, drive_file_name[drive_num], false);
+          drive_mounted_disk[drive_num] = disk_num;
+          drive_status[drive_num] |= DRIVE_STATUS_HAVEDISK;
+          return true;
+        }
     }
 
   return false;
+}
+
+
+void drive_set_realtime(bool b)
+{
+  if( b && drive_selected<0xff && !(drive_status[drive_selected] & DRIVE_STATUS_INT_EN) )
+    {
+      // drive interrupts were not enabled before => start timer
+      timer_start(TIMER_DRIVE, DRIVE_SECTOR_TRUE_DELAY);
+    }
+  else if( !b && drive_selected<0xff && !(drive_status[drive_selected] & DRIVE_STATUS_INT_EN) )
+    {
+      // drive has no interrupts enabled => stop timer
+      timer_stop(TIMER_DRIVE);
+    }
+
+  for(byte i=0; i<NUM_DRIVES; i++)
+    if( b )
+      drive_status[i] |=  DRIVE_STATUS_REALTIME;
+    else
+      drive_status[i] &= ~DRIVE_STATUS_REALTIME;
 }
 
 
@@ -303,7 +340,7 @@ byte drive_in(byte addr)
 
         if( drive_selected<NUM_DRIVES )
           {
-            if( !(drive_status[drive_selected] & DRIVE_STATUS_INT_EN) )
+            if( !(drive_status[drive_selected] & (DRIVE_STATUS_INT_EN|DRIVE_STATUS_REALTIME)) )
               {
                 // if interrupts are not enabled, alternate "sector true" bit
                 // every time this register is queried and advance current sector
@@ -397,14 +434,14 @@ void drive_out(byte addr, byte data)
             if( data & 0x80 )
               {
                 drive_flush(drive);
-                drive_status[drive] &= (DRIVE_STATUS_HAVEDISK|DRIVE_STATUS_HEADLOAD);
+                drive_status[drive] &= (DRIVE_STATUS_HAVEDISK|DRIVE_STATUS_HEADLOAD|DRIVE_STATUS_REALTIME);
                 drive_current_byte[drive] = 0xff;
               }
             else
               drive_selected = drive;
 
             // start timer interrupts if interrupts for the selected drive are enabled
-            if( drive_status[drive_selected]&DRIVE_STATUS_INT_EN )
+            if( drive_status[drive_selected]&(DRIVE_STATUS_INT_EN|DRIVE_STATUS_REALTIME) )
               timer_start(TIMER_DRIVE, DRIVE_SECTOR_TRUE_DELAY);
           }
 
@@ -433,12 +470,22 @@ void drive_out(byte addr, byte data)
               {
                 drive_current_track[drive_selected]++;
                 drive_current_byte[drive_selected] = 0xff;
+                if( timer_running(TIMER_DRIVE) )
+                  {
+                    drive_sector_true = false;
+                    timer_start(TIMER_DRIVE, DRIVE_HEAD_STEP_DELAY);
+                  }
               }
             
             if( (data & 0x02) && drive_current_track[drive_selected]>0 ) 
               {
                 drive_current_track[drive_selected]--;
                 drive_current_byte[drive_selected] = 0xff;
+                if( timer_running(TIMER_DRIVE) )
+                  {
+                    drive_sector_true = false;
+                    timer_start(TIMER_DRIVE, DRIVE_HEAD_STEP_DELAY);
+                  }
               }
             
             if( data & 0x04 ) drive_status[drive_selected] |=  DRIVE_STATUS_HEADLOAD;
@@ -452,9 +499,9 @@ void drive_out(byte addr, byte data)
                 drive_current_byte[drive_selected] = 0;
               }
 
-            if( !timer_running(TIMER_DRIVE) && (drive_status[drive_selected]&DRIVE_STATUS_INT_EN) )
+            if( !timer_running(TIMER_DRIVE) && (drive_status[drive_selected]&(DRIVE_STATUS_INT_EN|DRIVE_STATUS_REALTIME)) )
               timer_start(TIMER_DRIVE, DRIVE_SECTOR_TRUE_DELAY);
-            else if( timer_running(TIMER_DRIVE) && !(drive_status[drive_selected]&DRIVE_STATUS_INT_EN) )
+            else if( timer_running(TIMER_DRIVE) && !(drive_status[drive_selected]&(DRIVE_STATUS_INT_EN|DRIVE_STATUS_REALTIME)) )
               timer_stop(TIMER_DRIVE); altair_interrupt(INT_DRIVE, false); 
           }
 

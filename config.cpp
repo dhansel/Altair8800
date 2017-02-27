@@ -40,7 +40,7 @@
 #define  BAUD_115200 11
 
 // config_flags:
-// xxxxxxxx xxxxxxxt ttttRRRR xVCDIPFT
+// xxxxxxxx xxxxxxxt ttttRRRR dVCDIPFT
 // T = Throttle
 // t = Throttle delay if throttle is enabled (0=auto)
 // F = Profile
@@ -50,6 +50,7 @@
 // C = Clear memory on powerup
 // V = VI board installed
 // R = RTC rate
+// d = force real-time mode for disk drives
 uint32_t config_flags;
 
 
@@ -262,7 +263,7 @@ static void print_flag(uint32_t data, uint32_t value, byte row=0, byte col=0)
 }
 
 
-static void print_flag(int value, byte row=0, byte col=0)
+static void print_flag(uint32_t value, byte row=0, byte col=0)
 {
   print_flag(config_flags, value, row, col);
 }
@@ -420,6 +421,27 @@ static void print_aux1_program(byte row=0, byte col=0)
     Serial.print(FP(prog_get_name(b)));
   else
     Serial.print(F("none"));
+}
+
+
+static void print_drive_mounted()
+{
+  byte n = 0;
+  for(byte i=0; i<NUM_DRIVES; i++)
+    if( drive_get_mounted_disk(i)>0 ) n++;
+
+  Serial.print(n); Serial.print(F(" mounted"));
+}
+
+
+static void print_drive_mounted_disk(byte d)
+{
+  if( d==0 )
+    Serial.print(F("none"));
+  else if( drive_disk_filename(d)==NULL )
+    { Serial.print(F("empty disk #")); numsys_print_byte(d); }
+  else
+    Serial.print(drive_disk_description(d));
 }
 
 
@@ -616,21 +638,24 @@ static bool save_config(byte fileno)
   // better to write all data at once (will overwrite instead
   // of deleting/creating the file)
   byte s = sizeof(uint32_t);
-  byte data[6*sizeof(uint32_t)+10];
+  byte data[6*sizeof(uint32_t)+10+NUM_DRIVES+1];
   memcpy(data+0*s,   &config_flags, s);
   memcpy(data+1*s,   &new_config_serial_settings, s);
   memcpy(data+2*s,    config_serial_device_settings, 4*s);
   memcpy(data+6*s,    config_interrupt_vi_mask, 8);
   memcpy(data+6*s+8, &config_interrupt_mask, 1);
-  memcpy(data+6*s+9, &config_aux1_prog, 1);
-  return filesys_write_file('C', fileno, (void *) data, 6*s+10);
+  data[6*s+9]  = config_aux1_prog;
+  data[6*s+10] = NUM_DRIVES;
+  for(byte i=0; i<NUM_DRIVES; i++) data[6*s+11+i] = drive_get_mounted_disk(i);
+
+  return filesys_write_file('C', fileno, (void *) data, 6*s+10+NUM_DRIVES+1);
 }
 
 
 static bool load_config(byte fileno)
 {
   bool ok = false;
-  byte fid = filesys_open_read('C', fileno);
+  byte n, d, fid = filesys_open_read('C', fileno);
   if( fid )
     {
       // initialize all settings with defaults so configuration settings
@@ -645,6 +670,17 @@ static bool load_config(byte fileno)
       filesys_read_data(fid, config_interrupt_vi_mask, 8);
       filesys_read_data(fid, &config_interrupt_mask, 1);
       filesys_read_data(fid, &config_aux1_prog, 1);
+      
+      if( filesys_read_data(fid, &n, 1)!=1 ) n = 0;
+      for(byte i=0; i<n; i++) 
+        if( filesys_read_data(fid, &d, 1)==1 && i<NUM_DRIVES )
+          {
+            if( d>0 )
+              drive_mount(i, d);
+            else
+              drive_unmount(i);
+          }
+      drive_set_realtime(config_flags & CF_DRIVE_RT);
       
       filesys_close(fid);
 #if defined(__AVR_ATmega2560__)
@@ -663,6 +699,82 @@ static bool load_config(byte fileno)
     }
 
   return ok;
+}
+
+
+// --------------------------------------------------------------------------------
+
+
+void config_edit_drives()
+{
+  bool go = true;
+  byte i, mounted[NUM_DRIVES];
+
+  for(i=0; i<NUM_DRIVES; i++) mounted[i] = drive_get_mounted_disk(i);
+
+  byte row, col, r_realtime, r_drives[NUM_DRIVES], r_cmd;
+  row = 4;
+  col = 26;
+  Serial.print(F("\033[2J\033[0;0H\n"));
+
+  Serial.println(F("Configure disk drive settings"));
+  Serial.print(F("\n(F)orce real-time mode : ")); print_flag(CF_DRIVE_RT); Serial.println(); r_realtime = row++;
+  
+  for(i=0; i<NUM_DRIVES; i++)
+    {
+      Serial.print(F("Drive (")); 
+      if( i<10 ) Serial.write(48+i); else Serial.write(87+i);
+      Serial.print(F(") mounted disk : "));
+      print_drive_mounted_disk(mounted[i]);
+      Serial.println();
+      r_drives[i] = row++;
+    }
+
+  Serial.println(F("\nE(x)it to main menu")); row+=4;
+  Serial.print(F("\n\nCommand: ")); r_cmd = row++;
+
+  while( go )
+    {
+      set_cursor(r_cmd, 10);
+      while( !serial_available() ) delay(50);
+      char c = serial_read();
+      if( c>31 && c<127 ) Serial.println(c);
+
+      switch( c )
+        {
+        case 'F': toggle_flag(CF_DRIVE_RT, r_realtime, col); break;
+        case 27:
+        case 'x': go = false; break;
+
+        default:
+          {
+            int d = -1;
+            if( c>='0' && c<='9' ) 
+              d = c-48;
+            else if( c>='a' && c<='f' )
+              d = c-87;
+
+            if( d>=0 && d<=NUM_DRIVES )
+              {
+                byte next = find_disk(mounted[d]+1);
+                if( drive_get_mounted_disk(d)>0 && 
+                    drive_disk_filename(drive_get_mounted_disk(d))==NULL &&
+                    mounted[d] < drive_get_mounted_disk(d) &&
+                    (next       > drive_get_mounted_disk(d) || next<mounted[d]) )
+                  next = drive_get_mounted_disk(d);
+
+                mounted[d] = next;
+                set_cursor(r_drives[d], col);
+                print_drive_mounted_disk(mounted[d]);
+              }
+          }
+        }
+    }
+
+  drive_set_realtime(config_flags & CF_DRIVE_RT);
+  for(i=0; i<NUM_DRIVES; i++) 
+    if( mounted[i] != drive_get_mounted_disk(i) )
+      drive_mount(i, mounted[i]);
 }
 
 
@@ -806,7 +918,7 @@ void config_edit()
   
   bool redraw = true;
 
-  byte row, col, r_profile, r_throttle, r_panel, r_input, r_debug, r_clearmem, r_aux1, r_interrupt, r_baud0, r_baud1, r_primary, r_cmd;
+  byte row, col, r_profile, r_throttle, r_panel, r_input, r_debug, r_clearmem, r_aux1, r_baud0, r_baud1, r_primary, r_cmd;
   while( true )
     {
       char c;
@@ -828,7 +940,6 @@ void config_edit()
           Serial.print(F("Enable serial (d)ebug       : ")); print_flag(CF_SERIAL_DEBUG); Serial.println(); r_debug = row++;
           Serial.print(F("Clear (m)emory on powerup   : ")); print_flag(CF_CLEARMEM); Serial.println(); r_clearmem = row++;
           Serial.print(F("A(u)x1 shortcut program     : ")); print_aux1_program(); Serial.println(); r_aux1 = row++;
-          Serial.print(F("Configure (I)nterrupts      : ")); print_vi_flag(); Serial.println(); r_interrupt = row++;
           Serial.print(F("Host Serial (b)aud rate     : ")); print_host_serial_baud_rate(0); Serial.println(); r_baud0 = row++;
 #if defined(__SAM3X8E__)
           Serial.print(F("Host Serial1 baud (r)ate    : ")); print_host_serial_baud_rate(1); Serial.println(); r_baud1 = row++;
@@ -839,6 +950,10 @@ void config_edit()
           Serial.print(F("(2) Configure ACR           : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_ACR]); Serial.println();
           Serial.print(F("(3) Configure 2SIO port 1   : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_2SIO1]); Serial.println();
           Serial.print(F("(4) Configure 2SIO port 2   : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_2SIO2]); Serial.println();
+#if NUM_DRIVES>0
+          Serial.print(F("(D) Configure disk drives   : ")); print_drive_mounted(); Serial.println(); row++;
+#endif
+          Serial.print(F("(I) Configure interrupts    : ")); print_vi_flag(); Serial.println(); row++;
           row += 5;
 
           Serial.println();
@@ -886,6 +1001,9 @@ void config_edit()
         case '3': config_edit_serial_device(CSM_2SIO1); break;
         case '4': config_edit_serial_device(CSM_2SIO2); break;
         case 'I': config_edit_interrupts(); break;
+#if NUM_DRIVES>0
+        case 'D': config_edit_drives(); break;
+#endif
           
         case 'M': filesys_manage(); break;
         case 'A': apply_host_serial_settings(); break;
@@ -982,6 +1100,10 @@ void config_defaults(bool apply)
   config_interrupt_mask = INT_SIO | INT_2SIO1;
   
   config_aux1_prog = prog_find("16k ROM Basic");
+
+  //drive_set_realtime(config_flags & CF_DRIVE_RT);
+  for(byte i=0; i<NUM_DRIVES; i++)
+    drive_unmount(i);
 
   if( apply ) apply_host_serial_settings(new_config_serial_settings);
 }
