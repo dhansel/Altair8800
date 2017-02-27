@@ -113,6 +113,38 @@ void numsys_print_mem(uint16_t addr, byte num, bool printBrackets)
 }
 
 
+static byte numsys_read_hex_digit()
+{
+  while( true )
+    {
+      char c = serial_read();
+      if( c>='0' && c<='9' )
+        return c-'0';
+      else if( c>='A' && c<='F' )
+        return c-'A'+10;
+      else if( c>='a' && c<='f' )
+        return c-'a'+10;
+    }
+}
+
+
+byte numsys_read_hex_byte()
+{
+  byte b;
+  b  = numsys_read_hex_digit() * 16;
+  b += numsys_read_hex_digit();
+  return b;
+}
+
+uint16_t numsys_read_hex_word()
+{
+  uint16_t w;
+  w  = (uint16_t) numsys_read_hex_byte() * 256;
+  w += (uint16_t) numsys_read_hex_byte();
+  return w;
+}
+
+
 uint16_t numsys_read_word()
 {
   byte b;

@@ -384,6 +384,90 @@ byte read_device()
 }
 
 
+bool read_intel_hex()
+{
+  while( 1 )
+    {
+      // expect line to start with a colon
+      int c = -1;
+      while( c<0 || c==10 || c==13 || c==' '|| c=='\t' ) c=serial_read();
+      if( c!=':' ) return false;
+
+      // initialize checksum
+      byte cs = 0;
+
+      // first byte is record length
+      byte n = numsys_read_hex_byte(); cs -= n;
+
+      // next two bytes are address
+      byte d = numsys_read_hex_byte(); cs -= d;
+      word a = numsys_read_hex_byte(); cs -= a;
+      a = a + 256*d;
+
+      // next byte is record type
+      byte r = numsys_read_hex_byte(); cs -= r;
+      
+      switch( r )
+        {
+        case 0:
+          {
+            // data record
+            if( n>0 ) {numsys_print_word(a); Serial.print(':');}
+            for(byte i=0; i<n; i++)
+              {
+                d = numsys_read_hex_byte();
+                Serial.print(' '); 
+                numsys_print_byte(d);
+                MWRITE(a, d);
+                cs -= d;
+                a++;
+              }
+            if( n>0 ) Serial.println();
+            break;
+          }
+
+        default:
+          {
+            // unhandled record => skip
+            for(byte i=0; i<n; i++) cs += numsys_read_hex_byte();
+            break;
+          }
+        }
+
+      // test checksum
+      if( cs != numsys_read_hex_byte() )
+        return false; // checksum error
+
+      // empty record means we're done
+      if( n==0 ) return true;
+    }
+}
+
+
+void read_data()
+{
+  Serial.print(F("\n\nStart address: "));
+  uint16_t addr = numsys_read_word();
+  Serial.print(F("\nNumber of bytes: "));
+  uint16_t len  = numsys_read_word();
+  Serial.print(F("\nData: "));
+  while( len>0 )
+    {
+      Serial.write(' ');
+      Mem[addr] = (byte) numsys_read_word();
+      ++addr;
+      --len;
+    }
+  Serial.write('\n');
+}
+
+void empty_input_buffer()
+{
+  while( true ) 
+    { if( serial_read()<0 ) { delay(15); if( serial_read()<0 ) { delay(150); if( serial_read()<0 ) break; } } }
+}
+
+
 void read_inputs_serial()
 {
   if( !config_serial_input_enabled() )
@@ -529,22 +613,22 @@ void read_inputs_serial()
       p_regPC = ~regPC;
       print_dbg_info();
     }
+  else if( data == 'H' )
+    {
+      Serial.println(F("\nReading HEX data..."));
+      if( read_intel_hex() )
+        Serial.println(F("Success.\n"));
+      else
+        Serial.println(F("Error!\n"));
+      
+      // skip any remaining input
+      empty_input_buffer();
+    }
   else if( data == 'L' )
     {
-      Serial.print(F("\n\nStart address: "));
-      uint16_t addr = numsys_read_word();
-      Serial.print(F("\nNumber of bytes: "));
-      uint16_t len  = numsys_read_word();
-      Serial.print(F("\nData: "));
-      while( len>0 )
-        {
-          Serial.write(' ');
-          Mem[addr] = (byte) numsys_read_word();
-          ++addr;
-          --len;
-        }
-      Serial.write('\n');
-      }
+      read_data();
+      empty_input_buffer();
+    }
   else if( data == 'n' )
     {
       numsys_toggle();
@@ -1107,8 +1191,8 @@ void setup()
   mem_setup();
   host_setup();
   filesys_setup();
-  config_setup();
   drive_setup();
+  config_setup();
   serial_setup();
   profile_setup();
   rtc_setup();
@@ -1244,7 +1328,7 @@ void loop()
 
       // flush any characters stuck in the serial buffer 
       // (so we don't accidentally execute commands after stopping)
-      while( serial_available() ) serial_read();
+      empty_input_buffer();
     }
 
   if( cswitch & BIT(SW_RESET) )
