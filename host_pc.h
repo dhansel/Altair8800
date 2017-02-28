@@ -16,6 +16,11 @@
 #undef  STANDALONE
 #define STANDALONE 1
 
+#ifdef _MSC_VER
+#define snprintf sprintf_s
+#define asm(x)   __asm NOP
+#endif
+
 #define PROF_DISPLAY_INTERVAL 10000000
 
 #undef  MAX_BREAKPOINTS

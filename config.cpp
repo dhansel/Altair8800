@@ -197,7 +197,7 @@ byte config_serial_ucase(byte dev)
 
 bool config_serial_trap_CLOAD()
 {
-  return get_bits(config_serial_device_settings[CSM_ACR], 7, 1);
+  return get_bits(config_serial_device_settings[CSM_ACR], 7, 1)>0;
 }
 
 uint32_t config_serial_playback_baud_rate(byte dev)
@@ -458,8 +458,6 @@ static void apply_host_serial_settings(uint32_t settings)
 
 static void toggle_host_serial_baud_rate(byte iface, byte row, byte col)
 {
-  byte min_rate;
-
 #ifdef HOST_PC_H
   new_config_serial_settings = toggle_bits(new_config_serial_settings, iface==0 ? 0 : 4, 4, BAUD_110, BAUD_115200);
   apply_host_serial_settings(new_config_serial_settings);
@@ -680,7 +678,7 @@ static bool load_config(byte fileno)
             else
               drive_unmount(i);
           }
-      drive_set_realtime(config_flags & CF_DRIVE_RT);
+      drive_set_realtime((config_flags & CF_DRIVE_RT)!=0);
       
       filesys_close(fid);
 #if defined(__AVR_ATmega2560__)
@@ -705,6 +703,7 @@ static bool load_config(byte fileno)
 // --------------------------------------------------------------------------------
 
 
+#if NUM_DRIVES>0
 void config_edit_drives()
 {
   bool go = true;
@@ -771,12 +770,12 @@ void config_edit_drives()
         }
     }
 
-  drive_set_realtime(config_flags & CF_DRIVE_RT);
+  drive_set_realtime((config_flags & CF_DRIVE_RT)!=0);
   for(i=0; i<NUM_DRIVES; i++) 
     if( mounted[i] != drive_get_mounted_disk(i) )
       drive_mount(i, mounted[i]);
 }
-
+#endif
 
 // --------------------------------------------------------------------------------
 
@@ -993,9 +992,10 @@ void config_edit()
         case 'u': toggle_aux1_program(r_aux1, col); redraw = false; break;
 
         case 'b': toggle_host_serial_baud_rate(0, r_baud0, col); redraw = false; break;
+#if defined(__SAM3X8E__)
         case 'r': toggle_host_serial_baud_rate(1, r_baud1, col); redraw = false; break;
         case 'P': toggle_host_primary_interface(r_primary, col); redraw = false; break;
-
+#endif
         case '1': config_edit_serial_device(CSM_SIO); break;
         case '2': config_edit_serial_device(CSM_ACR); break;
         case '3': config_edit_serial_device(CSM_2SIO1); break;
@@ -1016,7 +1016,7 @@ void config_edit()
         case 'S': 
           {
             Serial.print(F("\n\nSave as config # (0=default): "));
-            byte i = numsys_read_word();
+            byte i = (byte) numsys_read_word();
             Serial.println();
             if( !save_config(i & 0xff) )
               Serial.println(F("Saving failed. Capture/replay in progress?"));
@@ -1025,7 +1025,7 @@ void config_edit()
         case 'L':
           {
             Serial.print(F("\n\nLoad config #: "));
-            byte i = numsys_read_word();
+            byte i = (byte) numsys_read_word();
             Serial.println();
             if( !load_config(i & 0xff) )
               Serial.println(F("Load failed. File does not exist?"));

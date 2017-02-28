@@ -346,6 +346,8 @@ bool serial_available()
   for(byte dev=3; dev<0xff; dev--)
     if( config_serial_map_sim_to_host(dev)==config_host_serial_primary() )
       return (serial_status[dev] & SST_RDRF)!=0;
+
+  return false;
 }
 
 

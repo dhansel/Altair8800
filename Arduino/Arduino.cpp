@@ -16,9 +16,12 @@ using namespace std;
 #include <termios.h>
 #define endl "\r\n" << flush
 
-bool kbhit()
+#define _getch   getch
+#define _ungetch ungetch
+
+bool _kbhit()
 {
-  int ch = getch();
+  int ch = _getch();
   if (ch != ERR) {
     ungetch(ch);
     return 1;
@@ -51,7 +54,7 @@ unsigned long millis()
 {
   struct timeb ftime;
   ::ftime(&ftime);
-  return ftime.time * 1000 + ftime.millitm;
+  return (unsigned long) ftime.time * 1000 + ftime.millitm;
 }
 
 
@@ -103,10 +106,10 @@ char SerialClass::read()
 {
   kbhit_prev_result = false;
   kbhit_next_check  = 0;
-  if( kbhit() )
+  if( _kbhit() )
     {
 #ifdef _WIN32
-      return getch();
+      return _getch();
 #else
       // on linux, getch() returns 127 for backspace (we need 8) and 10 for linefeed/CR (we need 13)
       char c = getch();
@@ -123,7 +126,7 @@ bool SerialClass::available()
 { 
   if( !kbhit_prev_result && millis()>kbhit_next_check )
     {
-      kbhit_prev_result = kbhit() ? true : false;
+      kbhit_prev_result = _kbhit() ? true : false;
       kbhit_next_check  = millis()+10;
     }
 

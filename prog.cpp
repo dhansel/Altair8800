@@ -151,7 +151,12 @@ uint16_t prog_checksum_loader(const byte *tape, unsigned int tape_length)
             d     = pgm_read_byte(tape++);
             addr  = cs + d * 256;
             cs    = cs + d;
-            if( tape_length < n+1 ) return 0xffff; else tape_length -= n+1;
+
+            if( tape_length < ((unsigned int) n)+1u )
+              return 0xffff;
+            else
+              tape_length -= ((unsigned int) n)+1u;
+
             do {
               d = pgm_read_byte(tape++);
               cs += d;

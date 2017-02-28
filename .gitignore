@@ -1,7 +1,13 @@
 Altair8800
 Altair8800.exe
+Altair8800.sln
+Altair8800.sdf
+Altair8800.suo
+Altair8800.vcxproj.user
+Altair8800.opensdf
 AltairStorage.dat
 obj-linux
 obj-msys
+obj-visualc
 *~
 Schematics.pdf

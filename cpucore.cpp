@@ -1171,7 +1171,7 @@ void cpu_SHLD()
 {
   uint16_t addr = MEM_READ_WORD(regPC);
   MEM_WRITE(addr,   regL);
-  MEM_WRITE(addr+1, regH);
+  MEM_WRITE(addr+1u, regH);
   regPC += 2;
   TIMER_ADD_CYCLES(16);
 }
@@ -1210,8 +1210,8 @@ void cpu_STC()
 void cpu_XTHL()
 {
   byte b;
-  b = MEM_READ(regSP+1); MEM_WRITE(regSP+1, regH); regH = b;
-  b = MEM_READ(regSP);   MEM_WRITE(regSP,   regL); regL = b;
+  b = MEM_READ(regSP+1u); MEM_WRITE(regSP+1u, regH); regH = b;
+  b = MEM_READ(regSP);    MEM_WRITE(regSP,    regL); regL = b;
   TIMER_ADD_CYCLES(18);
 }
 

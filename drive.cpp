@@ -191,9 +191,9 @@ byte drive_get_mounted_disk(byte drive_num)
   return drive_mounted_disk[drive_num];
 }
 
-static const char *get_filename(byte disk_num, char *filename, bool check_exist)
+static const char *get_filename(byte disk_num, char *filename, int buf_len, bool check_exist)
 {
-  sprintf(filename, "DISK%02X.DSK", disk_num);
+  snprintf(filename, buf_len, "DISK%02X.DSK", disk_num);
   return !check_exist || host_file_exists(filename) ? filename : NULL;
 }
 
@@ -231,7 +231,7 @@ const char *drive_disk_description(byte disk_num)
 const char *drive_disk_filename(byte disk_num, bool check_exist)
 {
   static char buf[13];
-  return get_filename(disk_num, buf, check_exist);
+  return get_filename(disk_num, buf, 13, check_exist);
 }
 
 
@@ -242,7 +242,7 @@ bool drive_mount(byte drive_num, byte disk_num)
       if( drive_status[drive_num] & DRIVE_STATUS_HAVEDISK ) drive_unmount(drive_num);
       if( disk_num>0 )
         {
-          get_filename(disk_num, drive_file_name[drive_num], false);
+          get_filename(disk_num, drive_file_name[drive_num], 13, false);
           drive_mounted_disk[drive_num] = disk_num;
           drive_status[drive_num] |= DRIVE_STATUS_HAVEDISK;
           return true;

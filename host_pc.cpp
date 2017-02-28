@@ -130,7 +130,7 @@ void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
 static FILE *open_file(const char *filename)
 {
   char fnamebuf[30];
-  sprintf(fnamebuf, "disks/%s", filename);
+  snprintf(fnamebuf, 30, "disks/%s", filename);
   return fopen(fnamebuf, "rb");
 }
 
@@ -183,7 +183,7 @@ uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, voi
 uint32_t host_write_file(const char *filename, uint32_t offset, uint32_t len, void *buffer)
 {
   char fnamebuf[30];
-  sprintf(fnamebuf, "disks/%s", filename);
+  snprintf(fnamebuf, 30, "disks/%s", filename);
   uint32_t res = 0;
   FILE *f = fopen(fnamebuf, "r+b");
   if( !f ) f = fopen(fnamebuf, "w+b");
@@ -303,7 +303,7 @@ void host_setup()
 #endif
 
   // initialize random number generator
-  srand(time(NULL));
+  srand((unsigned int) time(NULL));
 }
 
 
