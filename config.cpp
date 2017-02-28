@@ -462,7 +462,13 @@ static void toggle_host_serial_baud_rate(byte iface, byte row, byte col)
   new_config_serial_settings = toggle_bits(new_config_serial_settings, iface==0 ? 0 : 4, 4, BAUD_110, BAUD_115200);
   apply_host_serial_settings(new_config_serial_settings);
 #else
-  new_config_serial_settings = toggle_bits(new_config_serial_settings, iface==0 ? 0 : 4, 4, BAUD_1200, BAUD_115200);
+  new_config_serial_settings = toggle_bits(new_config_serial_settings, iface==0 ? 0 : 4, 4, BAUD_600, BAUD_115200);
+#if defined(__SAM3X8E__)
+  // connecting to Arduino Due at 1200 baud over USB will cause it to erase its flash memory
+  // and go into programming mode => skip 1200 baud setting for USB interface
+  if( iface==0 && get_bits(new_config_serial_settings, 0, 4)==BAUD_1200 )
+    new_config_serial_settings = toggle_bits(new_config_serial_settings, 0, 4);
+#endif
 #endif
 
   print_host_serial_baud_rate(iface, row, col);
