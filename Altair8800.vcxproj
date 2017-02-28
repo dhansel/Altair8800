@@ -1,0 +1,141 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{FBA8BB04-6A3A-4E0A-AF03-515CDBD0385C}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>Altair8800</RootNamespace>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+    <OutDir>obj-visualc\$(Configuration)\</OutDir>
+    <IntDir>obj-visualc\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..;Arduino</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="Arduino\Arduino.cpp" />
+    <ClCompile Include="breakpoint.cpp" />
+    <ClCompile Include="config.cpp" />
+    <ClCompile Include="cpucore.cpp" />
+    <ClCompile Include="disassembler.cpp" />
+    <ClCompile Include="drive.cpp" />
+    <ClCompile Include="filesys.cpp" />
+    <ClCompile Include="host_due.cpp" />
+    <ClCompile Include="host_mega.cpp" />
+    <ClCompile Include="host_pc.cpp">
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS
+;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ClCompile Include="mem.cpp" />
+    <ClCompile Include="numsys.cpp" />
+    <ClCompile Include="profile.cpp" />
+    <ClCompile Include="prog.cpp" />
+    <ClCompile Include="prog_basic.cpp" />
+    <ClCompile Include="prog_examples.cpp" />
+    <ClCompile Include="prog_games.cpp" />
+    <ClCompile Include="prog_ps2.cpp" />
+    <ClCompile Include="prog_tools.cpp" />
+    <ClCompile Include="serial.cpp" />
+    <ClCompile Include="timer.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Altair8800.ino">
+      <FileType>Document</FileType>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Altair8800.h" />
+    <ClInclude Include="Arduino\Arduino.h" />
+    <ClInclude Include="breakpoint.h" />
+    <ClInclude Include="config.h" />
+    <ClInclude Include="cpucore.h" />
+    <ClInclude Include="disassembler.h" />
+    <ClInclude Include="drive.h" />
+    <ClInclude Include="filesys.h" />
+    <ClInclude Include="host.h" />
+    <ClInclude Include="host_due.h" />
+    <ClInclude Include="host_mega.h" />
+    <ClInclude Include="host_pc.h" />
+    <ClInclude Include="mem.h" />
+    <ClInclude Include="numsys.h" />
+    <ClInclude Include="profile.h" />
+    <ClInclude Include="prog.h" />
+    <ClInclude Include="prog_basic.h" />
+    <ClInclude Include="prog_examples.h" />
+    <ClInclude Include="prog_examples_asm.h" />
+    <ClInclude Include="prog_examples_basic_due.h" />
+    <ClInclude Include="prog_examples_basic_mega.h" />
+    <ClInclude Include="prog_games.h" />
+    <ClInclude Include="prog_ps2.h" />
+    <ClInclude Include="prog_tools.h" />
+    <ClInclude Include="serial.h" />
+    <ClInclude Include="timer.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
