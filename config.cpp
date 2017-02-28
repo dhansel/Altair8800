@@ -1083,9 +1083,9 @@ void config_defaults(bool apply)
   s |= (BAUD_1200 <<  0); // serial playback baud rate: 1200
   s |= (4         <<  4); // 4 NUL characters after newline
   s |= (0         <<  8); // not mapped to any host interface
-  s |= (2         << 10); // autodetect uppercase inputs
-  s |= (2         << 12); // autodetect 7 bit 
-  s |= (2ul       << 14); // autodetect backspace translation
+  s |= (CSF_AUTO  << 10); // autodetect uppercase inputs
+  s |= (CSF_AUTO  << 12); // autodetect 7 bit 
+  s |= (CSFB_NONE << 14); // no backspace translation
 
   for(byte dev=0; dev<4; dev++)
     config_serial_device_settings[dev] = s;
