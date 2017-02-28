@@ -1328,7 +1328,7 @@ void loop()
 
       // flush any characters stuck in the serial buffer 
       // (so we don't accidentally execute commands after stopping)
-      empty_input_buffer();
+      if( config_serial_input_enabled() ) empty_input_buffer();
     }
 
   if( cswitch & BIT(SW_RESET) )
