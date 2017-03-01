@@ -98,7 +98,7 @@ void host_read_data(void *data, uint32_t addr, uint32_t len)
   if( storagefile )
     {
       fseek(storagefile, addr, SEEK_SET);
-      uint32_t l = fread(data, len, 1, storagefile);
+      uint32_t l = fread(data, 1, len, storagefile);
       if( l<len ) memset(((byte *) data)+l, 0, len-l);
     }
 
