@@ -607,13 +607,32 @@ static bool apply_host_serial_settings()
 {
   char c;
   uint32_t old_config_serial_settings = config_serial_settings;
+
+#if defined(__SAM3X8E__)
+  if( config_host_serial_primary() != get_bits(new_config_serial_settings, 8, 1) )
+    Serial.println("\nChange must be confirmed by answering 'y' through new primary interface.\n"
+                   "[will revert back to this interface if new interface is not confirmed within 30 seconds]");
+  else
+#endif
+  Serial.println(F("\n[will revert to old settings if new settings not confirmed within 30 seconds]\n"));
+  Serial.flush();
+
   apply_host_serial_settings(new_config_serial_settings);
 
-  Serial.println(F("\n[will revert to old settings if no answer within 20 seconds]"));
-  Serial.print(F("Keep new host interface settings (y/n)? "));
-  uint32_t timeout = millis() + 20000;
+  uint32_t timeout = millis() + 30000, timeout2 = 0;
   c = 0;
-  do { delay(50); c = serial_read(); } while( c!='y' && c!='n' && millis()<timeout );
+  do
+    {
+      if( millis()>timeout2 )
+        {
+          Serial.print(F("\nKeep new host interface settings (y/n)? "));
+          timeout2 = millis() + 2000;
+        }
+
+      delay(50);
+      c = serial_read();
+    }
+  while( c!='y' && c!='n' && millis()<timeout );
   Serial.println(c);
   if( c!='y' ) 
     { 
@@ -621,8 +640,8 @@ static bool apply_host_serial_settings()
       if( c!='n' ) 
         {
           delay(100);
-          Serial.println(F("\nSettings were not confirmed withing 20 seconds."));
-          delay(2000);
+          Serial.println(F("\nSettings were not confirmed within 30 seconds."));
+          delay(3000);
 
           // flush serial input that may have accumulated while waiting
           while( serial_read()>=0 );
@@ -888,11 +907,33 @@ void config_edit_serial_device(byte dev)
 
       switch( c )
         {
+        case 'i':
+          {
+            bool ok = true;
+            if( get_bits(settings, 8, 2)==1 )
+              {
+                ok = false;
+                for(byte d=0; d<4 && !ok; d++)
+                  if( d!=dev && get_bits(config_serial_device_settings[d], 8, 2)==1 )
+                    ok = true;
+
+                if( !ok )
+                  {
+                    Serial.println(F("\n\nCan not change mapping. At least one device must"));
+                    Serial.println(F("be mapped to the host's (primary) serial interface."));
+                    delay(4000);
+                  }
+              }
+
+            if( ok )
 #if defined(__SAM3X8E__)
-        case 'i': settings = toggle_bits(settings, 8, 2, 0, 2); break;
+              settings = toggle_bits(settings, 8, 2, 0, 2);
 #else
-        case 'i': settings = toggle_bits(settings, 8, 2, 0, 1); break;
+              settings = toggle_bits(settings, 8, 2, 0, 1);
 #endif
+            break;
+          }
+
         case 'b': settings = toggle_bits(settings, 0, 4, BAUD_110, BAUD_19200); break;
         case 'u': settings = toggle_serial_flag(settings, 10); break;
         case 't': settings = toggle_bits(settings, 7, 1); break;
