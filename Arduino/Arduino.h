@@ -45,6 +45,7 @@ class SerialClass
   bool available();
   bool availableForWrite();
   char peek();
+  void flush();
 
   void begin(int i)     {}
   void setTimeout(int t) {}

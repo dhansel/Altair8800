@@ -71,13 +71,13 @@ void delay(unsigned long i)
 }
 
 void SerialClass::print(char c) { write(c); }
-void SerialClass::print(const char *s) { cout << FixNewline(s) << flush; }
-void SerialClass::print(int i) { cout << i << flush; }
-void SerialClass::print(unsigned int i) { cout << i << flush; }
-void SerialClass::print(long int i) { cout << i << flush; }
-void SerialClass::print(unsigned long i) { cout << i << flush; }
-void SerialClass::print(float f) { cout << f << flush; }
-void SerialClass::print(double d)  { cout << d << flush; }
+void SerialClass::print(const char *s) { cout << FixNewline(s) << std::flush; }
+void SerialClass::print(int i) { cout << i << std::flush; }
+void SerialClass::print(unsigned int i) { cout << i << std::flush; }
+void SerialClass::print(long int i) { cout << i << std::flush; }
+void SerialClass::print(unsigned long i) { cout << i << std::flush; }
+void SerialClass::print(float f) { cout << f << std::flush; }
+void SerialClass::print(double d)  { cout << d << std::flush; }
 
 void SerialClass::println() { cout << endl; }
 void SerialClass::println(char c) { write(c); cout << endl; }
@@ -92,13 +92,14 @@ void SerialClass::println(double d)  { cout << d << endl; }
 static bool kbhit_prev_result = false;
 static unsigned long kbhit_next_check = 0;
 
+void SerialClass::flush() { cout << std::flush; }
 char SerialClass::peek() { if( _kbhit() ) { char c =  _getch(); _ungetch(c); return c; } else return 0; }
 bool SerialClass::availableForWrite() { return true; }
 
 #ifdef _WIN32
-void SerialClass::write(char c) { cout << (c==127 ? string("\b \b") : string(1,c)) << flush; }
+void SerialClass::write(char c) { cout << (c==127 ? string("\b \b") : string(1,c)) << std::flush; }
 #else
-void SerialClass::write(char c) { cout << (c=='\n' ? "\r\n" : (c==127 ? "\b \b" : string(1,c))) << flush; }
+void SerialClass::write(char c) { cout << (c=='\n' ? "\r\n" : (c==127 ? "\b \b" : string(1,c))) << std::flush; }
 #endif
 
 
