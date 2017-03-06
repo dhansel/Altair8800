@@ -14,6 +14,7 @@ using namespace std;
 
 #include <ncurses.h>
 #include <termios.h>
+#include <unistd.h>
 #define endl "\r\n" << std::flush
 
 #define _getch   getch
@@ -66,9 +67,13 @@ unsigned long micros()
 
 void delay(unsigned long i)
 {
-  unsigned long m = millis()+i;
-  while(millis() < m);
+#ifdef _WIN32
+  Sleep(i);
+#else
+  usleep(i*1000);
+#endif
 }
+
 
 void SerialClass::print(char c) { write(c); }
 void SerialClass::print(const char *s) { cout << FixNewline(s) << std::flush; }
@@ -95,6 +100,7 @@ static unsigned long kbhit_next_check = 0;
 void SerialClass::flush() { cout << std::flush; }
 char SerialClass::peek() { if( _kbhit() ) { char c =  _getch(); _ungetch(c); return c; } else return 0; }
 bool SerialClass::availableForWrite() { return true; }
+bool SerialClass::available() { return _kbhit(); }
 
 #ifdef _WIN32
 void SerialClass::write(char c) { cout << (c==127 ? string("\b \b") : string(1,c)) << std::flush; }
@@ -119,19 +125,6 @@ char SerialClass::read()
     }
   else
     return 0;
-}
-
-// the kbhit() functions is very inefficient and slows
-// down emulation if called too often. 100 times a second is enough.
-bool SerialClass::available() 
-{ 
-  if( !kbhit_prev_result && millis()>kbhit_next_check )
-    {
-      kbhit_prev_result = _kbhit() ? true : false;
-      kbhit_next_check  = millis()+10;
-    }
-
-  return kbhit_prev_result;
 }
 
 

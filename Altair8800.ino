@@ -334,7 +334,7 @@ void altair_wait_step()
 {
   cswitch &= BIT(SW_RESET); // clear everything but RESET status
   while( host_read_status_led_WAIT() && (cswitch & (BIT(SW_STEP) | BIT(SW_SLOW) | BIT(SW_RESET)))==0 )
-    read_inputs();
+    { read_inputs(); delay(10); }
 
   if( cswitch & BIT(SW_SLOW) ) delay(500);
 }

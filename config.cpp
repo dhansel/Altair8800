@@ -363,7 +363,7 @@ static void print_serial_device_mapped_to(uint32_t settings)
 {
   switch( get_bits(settings, 8, 2) )
     {
-#if defined(__SAM3X8E__)
+#if defined(__SAM3X8E__) || defined(HOST_PC_H)
     case 0: Serial.print("Not mapped"); break;
     case 1: Serial.print("Primary serial host interface"); break;
     case 2: Serial.print("Secondary serial host interface"); break;
@@ -926,7 +926,7 @@ void config_edit_serial_device(byte dev)
               }
 
             if( ok )
-#if defined(__SAM3X8E__)
+#if defined(__SAM3X8E__) || defined(HOST_PC_H)
               settings = toggle_bits(settings, 8, 2, 0, 2);
 #else
               settings = toggle_bits(settings, 8, 2, 0, 1);

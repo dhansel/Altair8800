@@ -31,9 +31,26 @@
 #include "timer.h"
 
 #ifdef _WIN32
+
+#define _WINSOCKAPI_
 #include <Windows.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "Ws2_32.lib")
+#define SignalEvent SetEvent
+
 #else
+
 #include <signal.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/eventfd.h>
+#include <unistd.h>
+typedef int SOCKET;
+#define INVALID_SOCKET -1
+#define SOCKET_ERROR -1
+static unsigned long long int signal_write_buf = 1;
+#define SignalEvent(x) write(x, &signal_write_buf, 8)==0
+
 #endif
 
 byte data_leds;
@@ -217,50 +234,338 @@ uint32_t host_get_random()
 }
 
 
-static uint32_t cycles_per_char = 1, prev_char_cycles = 0;
-void host_check_interrupts()
+static int      inp_serial0 = -1, inp_serial1 = -1;
+static uint32_t cycles_per_char = 1;
+static SOCKET   iface_socket = INVALID_SOCKET;
+
+static SOCKET set_up_listener(const char* pcAddress, int nPort)
 {
-  static byte ctr = 0;
-  static unsigned long prevCtrlC = 0;
-
-  // Serial.available() is slow, only check it every 256 calls 
-  // if program is running
-  if( ((host_read_status_led_WAIT() || ++ctr==0) && Serial.available()) || ctrlC>0 )
+  u_long nInterfaceAddr = inet_addr(pcAddress);
+  if (nInterfaceAddr != INADDR_NONE) 
     {
-      int c = -1;
+      SOCKET sd = socket(AF_INET, SOCK_STREAM, 0);
+#ifndef _WIN32
+      int i = 1;
+      setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &i, sizeof(i));
+#endif
+      if (sd != INVALID_SOCKET) 
+        {
+          sockaddr_in sinInterface;
+          sinInterface.sin_family = AF_INET;
+          sinInterface.sin_addr.s_addr = nInterfaceAddr;
+          sinInterface.sin_port = nPort;
+          if (bind(sd, (sockaddr*)&sinInterface, sizeof(sockaddr_in)) != SOCKET_ERROR) 
+            {
+              listen(sd, 1);
+              return sd;
+            }
+        }
+    }
 
-      if( ctrlC>0 )
-	{ c = 3; ctrlC--; }
-      else if( (host_read_status_led_WAIT() || (timer_get_cycles()-prev_char_cycles) >= cycles_per_char) )
+  return INVALID_SOCKET;
+}
+
+
+#ifdef _WIN32
+
+static HANDLE signalEvent;
+
+DWORD WINAPI host_input_thread(void *data)
+{
+  WSAEVENT eventHandles[3], socket_event;
+  SOCKET accept_socket = INVALID_SOCKET;
+
+  // initialize socket for secondary interface
+  WSADATA wsaData;
+  WSAStartup(MAKEWORD(1,1), &wsaData);
+  accept_socket = set_up_listener("127.0.0.1", htons(8800));
+  if( accept_socket == INVALID_SOCKET )
+    printf("Can not listen on port 8800 => secondary interface not available\n");
+  else
+    {
+      socket_event = WSACreateEvent();
+      WSAEventSelect(accept_socket, socket_event, FD_ACCEPT);
+    }
+  
+  // initialize stdin handle
+  HANDLE stdIn = GetStdHandle(STD_INPUT_HANDLE);
+
+  while( 1 )
+    {
+      int n = 0;
+      int console_id = -1, socket_id = -1;
+
+      if( inp_serial0<0 )
+        { 
+          // ready to receive more data on console (primary input)
+          console_id = WSA_WAIT_EVENT_0+n; 
+          eventHandles[n++] = stdIn; 
+        }
+
+      if( iface_socket != INVALID_SOCKET )
+        {
+          if( inp_serial1<0 )
+            {
+              // ready to receive more data on socket (secondary input)
+              socket_id = WSA_WAIT_EVENT_0+n; 
+              eventHandles[n++] = socket_event; 
+            }
+        }
+      else if( accept_socket != INVALID_SOCKET )
+        { 
+          // ready to accept connection on socket
+          socket_id = WSA_WAIT_EVENT_0+n; 
+          eventHandles[n++] = socket_event; 
+        }
+
+      // adding this allows host_check_interrupts to signal this thread that 
+      // an input has been read and we can accept more inputs now (otherwise
+      // we may get stuck in WSAWaitForMultipleEvents even though more input
+      // is available)
+      eventHandles[n++] = signalEvent;
+
+      // wait until we either
+      // - get input on console (if we are ready to accept more)
+      // - get input on socket (if we are ready to accept more)
+      // - a new client is connected (if none is connected right now)
+      // - host_check_interrupts has signaled that there was a change in
+      //   whether we are ready to accept more data
+      DWORD result = WSAWaitForMultipleEvents(n, eventHandles, false, WSA_INFINITE, true);
+      if( console_id>=0 && result == WSA_WAIT_EVENT_0 + console_id )
+        {
+          if( Serial.available() )
+            {
+              // we received some console input (reading it resets the event)
+              inp_serial0 = Serial.read();
+            }
+          else
+            {
+              // some sort of other events => clear it from the queue
+              INPUT_RECORD r[512];
+              DWORD read;
+              ReadConsoleInput(stdIn, r, 512, &read );
+            }          
+        }
+      else if( socket_id>=0 && result == WSA_WAIT_EVENT_0+socket_id )
+        {
+          // activity on socket
+          if( iface_socket==INVALID_SOCKET )
+            {
+              // if we don't have an iface_socket then we're currently
+              // waiting for connections
+              sockaddr_in sinRemote;
+              socklen_t nAddrSize = sizeof(sinRemote);
+              iface_socket = accept(accept_socket, (sockaddr*)&sinRemote, &nAddrSize);
+              if( iface_socket != INVALID_SOCKET )
+                {
+                  // success => prepare to receive data
+                  WSAResetEvent(socket_event);
+                  WSAEventSelect(iface_socket, socket_event, FD_READ | FD_CLOSE);
+                 }
+            }
+          else
+            {
+              // we have an iface_socket => either input or connection drop
+              char c;
+              if( recv(iface_socket, &c, 1, 0)==0 )
+                {
+                  // no input => connection was dropped
+                  iface_socket = INVALID_SOCKET;
+                  
+                  // prepare to accept more connections
+                  WSAResetEvent(socket_event);
+                  WSAEventSelect(accept_socket, socket_event, FD_ACCEPT);
+                }
+              else
+                {
+                  // received input on socket
+                  DWORD n;
+                  inp_serial1 = c;
+
+                  // if no more data to read then reset the event
+                  if( ioctlsocket(iface_socket, FIONREAD, &n)==0 && n==0 ) WSAResetEvent(socket_event);
+                }
+            }
+        }
+    }
+}
+
+#else
+
+static int signalEvent;
+
+void *host_input_thread(void *data)
+{
+  SOCKET accept_socket = INVALID_SOCKET;
+  fd_set s_rd, s_wr, s_ex;
+
+  // initialize socket for secondary interface
+  accept_socket = set_up_listener("127.0.0.1", htons(8800));
+  if( accept_socket == INVALID_SOCKET )
+    printf("Can not listen on port 8800 => secondary interface not available\r\n");
+
+  FD_ZERO(&s_wr);
+  FD_ZERO(&s_ex);
+  while( 1 )
+    {
+      FD_ZERO(&s_rd);
+
+      int nfds = 0;
+      if( inp_serial0<0 )
 	{
-	  c = Serial.read();
-	  prev_char_cycles = timer_get_cycles();
+          // ready to receive more data on console (primary input)
+	  FD_SET(fileno(stdin), &s_rd);
+	  if( fileno(stdin)>=nfds ) nfds = fileno(stdin)+1;
 	}
 
-      if( c == 3 )
+      if( iface_socket != INVALID_SOCKET )
         {
-          // CTRL-C was pressed.  If we receive two CTRL-C in short order
-          // then we terminate the emulator.
-          if( millis()>prevCtrlC+250 )
-            prevCtrlC = millis();
-          else
-            exit(0);
+          if( inp_serial1<0 )
+	    {
+              // ready to receive more data on socket (secondary input)
+	      FD_SET(iface_socket, &s_rd); 
+	      if( iface_socket>=nfds ) nfds = iface_socket+1;
+	    }
         }
-      
-      if( c>=0 ) serial_receive_host_data(0, c);
-      ctr=0;
+      else if( accept_socket != INVALID_SOCKET )
+	{
+          // ready to accept connection on socket
+	  FD_SET(accept_socket, &s_rd); 
+	  if( accept_socket>=nfds ) nfds = accept_socket+1;
+	}
+
+      // adding this allows host_check_interrupts to signal this thread that 
+      // an input has been read and we can accept more inputs now (otherwise
+      // we may get stuck in WSAWaitForMultipleEvents even though more input
+      // is available)
+      FD_SET(signalEvent, &s_rd);
+      if( signalEvent>=nfds ) nfds = signalEvent+1;
+
+      // wait until we either
+      // - get input on console (if we are ready to accept more)
+      // - get input on socket (if we are ready to accept more)
+      // - a new client is connected (if none is connected right now)
+      // - host_check_interrupts has signaled that there was a change in
+      //   whether we are ready to accept more data
+      if( select(nfds, &s_rd, NULL, NULL, NULL) >= 0 )
+        {
+	  if( FD_ISSET(signalEvent, &s_rd) )
+	    {
+	      // clear the signal
+	      byte buf[8]; 
+	      read(signalEvent, buf, 8)==0;
+	    }
+
+          if( FD_ISSET(fileno(stdin), &s_rd) )
+	    inp_serial0 = Serial.read();
+          
+          if( iface_socket != INVALID_SOCKET && FD_ISSET(iface_socket, &s_rd) )
+            {
+              char c;
+              if( recv(iface_socket, &c, 1, MSG_NOSIGNAL)==0 )
+                {
+                  // no input => connection was dropped
+                  iface_socket = INVALID_SOCKET;
+                }
+              else
+                {
+                  // received input on socket
+                  inp_serial1 = c;
+                }
+            }
+          else if( accept_socket != INVALID_SOCKET && FD_ISSET(accept_socket, &s_rd) )
+            {
+              // accept a new connection
+              sockaddr_in sinRemote;
+              socklen_t nAddrSize = sizeof(sinRemote);
+              iface_socket = accept(accept_socket, (sockaddr*)&sinRemote, &nAddrSize);
+	      if( iface_socket!=INVALID_SOCKET )
+		{
+		  // make a connected telnet client enter CHAR mode
+		  write(iface_socket,"\377\375\042\377\373\001",6)!=0;
+		}
+            }
+        }
     }
+
+  return NULL;
+}
+
+#endif
+
+
+void host_check_interrupts()
+{
+  static unsigned long prevCtrlC = 0;
+  static uint32_t prev_char_cycles0 = 0, prev_char_cycles1 = 0;
+
+  // check input from interface 0 (console)
+  if( inp_serial0>=0 || ctrlC>0 )
+    if( host_read_status_led_WAIT() || (timer_get_cycles()-prev_char_cycles0) >= cycles_per_char )
+      {
+	int c = -1;
+	
+	if( ctrlC>0 )
+	  { c = 3; ctrlC--; }
+	else if( inp_serial0>=0 )
+	  { 
+	    c = inp_serial0; 
+	    
+	    // we have consumed the input => signal input thread to receive more
+	    inp_serial0 = -1; 
+	    SignalEvent(signalEvent); 
+	  }
+	
+	if( c==3 )
+	  {
+	    // CTRL-C was pressed.  If we receive two CTRL-C in short order
+	    // then we terminate the emulator.
+	    if( millis()>prevCtrlC+250 )
+	      prevCtrlC = millis();
+	    else
+	      exit(0);
+	  }
+	
+	if( c>=0 )
+	  serial_receive_host_data(0, (byte) c);
+	
+	prev_char_cycles0 = timer_get_cycles();
+      }
+
+  // check input from interface 1 (socket)
+  if( inp_serial1>=0 )
+    if( host_read_status_led_WAIT() || (timer_get_cycles()-prev_char_cycles1) >= cycles_per_char )
+      {
+	serial_receive_host_data(1, (byte) inp_serial1);
+	
+	// we have consumed the input => signal input thread to receive more
+	inp_serial1 = -1;
+	SignalEvent(signalEvent); 
+	
+	prev_char_cycles1 = timer_get_cycles();
+      }
 }
 
 
 void host_serial_setup(byte iface, unsigned long baud, bool set_primary_interface)
 {
   // assuming 9 bits per character
+  cycles_per_char  = (9*2000000)/baud;
+}
+
+
+void host_serial_write(byte iface, byte data)
+{
   if( iface==0 )
-    {
-      cycles_per_char  = (9*2000000)/baud;
-      prev_char_cycles = timer_get_cycles();
-    }
+    Serial.write(data);
+  else
+    send(iface_socket, (char *) &data, 1, 0 /*MSG_NOSIGNAL*/);
+}
+
+
+bool host_serial_available_for_write(byte iface)
+{
+  return iface==0 ? Serial.availableForWrite() : 1;
 }
 
 
@@ -289,7 +594,7 @@ void host_setup()
       storagefile = fopen("AltairStorage.dat", "r+b");
     }
 
-#ifdef _WIN32
+#if defined(_WIN32)
   // send CTRL-C to input instead of processing it (otherwise the
   // emulator would immediately quit if CTRL-C is pressed) and we
   // could not use CTRL-C to stop a running BASIC example.
@@ -299,13 +604,31 @@ void host_setup()
   HANDLE hstdin = GetStdHandle(STD_INPUT_HANDLE);
   GetConsoleMode(hstdin, &mode);
   SetConsoleMode(hstdin, mode & ~ENABLE_PROCESSED_INPUT);
-#else
-  signal(SIGINT, sig_handler);
-#endif
 
+  // create an event that can be sent to awaken the input thread
+  signalEvent = CreateEvent(NULL, false, false, NULL);
+
+  // create the input thread
+  DWORD id; 
+  HANDLE h = CreateThread(0, 0, host_input_thread, NULL, 0, &id);
+  CloseHandle(h);
+#elif defined(__linux__)
+  // handle CTRL-C in sig_handler so only pressing it twice
+  // will terminate the simulator (otherwise CTRL-C could not
+  // be sent to the emulated program
+  signal(SIGINT, sig_handler);
+
+  // create an event that can be sent to awaken the input thread
+  signalEvent = eventfd(0, 0);
+
+  // create the input thread
+  pthread_t id;
+  pthread_create(&id, NULL, host_input_thread, 0);
+  pthread_detach(id);
+#endif
+  
   // initialize random number generator
   srand((unsigned int) time(NULL));
 }
-
 
 #endif
