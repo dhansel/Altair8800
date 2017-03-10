@@ -235,7 +235,7 @@ uint32_t host_get_random()
 
 
 static int      inp_serial0 = -1, inp_serial1 = -1;
-static uint32_t cycles_per_char = 1;
+static uint32_t cycles_per_char[2];
 static SOCKET   iface_socket = INVALID_SOCKET;
 
 static SOCKET set_up_listener(const char* pcAddress, int nPort)
@@ -380,7 +380,7 @@ DWORD WINAPI host_input_thread(void *data)
                 {
                   // received input on socket
                   DWORD n;
-                  inp_serial1 = c;
+                  inp_serial1 = (byte) c;
 
                   // if no more data to read then reset the event
                   if( ioctlsocket(iface_socket, FIONREAD, &n)==0 && n==0 ) WSAResetEvent(socket_event);
@@ -470,7 +470,7 @@ void *host_input_thread(void *data)
               else
                 {
                   // received input on socket
-                  inp_serial1 = c;
+                  inp_serial1 = (byte) c;
                 }
             }
           else if( accept_socket != INVALID_SOCKET && FD_ISSET(accept_socket, &s_rd) )
@@ -501,7 +501,7 @@ void host_check_interrupts()
 
   // check input from interface 0 (console)
   if( inp_serial0>=0 || ctrlC>0 )
-    if( host_read_status_led_WAIT() || (timer_get_cycles()-prev_char_cycles0) >= cycles_per_char )
+    if( host_read_status_led_WAIT() || (timer_get_cycles()-prev_char_cycles0) >= cycles_per_char[0] )
       {
 	int c = -1;
 	
@@ -534,7 +534,7 @@ void host_check_interrupts()
 
   // check input from interface 1 (socket)
   if( inp_serial1>=0 )
-    if( host_read_status_led_WAIT() || (timer_get_cycles()-prev_char_cycles1) >= cycles_per_char )
+    if( (timer_get_cycles()-prev_char_cycles1) >= cycles_per_char[1] )
       {
 	serial_receive_host_data(1, (byte) inp_serial1);
 	
@@ -549,8 +549,8 @@ void host_check_interrupts()
 
 void host_serial_setup(byte iface, unsigned long baud, bool set_primary_interface)
 {
-  // assuming 9 bits per character
-  cycles_per_char  = (9*2000000)/baud;
+  // assuming 10 bits (start bit + 8 data bits + stop bit) per character
+  if( iface<2 ) cycles_per_char[iface]  = (10*2000000)/baud;
 }
 
 

@@ -987,8 +987,10 @@ void config_edit()
           Serial.print(F("Clear (m)emory on powerup   : ")); print_flag(CF_CLEARMEM); Serial.println(); r_clearmem = row++;
           Serial.print(F("A(u)x1 shortcut program     : ")); print_aux1_program(); Serial.println(); r_aux1 = row++;
           Serial.print(F("Host Serial (b)aud rate     : ")); print_host_serial_baud_rate(0); Serial.println(); r_baud0 = row++;
-#if defined(__SAM3X8E__)
+#if defined(__SAM3X8E__) || defined(HOST_PC_H)
           Serial.print(F("Host Serial1 baud (r)ate    : ")); print_host_serial_baud_rate(1); Serial.println(); r_baud1 = row++;
+#endif
+#if defined(__SAM3X8E__)
           Serial.print(F("(P)rimary host serial       : ")); print_host_primary_interface(); Serial.println(); r_primary = row++;
 #endif
           Serial.println();
@@ -1039,8 +1041,10 @@ void config_edit()
         case 'u': toggle_aux1_program(r_aux1, col); redraw = false; break;
 
         case 'b': toggle_host_serial_baud_rate(0, r_baud0, col); redraw = false; break;
-#if defined(__SAM3X8E__)
+#if defined(__SAM3X8E__) || defined(HOST_PC_H)
         case 'r': toggle_host_serial_baud_rate(1, r_baud1, col); redraw = false; break;
+#endif
+#if defined(__SAM3X8E__)
         case 'P': toggle_host_primary_interface(r_primary, col); redraw = false; break;
 #endif
         case '1': config_edit_serial_device(CSM_SIO); break;
