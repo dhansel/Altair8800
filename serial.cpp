@@ -269,7 +269,7 @@ static void serial_receive_data(byte dev, byte b)
 // called by the host if serial data received
 void serial_receive_host_data(byte host_interface, byte b)
 {
-  if( b==27 && config_serial_input_enabled() && !host_read_status_led_WAIT() )
+  if( b==27 && config_serial_input_enabled() && !host_read_status_led_WAIT() && host_interface==config_host_serial_primary() )
     {
       static unsigned long prevESC = 0;
       if( millis()-prevESC<250 )
@@ -481,7 +481,7 @@ void serial_timer_interrupt_setup(byte dev)
   if( dev<0xff )
     {
       // calculate the number of microseconds it would take to receive
-      // one byte given a specific baud rate (assuming 8 bit plus 1 stop bit and 1 parity bit):
+      // one byte given a specific baud rate (assuming 8 bit plus 1 start bit and 1 stop bit):
       // (10 * 1000000) / baud_rate
       timer_stop(dev);
       uint32_t us_per_byte = 10000000lu / config_serial_playback_baud_rate(dev);
