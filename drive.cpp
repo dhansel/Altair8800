@@ -42,7 +42,9 @@ void drive_out(byte addr, byte data) {}
 
 #define DRIVE_SECTOR_LENGTH    137
 #define DRIVE_NUM_SECTORS       32
-#define DRIVE_NUM_TRACKS       254
+#define DRIVE_NUM_SECTORS_MD    16
+#define DRIVE_NUM_TRACKS        77
+#define DRIVE_NUM_TRACKS_MD     35
 
 #define DRIVE_STATUS_HAVEDISK    1
 #define DRIVE_STATUS_HEADLOAD    2
@@ -58,6 +60,8 @@ static byte drive_current_track[NUM_DRIVES];
 static byte drive_current_sector[NUM_DRIVES];
 static byte drive_current_byte[NUM_DRIVES];
 static byte drive_sector_buffer[NUM_DRIVES][DRIVE_SECTOR_LENGTH];
+static byte drive_num_sectors[NUM_DRIVES];
+static byte drive_num_tracks[NUM_DRIVES];
 
 #define DRIVE_SECTOR_TRUE_DELAY       5200
 #define DRIVE_SECTOR_NOT_TRUE_DELAY     30
@@ -100,7 +104,7 @@ static const char *get_dir_content()
 
 static uint32_t drive_get_file_pos(byte drive_num)
 {
-  return drive_current_track[drive_num] * DRIVE_NUM_SECTORS * DRIVE_SECTOR_LENGTH + drive_current_sector[drive_num] * DRIVE_SECTOR_LENGTH;
+  return drive_current_track[drive_num] * drive_num_sectors[drive_num] * DRIVE_SECTOR_LENGTH + drive_current_sector[drive_num] * DRIVE_SECTOR_LENGTH;
 }
 
 
@@ -132,7 +136,7 @@ static void drive_sector_interrupt()
     {
       // advance current sector
       drive_current_sector[drive_selected]++;
-      if( drive_current_sector[drive_selected] >= DRIVE_NUM_SECTORS )
+      if( drive_current_sector[drive_selected] >= drive_num_sectors[drive_selected] )
         drive_current_sector[drive_selected] = 0;
       
       drive_current_byte[drive_selected] = 0xff;
@@ -159,6 +163,8 @@ void drive_setup()
       drive_current_sector[i] = 0;
       drive_current_byte[i] = 0;
       drive_mounted_disk[i] = 0;
+      drive_num_tracks[i] = DRIVE_NUM_TRACKS;
+      drive_num_sectors[i] = DRIVE_NUM_SECTORS;
     }
   
   // prepare sector change timer interrupt 
@@ -245,6 +251,21 @@ bool drive_mount(byte drive_num, byte disk_num)
           get_filename(disk_num, drive_file_name[drive_num], 13, false);
           drive_mounted_disk[drive_num] = disk_num;
           drive_status[drive_num] |= DRIVE_STATUS_HAVEDISK;
+
+          int32_t s = host_get_file_size(drive_file_name[drive_num]);
+          if( s>0 && s<100000 )
+            {
+              // minidisk
+              drive_num_tracks[drive_num] = DRIVE_NUM_TRACKS_MD;
+              drive_num_sectors[drive_num] = DRIVE_NUM_SECTORS_MD;
+            }
+          else
+            {
+              // regular disk or empty disk
+              drive_num_tracks[drive_num] = DRIVE_NUM_TRACKS;
+              drive_num_sectors[drive_num] = DRIVE_NUM_SECTORS;
+            }
+
           return true;
         }
     }
@@ -354,7 +375,7 @@ byte drive_in(byte addr)
                 else
                   {
                     drive_current_sector[drive_selected]++;
-                    if( drive_current_sector[drive_selected] >= DRIVE_NUM_SECTORS )
+                    if( drive_current_sector[drive_selected] >= drive_num_sectors[drive_selected] )
                       drive_current_sector[drive_selected] = 0;
                     drive_current_byte[drive_selected] = 0xff;
                     drive_sector_true = true;
@@ -466,7 +487,7 @@ void drive_out(byte addr, byte data)
 
         if( drive_selected < NUM_DRIVES )
           {
-            if( (data & 0x01) && drive_current_track[drive_selected]<DRIVE_NUM_TRACKS-1 ) 
+            if( (data & 0x01) && drive_current_track[drive_selected]<drive_num_tracks[drive_selected]-1 ) 
               {
                 drive_current_track[drive_selected]++;
                 drive_current_byte[drive_selected] = 0xff;
