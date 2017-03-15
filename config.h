@@ -9,7 +9,7 @@
 
 // Allowing breakpoints significantly reduces performance but is helpful
 // for debugging.  Also uses 2*MAX_BREAKPOINTS+1 bytes of RAM
-#define MAX_BREAKPOINTS 10
+#define MAX_BREAKPOINTS 0
 
 
 // Setting USE_PROFILING_DETAIL to 1 will (every 10 seconds) show a 
