@@ -166,9 +166,9 @@ bool host_file_exists(const char *filename)
 }
 
 
-int host_get_file_size(const char *filename)
+int32_t host_get_file_size(const char *filename)
 {
-  int res = -1;
+  int32_t res = -1;
 
   FILE *f = open_file(filename);
   if( f )

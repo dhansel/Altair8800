@@ -31,7 +31,7 @@ void     host_reset_function_switch_state();
 void     host_copy_flash_to_ram(void *dst, const void *src, uint32_t len);
 
 bool     host_file_exists(const char *filename);
-int      host_get_file_size(const char *filename);
+int32_t  host_get_file_size(const char *filename);
 
 uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, void *buffer);
 uint32_t host_write_file(const char *filename, uint32_t offset, uint32_t len, void *buffer);
