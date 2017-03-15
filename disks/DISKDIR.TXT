@@ -13,5 +13,6 @@ Available disks:
 1001) DISK09.DSK: Time Sharing Basic V1.1
 1010) DISK0A.DSK: Time Sharing Basic V2 system
 1011) DISK0B.DSK: Time Sharing Basic V2 programs
+1100) DISK0C.DSK: Altair Mini-Disk Basic
 ---------------------------------------------
 
