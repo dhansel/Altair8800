@@ -5,14 +5,17 @@ Available disks:
 0001) DISK01.DSK: CP/M (63k)
 0010) DISK02.DSK: ALTAIR DOS 1.0
 0011) DISK03.DSK: ALTAIR Disk Basic
-0100) DISK04.DSK: ALTAIR Disk Basic examples
+0100) DISK04.DSK: ALTAIR Disk Basic programs
 0101) DISK05.DSK: Games (CP/M programs)
 0110) DISK06.DSK: SuperCalc II (CP/M program)
 0111) DISK07.DSK: WordStar (CP/M program)
 1000) DISK08.DSK: Zork (CP/M game)
 1001) DISK09.DSK: Time Sharing Basic V1.1
-1010) DISK0A.DSK: Time Sharing Basic V2 system
+1010) DISK0A.DSK: Time Sharing Basic V2
 1011) DISK0B.DSK: Time Sharing Basic V2 programs
 1100) DISK0C.DSK: Altair Mini-Disk Basic
+1101) DISK0D.DSK: Altair Mini-Disk Basic programs
+1110) DISK0E.DSK: Altair Mini-Disk DOS
+1111) DISK0F.DSK: Altair Mini-Disk DOS programs
 ---------------------------------------------
 
