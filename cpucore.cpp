@@ -949,7 +949,7 @@ void cpu_RET()
   { \
     pushPC(); \
     regPC = 0x00 ## N; \
-    TIMER_ADD_CYCLES(4); \
+    TIMER_ADD_CYCLES(11); \
   }
 
 CPU_RST(00);
