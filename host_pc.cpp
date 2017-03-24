@@ -145,17 +145,17 @@ void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
 // ----------------------------------------------------------------------------------
 
 
-static FILE *open_file(const char *filename)
+static const char *get_full_path(char *fnamebuf, int fnamebuf_size, const char *filename)
 {
-  char fnamebuf[30];
   snprintf(fnamebuf, 30, "disks/%s", filename);
-  return fopen(fnamebuf, "rb");
+  return fnamebuf;
 }
 
 
 bool host_file_exists(const char *filename)
 {
-  FILE *f = open_file(filename);
+  char fnamebuf[30];
+  FILE *f = fopen(get_full_path(fnamebuf, 30, filename), "rb");
   if( f )
     {
       fclose(f);
@@ -170,7 +170,8 @@ int32_t host_get_file_size(const char *filename)
 {
   int32_t res = -1;
 
-  FILE *f = open_file(filename);
+  char fnamebuf[30];
+  FILE *f = fopen(get_full_path(fnamebuf, 30, filename), "rb");
   if( f )
     {
       if( fseek(f, 0, SEEK_END)==0 )
@@ -182,6 +183,21 @@ int32_t host_get_file_size(const char *filename)
 }
 
 
+FILE *open_file(const char *filename)
+{
+  static char fnamebuf[30];
+  static FILE *f = NULL;
+  if( f==NULL || strcmp(filename, fnamebuf+6)!=0 )
+    {
+      if( f!=NULL ) fclose(f);
+      f = fopen(get_full_path(fnamebuf, 30, filename), "r+b");
+      if( !f ) f = fopen(fnamebuf, "w+b");
+    }
+
+  return f;
+}
+
+
 uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, void *buffer)
 {
   uint32_t res = 0;
@@ -190,7 +206,6 @@ uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, voi
     {
       if( fseek(f, offset, SEEK_SET)==0 )
         res = fread(buffer, 1, len, f);
-      fclose(f);
     }
 
   //printf("host_read_file('%s', %04x, %04x, %p)=%04x\n", filename, offset, len, buffer, res);
@@ -200,17 +215,15 @@ uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, voi
 
 uint32_t host_write_file(const char *filename, uint32_t offset, uint32_t len, void *buffer)
 {
-  char fnamebuf[30];
-  snprintf(fnamebuf, 30, "disks/%s", filename);
   uint32_t res = 0;
-  FILE *f = fopen(fnamebuf, "r+b");
-  if( !f ) f = fopen(fnamebuf, "w+b");
-
+  FILE *f = open_file(filename);
   if( f )
     {
       if( fseek(f, offset, SEEK_SET)==0 )
-        res = fwrite(buffer, 1, len, f);
-      fclose(f);
+        {
+          res = fwrite(buffer, 1, len, f);
+          fflush(f);
+        }
     }
 
   //printf("host_write_file('%s', %04x, %04x, %p)=%04x\n", filename, offset, len, buffer, res);
@@ -565,7 +578,7 @@ void host_serial_write(byte iface, byte data)
 
 bool host_serial_available_for_write(byte iface)
 {
-  return iface==0 ? Serial.availableForWrite() : 1;
+  return iface==0 ? Serial.availableForWrite() : (iface_socket != INVALID_SOCKET);
 }
 
 
