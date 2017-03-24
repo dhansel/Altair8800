@@ -134,6 +134,10 @@ static void drive_sector_interrupt()
     }
   else
     {
+      // flush write buffer and end write mode (if enabled)
+      if( drive_status[drive_selected] & DRIVE_STATUS_WRITE )
+        drive_flush(drive_selected);
+
       // advance current sector
       drive_current_sector[drive_selected]++;
       if( drive_current_sector[drive_selected] >= drive_num_sectors[drive_selected] )
@@ -374,6 +378,10 @@ byte drive_in(byte addr)
                   }
                 else
                   {
+                    // if we were writing then flush the write buffer now
+                    if( drive_status[drive_selected]&DRIVE_STATUS_WRITE )
+                      drive_flush(drive_selected);
+
                     drive_current_sector[drive_selected]++;
                     if( drive_current_sector[drive_selected] >= drive_num_sectors[drive_selected] )
                       drive_current_sector[drive_selected] = 0;
@@ -405,7 +413,6 @@ byte drive_in(byte addr)
               {
                 // read new sector from file
                 //Serial.print(F("Reading disk: ")); Serial.println(drive_get_file_pos(drive_selected));
-
                 byte n = host_read_file(drive_file_name[drive_selected], drive_get_file_pos(drive_selected), 
                                         DRIVE_SECTOR_LENGTH, drive_sector_buffer[drive_selected]);
                 if( n<DRIVE_SECTOR_LENGTH ) memset(drive_sector_buffer[drive_selected]+n, 0, DRIVE_SECTOR_LENGTH-n);
@@ -419,7 +426,7 @@ byte drive_in(byte addr)
       }
     }
 
-  //if( drive_status[drive_selected]&DRIVE_STATUS_INT_EN ) printf("reading disk %04x: %02x -> %02x\n", regPC, addr, data);
+  //printf("reading disk %04x: %02x -> %02x\n", regPC, addr, data);
   return data;
 }
 
@@ -427,7 +434,7 @@ byte drive_in(byte addr)
 
 void drive_out(byte addr, byte data)
 {
-  //if( drive_status[drive_selected]&DRIVE_STATUS_INT_EN ) printf("writing disk %04x: %02x -> %02x\n", regPC, addr, data);
+  //printf("writing disk %04x: %02x -> %02x\n", regPC, addr, data);
 
   // we were writing and now are doing something else then flush write buffer
   if( addr!=0012 && drive_selected<NUM_DRIVES && (drive_status[drive_selected]&DRIVE_STATUS_WRITE) )
