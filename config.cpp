@@ -40,7 +40,7 @@
 #define  BAUD_115200 11
 
 // config_flags:
-// xxxxxxxx xxxxxxxt ttttRRRR dVCDIPFT
+// xxxxxxxx xxrppmmt ttttRRRR dVCDIPFT
 // T = Throttle
 // t = Throttle delay if throttle is enabled (0=auto)
 // F = Profile
@@ -51,6 +51,9 @@
 // V = VI board installed
 // R = RTC rate
 // d = force real-time mode for disk drives
+// p = printer type (00=NONE, 01=Okidata, 02=C700)
+// m = map printer to host interface (00=NONE, 01=primary, 02=secondary)
+// r = real-time mode for printer
 uint32_t config_flags;
 
 
@@ -243,6 +246,18 @@ uint32_t config_host_serial_baud_rate(uint32_t settings, byte iface)
 }
 
 
+byte config_printer_map_to_host_serial()
+{
+  return get_bits(config_flags, 17, 2);
+}
+
+
+byte config_printer_type()
+{
+  return get_bits(config_flags, 19, 2);
+}
+
+
 // --------------------------------------------------------------------------------
 
 
@@ -359,9 +374,9 @@ static void print_serial_flag_backspace(uint32_t settings)
 }
 
 
-static void print_serial_device_mapped_to(uint32_t settings)
+static void print_device_mapped_to(uint32_t settings)
 {
-  switch( get_bits(settings, 8, 2) )
+  switch( settings )
     {
 #if defined(__SAM3X8E__) || defined(HOST_PC_H)
     case 0: Serial.print("Not mapped"); break;
@@ -372,6 +387,12 @@ static void print_serial_device_mapped_to(uint32_t settings)
     case 1: Serial.print(F("Serial")); break;
 #endif
     }
+}
+
+
+static void print_serial_device_mapped_to(uint32_t settings)
+{
+  print_device_mapped_to(get_bits(settings, 8, 2));
 }
 
 
@@ -442,6 +463,17 @@ static void print_drive_mounted_disk(byte d)
     { Serial.print(F("empty disk #")); numsys_print_byte(d); }
   else
     Serial.print(drive_disk_description(d));
+}
+
+
+static void print_printer_type()
+{
+  switch( config_printer_type() )
+    {
+    case 0: Serial.print(F("None")); break;
+    case 1: Serial.print(F("Okidata")); break;
+    case 2: Serial.print(F("C700")); break;
+    }
 }
 
 
@@ -727,6 +759,53 @@ static bool load_config(byte fileno)
 
 // --------------------------------------------------------------------------------
 
+#if USE_PRINTER>0
+
+void config_edit_printer()
+{
+  bool go = true;
+
+  while( go )
+    {
+      Serial.print(F("\033[2J\033[0;0H\n"));
+      
+      Serial.println(F("Configure printer settings"));
+      Serial.print(F("\n(P)rinter type             : ")); print_printer_type(); Serial.println();
+      Serial.print(F("Map printer to (i)nterface : ")); print_device_mapped_to(config_printer_map_to_host_serial()); Serial.println();
+      Serial.print(F("(F)orce real-time mode     : ")); print_flag(CF_PRINTER_RT); Serial.println();
+      
+      Serial.println(F("\nE(x)it to main menu"));
+      Serial.print(F("\n\nCommand: "));
+      
+      while( !serial_available() ) delay(50);
+      char c = serial_read();
+      if( c>31 && c<127 ) Serial.println(c);
+
+      switch( c )
+        {
+        case 'P': 
+          config_flags = toggle_bits(config_flags, 19, 2, 0, 2);
+          break;
+
+        case 'i':
+#if defined(__SAM3X8E__) || defined(HOST_PC_H)
+          config_flags = toggle_bits(config_flags, 17, 2, 0, 2);
+#else
+          config_flags = toggle_bits(config_flags, 17, 2, 0, 1);
+#endif
+          break;
+
+        case 'F': toggle_flag(CF_PRINTER_RT, 0, 0); break;
+        case 27:
+        case 'x': go = false; break;
+        }
+    }
+}
+
+#endif
+
+// --------------------------------------------------------------------------------
+
 
 #if NUM_DRIVES>0
 void config_edit_drives()
@@ -822,6 +901,7 @@ void config_edit_interrupts()
   byte conn_2sio1 = find_vi_conn(INT_2SIO1);
   byte conn_2sio2 = find_vi_conn(INT_2SIO2);
   byte conn_rtc   = find_vi_conn(INT_RTC);
+  byte conn_lpc   = find_vi_conn(INT_LPC);
   byte conn_drive = find_vi_conn(INT_DRIVE);
 
   bool go = true;
@@ -838,6 +918,7 @@ void config_edit_interrupts()
       Serial.print(F("(4) 88-2SIO port 2 interrupt  : ")); print_interrupt_conn(INT_2SIO2, conn_2sio2); Serial.println();
       Serial.print(F("(5) 88-SIO interrupt          : ")); print_interrupt_conn(INT_SIO, conn_sio); Serial.println();
       Serial.print(F("(6) 88-ACR interrupt          : ")); print_interrupt_conn(INT_ACR, conn_acr); Serial.println();
+      Serial.print(F("(7) 88-LPC interrupt          : ")); print_interrupt_conn(INT_LPC, conn_lpc); Serial.println();
 
       Serial.println(F("\nE(x)it to main menu"));
 
@@ -861,6 +942,7 @@ void config_edit_interrupts()
         case '4': conn_2sio2 = toggle_interrupt_conn(INT_2SIO2, conn_2sio2); break;
         case '5': conn_sio   = toggle_interrupt_conn(INT_SIO, conn_sio);   break;
         case '6': conn_acr   = toggle_interrupt_conn(INT_ACR, conn_acr);   break;
+        case '7': conn_lpc   = toggle_interrupt_conn(INT_LPC, conn_lpc);   break;
 
         case 27:
         case 'x': go = false; break;
@@ -874,6 +956,7 @@ void config_edit_interrupts()
   if( conn_2sio2 < 0xff ) config_interrupt_vi_mask[conn_2sio1] |= INT_2SIO2;
   if( conn_rtc   < 0xff ) config_interrupt_vi_mask[conn_rtc]   |= INT_RTC;
   if( conn_drive < 0xff ) config_interrupt_vi_mask[conn_drive] |= INT_DRIVE;
+  if( conn_lpc   < 0xff ) config_interrupt_vi_mask[conn_lpc]   |= INT_LPC;
 }
 
 
@@ -994,15 +1077,21 @@ void config_edit()
           Serial.print(F("(P)rimary host serial       : ")); print_host_primary_interface(); Serial.println(); r_primary = row++;
 #endif
           Serial.println();
-          Serial.print(F("(1) Configure SIO           : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_SIO]); Serial.println();
-          Serial.print(F("(2) Configure ACR           : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_ACR]); Serial.println();
-          Serial.print(F("(3) Configure 2SIO port 1   : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_2SIO1]); Serial.println();
-          Serial.print(F("(4) Configure 2SIO port 2   : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_2SIO2]); Serial.println();
+          Serial.print(F("(1) Configure SIO           : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_SIO]); Serial.println(); row++;
+          Serial.print(F("(2) Configure ACR           : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_ACR]); Serial.println(); row++;
+          Serial.print(F("(3) Configure 2SIO port 1   : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_2SIO1]); Serial.println(); row++;
+          Serial.print(F("(4) Configure 2SIO port 2   : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_2SIO2]); Serial.println(); row++;
+#if USE_PRINTER>0
+          Serial.print(F("(5) Configure printer       : ")); 
+          print_printer_type();
+          if( config_printer_type()!=CP_NONE ) { Serial.print(F(" on ")); print_device_mapped_to(config_printer_map_to_host_serial()); }
+          Serial.println(); row++;
+#endif
 #if NUM_DRIVES>0
           Serial.print(F("(D) Configure disk drives   : ")); print_drive_mounted(); Serial.println(); row++;
 #endif
           Serial.print(F("(I) Configure interrupts    : ")); print_vi_flag(); Serial.println(); row++;
-          row += 5;
+          row += 1;
 
           Serial.println();
           Serial.println(F("(M)anage Filesystem"));
@@ -1051,6 +1140,10 @@ void config_edit()
         case '2': config_edit_serial_device(CSM_ACR); break;
         case '3': config_edit_serial_device(CSM_2SIO1); break;
         case '4': config_edit_serial_device(CSM_2SIO2); break;
+#if USE_PRINTER>0
+        case '5': config_edit_printer(); break;
+#endif
+
         case 'I': config_edit_interrupts(); break;
 #if NUM_DRIVES>0
         case 'D': config_edit_drives(); break;

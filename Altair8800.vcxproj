@@ -96,6 +96,7 @@
     </ClCompile>
     <ClCompile Include="mem.cpp" />
     <ClCompile Include="numsys.cpp" />
+    <ClCompile Include="printer.cpp" />
     <ClCompile Include="profile.cpp" />
     <ClCompile Include="prog.cpp" />
     <ClCompile Include="prog_basic.cpp" />
@@ -126,6 +127,7 @@
     <ClInclude Include="host_pc.h" />
     <ClInclude Include="mem.h" />
     <ClInclude Include="numsys.h" />
+    <ClInclude Include="printer.h" />
     <ClInclude Include="profile.h" />
     <ClInclude Include="prog.h" />
     <ClInclude Include="prog_basic.h" />

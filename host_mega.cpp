@@ -33,6 +33,10 @@
 #error Throttling neither supported nor necessary for Arduino MEGA. Set USE_THROTTLE to 0 in config.h
 #endif
 
+#if USE_PRINTER>0 && MEMSIZE>(4096+1024)
+#error Either set USE_PRINTER to 0 in config.h or reduce MEMSIZE in host_mega.h to 4096+1024, otherwise stability problems may occur
+#endif
+
 
 /*
   Runs emulation at about 0.5 Mhz clock speed (about 1/4 speed of original Altair8800)

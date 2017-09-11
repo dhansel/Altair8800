@@ -51,6 +51,7 @@
 #define INT_2SIO2       0x0008
 #define INT_DRIVE       0x0010
 #define INT_RTC         0x0020
+#define INT_LPC         0x0040
 #define INT_VECTOR      0x0080
 #define INT_DEVICE      0x00ff
 
@@ -62,6 +63,7 @@ byte altair_in(byte addr);
 void altair_out(byte addr, byte val);
 void altair_hlt();
 void altair_interrupt(uint16_t i, bool set = true);
+bool altair_interrupt_active(uint16_t i);
 void altair_interrupt_enable();
 void altair_interrupt_disable();
 bool altair_isreset();

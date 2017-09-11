@@ -17,6 +17,7 @@
 #define TIMER_2SIO2    3
 #define TIMER_DRIVE    4
 #define TIMER_RTC      5
+#define TIMER_PRINTER  6
 #define TIMER_THROTTLE 8
 #define TIMER_PROFILE  9
 

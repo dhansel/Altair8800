@@ -31,8 +31,12 @@
 
 
 // Enables support for disk drives. Each drive uses about 160 bytes
-// of memory. Set to 0 to completely disable drive support.
+// of RAM. Set to 0 to completely disable drive support.
 #define NUM_DRIVES 4
+
+
+// Enables printer emulation which uses about 140 bytes of RAM.
+#define USE_PRINTER 1
 
 
 // If enabled, Address switch state will be set by issuing the '/'
@@ -53,6 +57,7 @@
 #define CF_CLEARMEM     0x20
 #define CF_HAVE_VI      0x40
 #define CF_DRIVE_RT     0x80
+#define CF_PRINTER_RT   0x00200000
 
 #define CSM_SIO         0
 #define CSM_ACR         1
@@ -67,6 +72,10 @@
 #define CSFB_UNDERSCORE 1
 #define CSFB_RUBOUT     3
 #define CSFB_AUTO       2
+
+#define CP_NONE         0
+#define CP_OKI          1
+#define CP_C700         2
 
 extern uint32_t config_flags;
 extern uint32_t config_serial_settings;
@@ -104,5 +113,9 @@ byte     config_serial_backspace(byte dev);
 byte     config_serial_7bit(byte dev);
 byte     config_serial_ucase(byte dev);
 bool     config_serial_trap_CLOAD();
+
+byte        config_printer_type();
+byte        config_printer_map_to_host_serial();
+inline byte config_printer_realtime() { return (config_flags & CF_PRINTER_RT)!=0; }
 
 #endif

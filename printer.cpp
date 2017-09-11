@@ -18,15 +18,6 @@
 // -----------------------------------------------------------------------------
 
 
-// NOTE: I found almost no documentation on either the Okidata or C700
-//       printer. All I have is some information on the Okidata taken
-//       from the printer emulation of the MITS Altair Emulator.
-//       The rest I had to guess based on issuing actual LPRINT/LLIST
-//       commands in BASIC and CP/M and seeing what happens.
-//       What I have here works fine for the cases I tried but is
-//       certainly nowhere close to being accurate.
-
-
 #include "printer.h"
 #include "config.h"
 #include "host.h"
@@ -57,18 +48,25 @@ void printer_setup() {}
 static byte status = 0x00;
 static bool interrupt_enabled = false;
 static byte buffer_size = 0, buffer_counter = 0, linefeed_status = 0;
-static byte buffer[80];
+static byte buffer[132];
 
 
 static bool print_character(byte c, unsigned long delay)
 {
   bool res = false;
 
-  byte ser = config_printer_map_to_host_serial();
-  if( ser>0 && host_serial_available_for_write(ser-1) )
+  int ser = config_printer_map_to_host_serial();
+  if( ser==1 )
+    ser = config_host_serial_primary();
+  else if( ser==2 )
+    ser = 1-config_host_serial_primary();
+  else
+    ser = -1;
+
+  if( ser>=0 && host_serial_available_for_write(ser) )
     {
       // printer is assigned to serial device and device is ready
-      host_serial_write(ser-1, c);
+      host_serial_write(ser, c);
       timer_start(TIMER_PRINTER, delay);
       res = true;
     }
@@ -149,6 +147,14 @@ static void printer_interrupt()
 
 // ----- Okidata printer
 
+
+// NOTE: I found very little documentation on the Okidata printer. 
+//       All I have is some information taken from the printer emulation of 
+//       the MITS Altair Emulator.
+//       The rest I had to guess based on issuing actual LPRINT/LLIST
+//       commands in BASIC and CP/M and seeing what happens.
+//       What I have here works fine for the cases I tried but is
+//       certainly nowhere close to being accurate.
 
 void printer_oki_out_ctrl(byte data)
 {
@@ -246,59 +252,88 @@ void printer_oki_setup()
 
 // ----- C700 printer
 
+// Documentation for the C700 printer is at:
+// http://altairclone.com/downloads/manuals/88-C700%20(Centronics).pdf
+
+static byte printer_c700_selected = false;
 
 void printer_c700_out_ctrl(byte data)
 {
   if( interrupt_enabled ) 
     altair_interrupt(INT_LPC, false);
 
-  switch( data )
+  // bit 0: 0=PRIME (reset print buffer)
+  if( (data & 0x01)==0 )
     {
-    case 0x03:
-      {
-        // command 0x03: enable interrupts (?)
-        interrupt_enabled = true;
-        if( !timer_running(TIMER_PRINTER) )
-          timer_start(TIMER_PRINTER, 10);
+      buffer_counter = 0;
+      buffer_size = 0;
+    }
 
-        break;
-      }
+  // bit 1: 1=enable interrupts
+  interrupt_enabled = (data & 0x02)!=0;
+  if( interrupt_enabled )
+    {
+      if( !timer_running(TIMER_PRINTER) )
+        timer_start(TIMER_PRINTER, 10);
+    }
+  else
+    {
+      if( timer_running(TIMER_PRINTER) )
+        timer_stop(TIMER_PRINTER);
     }
 }
 
 
 void printer_c700_out_data(byte data)
 {
-  if( interrupt_enabled ) 
-    altair_interrupt(INT_LPC, false);
-
-  if( data==0x0d )
+  if( data == 0x11 )
     {
-      buffer_counter  = 0;
-      linefeed_status = STLF_CRLF;
-      print_next_character();
+      // select printer
+      printer_c700_selected = true;
     }
-  else if( data==0x0a )
+  else if( printer_c700_selected )
     {
-      linefeed_status = STLF_LF;
-      print_next_character();
-    }
-  else if( data==0x11 )
-    {
-      // 0x11 is DC1 (device control 1)
-      // function for C700 is unknown
-    }
-  else if( (status & PST_PRINTING)==0 && buffer_size<80 )
-    {
-      buffer[buffer_size++] = data;
-      if( buffer_size==80 )
+      if( data==0x0a )
         {
-          status |= PST_BUFFER_FULL;
-          if( (status & PST_LINEFEED)==0 ) 
+          // line feed
+          linefeed_status = STLF_LF;
+          print_next_character();
+        }
+      else if( data==0x0d )
+        {
+          // carriage return
+          buffer_counter  = 0;
+          linefeed_status = STLF_CRLF;
+          print_next_character();
+        }
+      else if( data==0x0e )
+        {
+          // SO code (wide character printing)
+          // currently not implemented
+        }
+      else if( data == 0x13 )
+        {
+          // de-select printer
+          printer_c700_selected = false;
+        }
+      else if( data==0x7f )
+        {
+          // DEL (clears buffer)
+          buffer_counter = 0;
+          buffer_size = 0;
+        }
+      else if( (status & PST_PRINTING)==0 && buffer_size<132 )
+        {
+          buffer[buffer_size++] = data;
+          if( buffer_size==132 )
             {
-              buffer_counter  = 0;
-              linefeed_status = STLF_CRLF;
-              print_next_character();
+              status |= PST_BUFFER_FULL;
+              if( (status & PST_LINEFEED)==0 ) 
+                {
+                  buffer_counter  = 0;
+                  linefeed_status = STLF_CRLF;
+                  print_next_character();
+                }
             }
         }
     }
@@ -307,12 +342,29 @@ void printer_c700_out_data(byte data)
 
 byte printer_c700_in_ctrl()
 {
-  // I have no documentation of the C700 printer
-  // so I don't really know what the status register is
-  // supposed to return when reading.
-  // Returning 0xFF when the printer is available and 0x00 when
-  // the printer is busy works with BASIC
-  return (status==0x00 ? 0xFF : 0x00);
+  byte res = 0x00;
+
+  // bit 0: 0=not ready, 1=ready
+  // bit 1: 0=not busy,  1=busy
+  if( status & (PST_PRINTING|PST_LINEFEED) ) 
+    res |= 0x02;
+  else
+    res |= 0x01;
+
+  // bit 2: 1=out of paper (we always have paper)
+
+  // bit 3: 0=printer selected, 1=printer not selected
+  if( !printer_c700_selected ) res |= 0x08;
+
+  // bit 4: 1=fault (we never have a fault)
+
+  // bit 6: interrupts enabled
+  if( interrupt_enabled ) res |= 0x40;
+
+  // bit 7: 1=interrupt has occurred
+  if( altair_interrupt_active(INT_LPC) ) res |= 0x80;
+
+  return res;
 }
 
 
@@ -326,6 +378,7 @@ void printer_c700_setup()
 {
   timer_setup(TIMER_PRINTER, 1000000, printer_c700_interrupt);
   status = 0x00;
+  printer_c700_selected = false;
 }
 
 
