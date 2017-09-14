@@ -845,7 +845,7 @@ const byte PROGMEM basic16k[0x4000] = {
   0xE8,0x2A,0xA6,0x03,0xEB,0x06,0x0A,0xCD,0x98,0xE2,0xD6,0xD3,0xC2,0x15,0xE3,0x05,
   0xC2,0x17,0xE3,0xCD,0x98,0xE2,0x93,0xC2,0x15,0xE3,0x2A,0xD9,0x00,0x06,0x0A,0xCD,
   0x98,0xE2,0x5F,0x96,0xA2,0xC2,0x5A,0xE3,0x73,0xCD,0x4C,0xC6,0x7E,0xB7,0x23,0xC2,
-  0x2D,0xE3,0x05,0xC2,0x2F,0xE3,0x01,/*0xF9*/0xFA,0xFF,0x09,0x22,0x76,0x03,0x21,0x04,0xC6, // bug in 16k ROM basic => see below
+  0x2D,0xE3,0x05,0xC2,0x2F,0xE3,0x01,/*0xF9*/0xFB,0xFF,0x09,0x22,0x76,0x03,0x21,0x04,0xC6, // bug in 16k ROM basic => see below
   0xCD,0xA8,0xDC,0x2A,0xD9,0x00,0xE5,0xC3,0xE7,0xC7,0x23,0xEB,0x2A,0x76,0x03,0xCD,
   0xCB,0xCB,0xDA,0x4D,0xE3,0x21,0x6E,0xE3,0xCD,0xA8,0xDC,0xC3,0x05,0xC7,0x4E,0x4F,
   0x20,0x47,0x4F,0x4F,0x44,0x0D,0x0A,0x00,0xCD,0x91,0xE3,0x7E,0xC3,0xA9,0xDA,0xCD,
@@ -1311,26 +1311,15 @@ const byte PROGMEM basic16k[0x4000] = {
 
 Bug in CLOAD routine in ALTAIR 16k ROM BASIC?
 
-See the code below. It reads 10 zeros at the end of the program
-before it stops reading.  BASIC needs 3 zeros to denote the end of the 
-program (one 0 for end-of-line of the last line and then two to denote 
-the end of the program itself). After loading finishes, HL points to
-the first address after the last of the 10 zeros read.
-In E346-E349, FFF9 is added to HL, which is the same as subtracting 8.  
-That value is stored in 0376. But that leaves 0376 pointing TO the 
-last of the three zero bytes instead of the first address after. 
-Typing in a program from scratch and looking at 0376, it points to the 
-next address AFTER the program.
-
-This causes problems when loading a program back from cassette. 
-After reading back this program:
+After saving the following program with CSAVE and then reading it back
+via CLOAD:
 10 PRINT "A"
 20 GOTO 10
 and then typing
 10 PRINT "B"
 list
 the output is
-10 PRINT "A"
+10 PRINT "B"
 20 GOTO 10
 0
 (note the additional 0 at the end)
@@ -1338,48 +1327,79 @@ At that point, typing
 30 PRINT
 will crash BASIC (infinite loop, overwriting all RAM)
 
-Changing E347 from F9 to FA (i.e. subtracting 7 instead of 8)
-fixes the CLOAD problem shown above.
+See the CLOAD code below. It expects 10 zeros at the end of the program
+to denote end-of-data.  BASIC needs 3 zeros to denote the end of the 
+program (one 0 for end-of-line of the last line and then two to denote 
+the end of the program itself). After loading finishes, HL points to
+the first address after the last of the 10 zeros read.
+In E346-E349, FFF9 is added to HL, which is the same as subtracting 7.
+That value is stored in 0376. So 0376 points to the first location of
+unused memory after the program.
+
+Now the saved BASIC program above on tape looks like this:
+0000: D3 D3 D3 D3 D3 D3 D3 D3  D3 D3 41 E2 03 0A 00 91
+0010: 20 22 41 22 00 EC 03 14  00 89 20 0E 0A 00 00 00
+0020: 00 00 00 00 00 00 00 00                         
+
+Note that there are 11 zeros at the end of the program. That is because 
+the last line of the program is "20 GOTO 10". BASIC stores the "10" as a
+two-byte, little-endian number, i.e. 0A 00. So the last byte of the
+actual program on tape is zero, followed by 10 zeros for the trailer.
+
+Remember that CLOAD stops reading after 10 zeros and then subtracts 7 
+to set the end-location of the program. For the program above, 
+the 10 zeros read include the zero-byte from the "GOTO" line number 
+and skip the last zero-byte of the trailer. That leaves the program-end 
+pointer pointing to the last byte of program space instead of the first
+one after.
+
+If the last line of the program is "GOTO 0" then the program-end
+pointer will point the second-to-last byte of program space.
+
+Changing E347 from F9 to FB (i.e. subtracting 5 instead of 7)
+appears to fix the CLOAD problem shown above. It does add two 
+additional zeros at the end of programs that don't end with a
+zero themselves but that does not seem to cause other problems.
+
 
 --- 16k BASIC Code excerpt:
 
-Load program from cassette:
-        ...
-        E311                LHLD 03A6    program space start address is in 03A6
-        E314                XCHG         move to HL
+E311   LHLD 03A6    ; 03a6 contains file name (one char) 
+                    ; 03a7 is FF for CLOAD? and 00 for CLOAD
+E314   XCHG         ; file name => regE, 00/ff => regD
 
 wait for header...
- PC   = E315 = [06 0A CD] = MVI B,0A     expect 10 consecutive D3 as header
- PC   = E317 = [CD 98 E2] = CALL E298    read new character
- PC   = E31A = [D6 D3 C2] = SUI D3       is it D3
- PC   = E31C = [C2 15 E3] = JNZ E315     no, start over
- PC   = E31F = [05 C2 17] = DCR B        count down # of D3
- PC   = E320 = [C2 17 E3] = JNZ E317     loop
+E315   MVI B,0A     ; expect 10 consecutive D3 as header
+E317   CALL E298    ; read next character from tape
+E31A   SUI D3       ; is it D3?
+E31C   JNZ E315     ; no, start over
+E31F   DCR B        ; count down # of D3
+E320   JNZ E317     ; loop
 
 check file name...
- PC   = E323 = [CD 98 E2] = CALL E298    read next character
- PC   = E326 = [93 C2 15] = SUB E        does it match file name (in E)
- PC   = E327 = [C2 15 E3] = JNZ E315     no, start over
- PC   = E32A = [2A D9 00] = LHLD 00D9    
+E323   CALL E298    ; read next character from tape
+E326   SUB E        ; does it match file name (in E)?
+E327   JNZ E315     ; no, start over
+E32A   LHLD 00D9    ; program space start address is in D9:DA
 
 load program...
- PC   = E32D = [06 0A CD] = MVI B,0A     expect 10 consecutive zeros as end marker
- PC   = E32F = [CD 98 E2] = CALL E298    receive char
- PC   = E332 = [5F 96 A2] = MOV E,A      save received char
- PC   = E333 = [96 A2 C2] = SUB M        
- PC   = E334 = [A2 C2 5A] = ANA D        
- PC   = E335 = [C2 5A E3] = JNZ E35A     
- PC   = E338 = [73 CD 4C] = MOV M,E      move received char to memory [HL]
- PC   = E339 = [CD 4C C6] = CALL C64C    
- PC   = E33C = [7E B7 23] = MVR A,HL     read back received char from memory
- PC   = E33D = [B7 23 C2] = ORA A        check if zero
- PC   = E33E = [23 C2 2D] = INX HL       increment memory address for write
- PC   = E33F = [C2 2D E3] = JNZ E32D     jump if received char not zero
- PC   = E342 = [05 C2 2F] = DCR B        count down # of zeros
- PC   = E343 = [C2 2F E3] = JNZ E32F     loop
-        E346 = [01 F9 FF] = LXI BC,FFF9  subtract 8 (should be 7?) from HL  <==== fix: LXI BC,FFFA
-        E349                DAD BC       to point to address after last program byte
-        E34A                SHLD 0376    store in 0376
+E32D   MVI B,0A     ; expect 10 consecutive zeros as end marker
+E32F   CALL E298    ; receive char
+E332   MOV E,A      ; save received char
+E333   SUB M        ; compare to memory
+E334   ANA D        ; ignore comparison for CLOAD (D=0, see above)
+E335   JNZ E35A     ; print "no good" if difference is found
+E338   MOV M,E      ; move received char to memory [HL]
+E339   CALL C64C    ; checks for "out of memory" and prints error
+E33C   MVR A,HL     ; read back received char from memory
+E33D   ORA A        ; check if zero
+E33E   INX HL       ; increment memory address for write
+E33F   JNZ E32D     ; jump if received char not zero
+E342   DCR B        ; count down # of zeros
+E343   JNZ E32F     ; loop
+E346   LXI BC,FFF9  ; subtract 7 from HL
+E349   DAD BC       ; to point to address after last program byte
+E34A   SHLD 0376    ; store in 0376
 */
 
 
