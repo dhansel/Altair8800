@@ -79,7 +79,7 @@ static byte dir_find_file(char nm1, char nm2, struct DirEntryStruct *entry)
   for(byte i=0; i<num_entries; i++)
     {
       dir_read_entry(i, entry);
-      if( entry->name1==nm1 && entry->name2==nm2 )
+      if( entry->name1==(byte) nm1 && entry->name2==(byte) nm2 )
         return i;
     }
   
