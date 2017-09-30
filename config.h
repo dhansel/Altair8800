@@ -21,7 +21,6 @@
 // Enables throttling of CPU speed. This only makes sense to enable
 // on the Due since the Mega is too slow anyways and the throttling 
 // checks would only reduce performance further.
-// if USE_THROTTLE is enabled, USE_PROFILING must be enabled too.
 #define USE_THROTTLE 1
 
 
@@ -33,6 +32,12 @@
 // Enables support for disk drives. Each drive uses about 160 bytes
 // of RAM. Set to 0 to completely disable drive support.
 #define NUM_DRIVES 4
+
+
+// Enables support for hard disk (88-HDSK). Hard disk support uses
+// about 1100 bytes of RAM plus 56 bytes for each unit.
+// Set to 0 to completely disable hard disk support
+#define NUM_HDSK_UNITS 1
 
 
 // Enables printer emulation which uses about 140 bytes of RAM.
@@ -58,6 +63,7 @@
 #define CF_HAVE_VI      0x40
 #define CF_DRIVE_RT     0x80
 #define CF_PRINTER_RT   0x00200000
+#define CF_HDSK_RT      0x00400000
 
 #define CSM_SIO         0
 #define CSM_ACR         1
@@ -79,8 +85,8 @@
 
 extern uint32_t config_flags;
 extern uint32_t config_serial_settings;
-extern byte     config_interrupt_mask;
-extern byte     config_interrupt_vi_mask[8];
+extern uint32_t config_interrupt_mask;
+extern uint32_t config_interrupt_vi_mask[8];
 
 void config_setup();
 void config_edit();

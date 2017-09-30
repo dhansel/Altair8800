@@ -35,6 +35,7 @@ int32_t  host_get_file_size(const char *filename);
 
 uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, void *buffer);
 uint32_t host_write_file(const char *filename, uint32_t offset, uint32_t len, void *buffer);
+uint32_t host_set_file(const char *filename, uint32_t offset, uint32_t len, byte b, bool keep_open = false);
 
 void host_write_data(const void *data, uint32_t addr, uint32_t len);
 void host_read_data(void *data,  uint32_t addr, uint32_t len);

@@ -87,6 +87,7 @@
     <ClCompile Include="disassembler.cpp" />
     <ClCompile Include="drive.cpp" />
     <ClCompile Include="filesys.cpp" />
+    <ClCompile Include="hdsk.cpp" />
     <ClCompile Include="host_due.cpp" />
     <ClCompile Include="host_mega.cpp" />
     <ClCompile Include="host_pc.cpp">
@@ -94,6 +95,7 @@
 ;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
+    <ClCompile Include="image.cpp" />
     <ClCompile Include="mem.cpp" />
     <ClCompile Include="numsys.cpp" />
     <ClCompile Include="printer.cpp" />
@@ -121,10 +123,12 @@
     <ClInclude Include="disassembler.h" />
     <ClInclude Include="drive.h" />
     <ClInclude Include="filesys.h" />
+    <ClInclude Include="hdsk.h" />
     <ClInclude Include="host.h" />
     <ClInclude Include="host_due.h" />
     <ClInclude Include="host_mega.h" />
     <ClInclude Include="host_pc.h" />
+    <ClInclude Include="image.h" />
     <ClInclude Include="mem.h" />
     <ClInclude Include="numsys.h" />
     <ClInclude Include="printer.h" />

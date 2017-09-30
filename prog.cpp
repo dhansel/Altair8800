@@ -60,6 +60,8 @@ struct prog_info_struct get_prog_info(byte i)
       {PSTR("CPU Exerciser"),              prog_tools_copy_exerciser,     true},
 #if !defined(__AVR_ATmega2560__)
       {PSTR("Music system"),               prog_tools_copy_musicsys,      true},
+      {PSTR("Hard disk boot ROM"),         prog_tools_copy_hdbl,          true},
+      //{PSTR("ADEXER"),                     prog_tools_copy_adexer,        true},
 #endif
       //{PSTR("Status lights test"),         prog_tools_copy_statustest,    false},
       //{PSTR("Serial echo using IRQ"),      prog_tools_copy_serialirqtest, false},

@@ -534,11 +534,11 @@ uint32_t due_storagesize = 0x8000;
 // The Due has 512k FLASH memory (addresses 0x00000-0x7ffff).
 // We use 32k (0x8000 bytes) for storage
 // DueFlashStorage address 0 is the first address of the second memory bank,
-// i.e. 0x40000. We add 0x38000 so we use at 0x78000-0x7ffff
+// i.e. 0x40000. We add 0x39000 so we use at 0x79000-0x7ffff
 // => MUST make sure that our total program size (shown in Arduine IDE after compiling)
-//    is less than 491519 (0x77fff)! Otherwise we would overwrite our own program when
+//    is less than 495616 (0x78fff)! Otherwise we would overwrite our own program when
 //    saving memory pages.
-#define FLASH_STORAGE_OFFSET 0x38000
+#define FLASH_STORAGE_OFFSET 0x39000
 DueFlashStorage dueFlashStorage;
 
 #define MOVE_BUFFER_SIZE 1024
@@ -687,8 +687,9 @@ volatile static uint16_t switches_pulse = 0;
 volatile static uint16_t switches_debounced = 0;
 static uint32_t debounceTime[16];
 static const byte function_switch_pin[16] = {20,21,54,55,56,57,58,59,52,53,60,61,30,31,32,33};
-static const uint16_t function_switch_irq[16] = {0, INT_SW_STOP, 0, 0, 0, 0, 0, 0, INT_SW_RESET, INT_SW_CLR, 
-                                                 0, 0, 0, 0, INT_SW_AUX2UP, INT_SW_AUX2DOWN};
+static const uint8_t function_switch_irq[16] = {0, INT_SW_STOP>>24, 0, 0, 0, 0, 0, 0, 
+                                                INT_SW_RESET>>24, INT_SW_CLR>>24, 0, 0, 0, 0, 
+                                                INT_SW_AUX2UP>>24, INT_SW_AUX2DOWN>>24};
 
 
 bool host_read_function_switch(byte i)
@@ -741,7 +742,7 @@ static void switch_interrupt(int i)
         {
           switches_debounced |= bitval;
           switches_pulse |= bitval;
-          if( function_switch_irq[i]>0 ) altair_interrupt(function_switch_irq[i]);
+          if( function_switch_irq[i]>0 ) altair_interrupt(function_switch_irq[i]<<24);
           debounceTime[i] = millis() + 50;
         }
       else if( !d1 && d2 ) 
@@ -1004,6 +1005,48 @@ uint32_t host_write_file(const char *filename, uint32_t offset, uint32_t len, vo
             res = f.write((uint8_t *) buffer, len);
           f.close();
         }
+      if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
+    }
+
+  return res;
+}
+
+
+uint32_t host_set_file(const char *filename, uint32_t offset, uint32_t len, byte b, bool keep_open)
+{
+  uint32_t res = 0;
+  static File f;
+
+  if( use_sd )
+    {
+      bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
+      host_set_status_led_HLDA(); 
+
+      // if a filename is given then (re-)open the file
+      if( filename!=NULL )
+        {
+          if( f ) f.close();
+          f = SD.open(filename, FILE_WRITE);
+        }
+
+      // if a position is given then seek to that position
+      if( f && offset < 0xffffffff )
+        if( !host_seek_file_write(f, offset) )
+          f.close();
+
+      // if the file is open and length is >0 then write to the file
+      if( f && len>0 )
+        {
+          // write data in MOVE_BUFFER_SIZE chunks
+          memset(moveBuffer, b, len < MOVE_BUFFER_SIZE ? len : MOVE_BUFFER_SIZE);
+          for(uint32_t i=0; i<len; i+=MOVE_BUFFER_SIZE) 
+            res += f.write(moveBuffer, i+MOVE_BUFFER_SIZE<=len ? MOVE_BUFFER_SIZE : len-i);
+        }
+
+      // if we're not supposed to keep the file open then close it
+      if( !keep_open )
+        f.close();
+
       if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
     }
 

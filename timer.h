@@ -8,7 +8,7 @@
 
 #include <Arduino.h>
 
-#define MAX_TIMERS 10
+#define MAX_TIMERS 12
 
 // timers 0-4 must represent the four serial devices
 #define TIMER_SIO      0
@@ -20,6 +20,8 @@
 #define TIMER_PRINTER  6
 #define TIMER_THROTTLE 8
 #define TIMER_PROFILE  9
+#define TIMER_HDSK     10
+#define TIMER_HDSK_SK  11
 
 
 extern uint32_t timer_cycle_counter, timer_cycle_counter_offset, timer_next_expire_cycles;

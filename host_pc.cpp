@@ -192,6 +192,7 @@ FILE *open_file(const char *filename)
       if( f!=NULL ) fclose(f);
       f = fopen(get_full_path(fnamebuf, 30, filename), "r+b");
       if( !f ) f = fopen(fnamebuf, "w+b");
+      if( !f ) f = fopen(fnamebuf, "rb");
     }
 
   return f;
@@ -227,6 +228,43 @@ uint32_t host_write_file(const char *filename, uint32_t offset, uint32_t len, vo
     }
 
   //printf("host_write_file('%s', %04x, %04x, %p)=%04x\n", filename, offset, len, buffer, res);
+  return res;
+}
+
+
+uint32_t host_set_file(const char *filename, uint32_t offset, uint32_t len, byte b, bool keep_open)
+{
+  uint32_t res = 0;
+  static FILE *f = NULL;
+
+  // if a filename is given then (re-)open the file
+  if( filename!=NULL )
+    {
+      char fnamebuf[30];
+      if( f!=NULL ) fclose(f);
+      f = fopen(get_full_path(fnamebuf, 30, filename), "r+b");
+      if( !f ) f = fopen(fnamebuf, "w+b");
+    }
+
+  // if a position is given then seek to that position
+  if( f && offset < 0xffffffff )
+    if( fseek(f, offset, SEEK_SET)!=0 )
+      { fclose(f); f = NULL; }
+
+  // if the file is open and length is >0 then write to the file
+  if( f && len>0 )
+    {
+      // write data in 256-byte chunks
+      byte buf[256];
+      memset(buf, b, 256);
+      for(uint32_t i=0; i<len; i+=256) 
+        res += fwrite(buf, i+256<len ? 256 : len-i, 1, f);
+    }
+
+  // if we're not supposed to keep the file open then close it
+  if( !keep_open )
+    { fclose(f); f=NULL; }
+
   return res;
 }
 

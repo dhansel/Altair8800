@@ -24,7 +24,10 @@
 #include "filesys.h"
 #include "numsys.h"
 #include "drive.h"
+#include "hdsk.h"
 #include "prog.h"
+
+#define CONFIG_FILE_VERSION 1
 
 #define  BAUD_110    0
 #define  BAUD_150    1
@@ -40,7 +43,7 @@
 #define  BAUD_115200 11
 
 // config_flags:
-// xxxxxxxx xxrppmmt ttttRRRR dVCDIPFT
+// vvvvvvvv xhrppmmt ttttRRRR dVCDIPFT
 // T = Throttle
 // t = Throttle delay if throttle is enabled (0=auto)
 // F = Profile
@@ -54,6 +57,8 @@
 // p = printer type (00=NONE, 01=Okidata, 02=C700)
 // m = map printer to host interface (00=NONE, 01=primary, 02=secondary)
 // r = real-time mode for printer
+// h = real-time mode for hard drives
+// v = config file version
 uint32_t config_flags;
 
 
@@ -80,11 +85,11 @@ uint32_t config_serial_device_settings[4];
 
 
 // masks defining which interrupts (INT_*) are at which vector interrupt levels
-byte config_interrupt_vi_mask[8];
+uint32_t config_interrupt_vi_mask[8];
 
 
 // mask defining whch interrupts (INT_*) are connected if VI board is not installed
-byte config_interrupt_mask;
+uint32_t config_interrupt_mask;
 
 
 // program to be run when AUX1 is raised
@@ -406,7 +411,7 @@ static void print_rtc_frequency()
 }
 
 
-static void print_interrupt_conn(byte mask, byte b)
+static void print_interrupt_conn(uint32_t mask, byte b)
 {
   if( config_flags&CF_HAVE_VI )
     {
@@ -432,11 +437,17 @@ static void print_aux1_program(byte row=0, byte col=0)
   byte b = config_aux1_program();
   if( b & 0x80 )
     {
-      const char *disk = drive_disk_description(b&0x7f);
-      if( disk==NULL )
+      const char *image;
+
+      if( b & 0x40 )
+        image = hdsk_get_image_description(b&0x3f);
+      else
+        image = drive_get_image_description(b&0x3f);
+
+      if( image==NULL )
         Serial.print(F("none"));
       else
-        Serial.print(disk);
+        Serial.print(image);
     }
   else if( b > 0 && prog_get_name(b)!=NULL )
     Serial.print(FP(prog_get_name(b)));
@@ -449,20 +460,42 @@ static void print_drive_mounted()
 {
   byte n = 0;
   for(byte i=0; i<NUM_DRIVES; i++)
-    if( drive_get_mounted_disk(i)>0 ) n++;
+    if( drive_get_mounted_image(i)>0 ) n++;
 
   Serial.print(n); Serial.print(F(" mounted"));
 }
 
 
-static void print_drive_mounted_disk(byte d)
+static void print_drive_mounted_image(byte d)
 {
   if( d==0 )
     Serial.print(F("none"));
-  else if( drive_disk_filename(d)==NULL )
+  else if( drive_get_image_filename(d)==NULL )
     { Serial.print(F("empty disk #")); numsys_print_byte(d); }
   else
-    Serial.print(drive_disk_description(d));
+    Serial.print(drive_get_image_description(d));
+}
+
+
+static void print_hdsk_mounted()
+{
+  byte n = 0;
+  for(byte i=0; i<NUM_HDSK_UNITS; i++)
+    for(byte j=0; j<4; j++)
+      if( hdsk_get_mounted_image(i, j)>0 ) n++;
+
+  Serial.print(n); Serial.print(F(" mounted"));
+}
+
+
+static void print_hdsk_mounted_image(byte d)
+{
+  if( d==0 )
+    Serial.print(F("none"));
+  else if( hdsk_get_image_filename(d)==NULL )
+    { Serial.print(F("empty disk #")); numsys_print_byte(d); }
+  else
+    Serial.print(hdsk_get_image_description(d));
 }
 
 
@@ -544,7 +577,7 @@ static void toggle_throttle(byte row, byte col)
 }
 
 
-static byte toggle_interrupt_conn(byte mask, byte c)
+static byte toggle_interrupt_conn(uint32_t mask, byte c)
 {
   if( config_flags&CF_HAVE_VI )
     {
@@ -592,12 +625,26 @@ static uint32_t toggle_serial_flag_backspace(uint32_t settings)
 }
 
 
-static byte find_disk(byte n)
+static byte find_floppy_image(byte n)
 {
   byte i=n;
   do
     {
-      if( drive_disk_filename(i)!=NULL ) return i;
+      if( drive_get_image_filename(i)!=NULL ) return i;
+      i++;
+    }
+  while( i>0 );
+
+  return 0;
+}
+
+
+static byte find_hdsk_image(byte n)
+{
+  byte i=n;
+  do
+    {
+      if( hdsk_get_image_filename(i)!=NULL ) return i;
       i++;
     }
   while( i>0 );
@@ -609,19 +656,40 @@ static byte find_disk(byte n)
 static void toggle_aux1_program(byte row, byte col)
 {
   byte b = config_aux1_prog;
-  
-  if( b & 0x80 )
+  bool found = false;
+
+  while( !found )
     {
-      b = find_disk((b & 0x7f)+1);
-      if( b>0 ) b |= 0x80;
+      if( !found && (b & 0xC0)==0x00 )
+        {
+          // look for next integrated program
+          b = b + 1;
+          if( prog_get_name(b) )
+            found = true;
+          else
+            b = 0x80;
+        }
+
+      if( !found && (b & 0xC0)==0x80 )
+        {
+          // look for next floppy disk image
+          b = find_floppy_image((b & 0x3f)+1) | 0x80;
+          if( b>0x80 ) 
+            found = true;
+          else
+            b = 0xC0;
+        }
+
+      if( !found && (b & 0xC0)==0xC0 )
+        {
+          // look for next hard disk image
+          b = find_hdsk_image((b & 0x3f)+1) | 0xC0;
+          if( b>0xC0 ) 
+            found = true;
+          else
+            b = 0;
+        }
     }
-  else if( prog_get_name(b+1)==NULL  )
-    {
-      b = find_disk(1);
-      if( b>0 ) b |= 0x80;
-    }
-  else
-    b = b + 1;
 
   config_aux1_prog = b;
   print_aux1_program(row, col);
@@ -693,17 +761,29 @@ static bool save_config(byte fileno)
   // better to write all data at once (will overwrite instead
   // of deleting/creating the file)
   byte s = sizeof(uint32_t);
-  byte data[6*sizeof(uint32_t)+10+NUM_DRIVES+1];
-  memcpy(data+0*s,   &config_flags, s);
-  memcpy(data+1*s,   &new_config_serial_settings, s);
-  memcpy(data+2*s,    config_serial_device_settings, 4*s);
-  memcpy(data+6*s,    config_interrupt_vi_mask, 8);
-  memcpy(data+6*s+8, &config_interrupt_mask, 1);
-  data[6*s+9]  = config_aux1_prog;
-  data[6*s+10] = NUM_DRIVES;
-  for(byte i=0; i<NUM_DRIVES; i++) data[6*s+11+i] = drive_get_mounted_disk(i);
+  byte data[15*sizeof(uint32_t)+1+NUM_DRIVES+1+NUM_HDSK_UNITS*4+1];
 
-  return filesys_write_file('C', fileno, (void *) data, 6*s+10+NUM_DRIVES+1);
+  // merge version number into config_flags
+  config_flags = (config_flags & 0x00ffffff) | (CONFIG_FILE_VERSION << 24);
+
+  memcpy(data+0*s,  &config_flags, s);
+  memcpy(data+1*s,  &new_config_serial_settings, s);
+  memcpy(data+2*s,   config_serial_device_settings, 4*s);
+  memcpy(data+6*s,   config_interrupt_vi_mask, 8*s);
+  memcpy(data+14*s, &config_interrupt_mask, s);
+
+  word n = 15*s;
+  data[n++] = config_aux1_prog;
+  
+  data[n++] = NUM_DRIVES;
+  for(byte i=0; i<NUM_DRIVES; i++) data[n++] = drive_get_mounted_image(i);
+
+  data[n++] = NUM_HDSK_UNITS;
+  for(byte i=0; i<NUM_HDSK_UNITS; i++) 
+    for(byte j=0; j<4; j++)
+      data[n++] = hdsk_get_mounted_image(i, j);
+
+  return filesys_write_file('C', fileno, (void *) data, n);
 }
 
 
@@ -720,12 +800,31 @@ static bool load_config(byte fileno)
 
       byte s = sizeof(uint32_t);
       filesys_read_data(fid, &config_flags, s);
+      
+      // highest 8 bits are file version
+      byte v = config_flags >> 24;
+
       filesys_read_data(fid, &new_config_serial_settings, s);
       filesys_read_data(fid, config_serial_device_settings, 4*s);
-      filesys_read_data(fid, config_interrupt_vi_mask, 8);
-      filesys_read_data(fid, &config_interrupt_mask, 1);
+      if( v==0 )
+        {
+          // in config file version 0 the interrupt masks are 8 bits
+          byte b[9];
+          filesys_read_data(fid, b, 9);
+          for(byte i=0; i<8; i++) config_interrupt_vi_mask[i] = b[i];
+          config_interrupt_mask = b[8];
+        }
+      else
+        {
+          // in config file version 1 and later the interrupt masks are 32 bits
+          filesys_read_data(fid, config_interrupt_vi_mask, 8*s);
+          filesys_read_data(fid, &config_interrupt_mask, s);
+        }
+
+      // AUX1 UP shortcut program
       filesys_read_data(fid, &config_aux1_prog, 1);
       
+      // disk drive settings
       if( filesys_read_data(fid, &n, 1)!=1 ) n = 0;
       for(byte i=0; i<n; i++) 
         if( filesys_read_data(fid, &d, 1)==1 && i<NUM_DRIVES )
@@ -736,6 +835,19 @@ static bool load_config(byte fileno)
               drive_unmount(i);
           }
       drive_set_realtime((config_flags & CF_DRIVE_RT)!=0);
+
+      // hard disk settings
+      if( filesys_read_data(fid, &n, 1)!=1 ) n = 0;
+      for(byte i=0; i<n; i++) 
+        for(byte j=0; j<4; j++) 
+          if( filesys_read_data(fid, &d, 1)==1 && i<NUM_HDSK_UNITS )
+            {
+              if( d>0 )
+                hdsk_mount(i, j, d);
+              else
+                hdsk_unmount(i, j);
+            }
+      hdsk_set_realtime((config_flags & CF_HDSK_RT)!=0);
       
       filesys_close(fid);
 #if defined(__AVR_ATmega2560__)
@@ -806,18 +918,17 @@ void config_edit_printer()
 
 // --------------------------------------------------------------------------------
 
-
 #if NUM_DRIVES>0
 void config_edit_drives()
 {
   bool go = true;
   byte i, mounted[NUM_DRIVES];
 
-  for(i=0; i<NUM_DRIVES; i++) mounted[i] = drive_get_mounted_disk(i);
+  for(i=0; i<NUM_DRIVES; i++) mounted[i] = drive_get_mounted_image(i);
 
   byte row, col, r_realtime, r_drives[NUM_DRIVES], r_cmd;
   row = 4;
-  col = 26;
+  col = 32;
   Serial.print(F("\033[2J\033[0;0H\n"));
 
   Serial.println(F("Configure disk drive settings"));
@@ -827,8 +938,8 @@ void config_edit_drives()
     {
       Serial.print(F("Drive (")); 
       if( i<10 ) Serial.write(48+i); else Serial.write(87+i);
-      Serial.print(F(") mounted disk : "));
-      print_drive_mounted_disk(mounted[i]);
+      Serial.print(F(") mounted disk image : "));
+      print_drive_mounted_image(mounted[i]);
       Serial.println();
       r_drives[i] = row++;
     }
@@ -859,16 +970,16 @@ void config_edit_drives()
 
             if( d>=0 && d<=NUM_DRIVES )
               {
-                byte next = find_disk(mounted[d]+1);
-                if( drive_get_mounted_disk(d)>0 && 
-                    drive_disk_filename(drive_get_mounted_disk(d))==NULL &&
-                    mounted[d] < drive_get_mounted_disk(d) &&
-                    (next       > drive_get_mounted_disk(d) || next<mounted[d]) )
-                  next = drive_get_mounted_disk(d);
+                byte next = find_floppy_image(mounted[d]+1);
+                if( drive_get_mounted_image(d)>0 && 
+                    drive_get_image_filename(drive_get_mounted_image(d))==NULL &&
+                    mounted[d] < drive_get_mounted_image(d) &&
+                    (next       > drive_get_mounted_image(d) || next<mounted[d]) )
+                  next = drive_get_mounted_image(d);
 
                 mounted[d] = next;
                 set_cursor(r_drives[d], col);
-                print_drive_mounted_disk(mounted[d]);
+                print_drive_mounted_image(mounted[d]);
               }
           }
         }
@@ -876,15 +987,120 @@ void config_edit_drives()
 
   drive_set_realtime((config_flags & CF_DRIVE_RT)!=0);
   for(i=0; i<NUM_DRIVES; i++) 
-    if( mounted[i] != drive_get_mounted_disk(i) )
+    if( mounted[i] != drive_get_mounted_image(i) )
       drive_mount(i, mounted[i]);
 }
 #endif
 
+
+// --------------------------------------------------------------------------------
+
+#if NUM_HDSK_UNITS>0
+void config_edit_hdsk()
+{
+  bool go = true;
+  byte i, j, k;
+
+  byte mounted[NUM_HDSK_UNITS*4];
+  for(i=0; i<NUM_HDSK_UNITS; i++)
+    for(j=0; j<4; j++)
+      mounted[i*4+j] = hdsk_get_mounted_image(i, j);
+
+  byte row, col, r_drives[NUM_HDSK_UNITS*4], r_cmd, r_realtime;
+  row = 4;
+  col = 33;
+  Serial.print(F("\033[2J\033[0;0H\n"));
+
+  Serial.println(F("Configure hard disk settings"));
+  Serial.print(F("\n(F)orce real-time mode : ")); print_flag(CF_HDSK_RT); Serial.println(); r_realtime = row++;
+
+  for(i=0; i<NUM_HDSK_UNITS; i++)
+    for(j=0; j<4; j++)
+      {
+        byte n = i*4+j;
+        Serial.print(F("("));
+        if( n<10 ) Serial.write(48+n); else Serial.write(87+n);
+        Serial.print(F(") Hard disk"));
+#if NUM_HDSK_UNITS>1
+        Serial.print(F(" unit ")); 
+        Serial.print(i+1);
+        col=40;
+#endif
+        Serial.print(F(" platter "));
+        Serial.print(j);
+        Serial.print(F(" image : "));
+        print_hdsk_mounted_image(mounted[i*4+j]);
+        Serial.println();
+        r_drives[n] = row++;
+      }
+
+  Serial.println(F("\n(R)eset hard disk controller")); row+=3;
+  
+  Serial.println(F("\nE(x)it to main menu")); row+=3;
+  Serial.print(F("\n\nCommand: ")); r_cmd = row++;
+
+  while( go )
+    {
+      set_cursor(r_cmd, 10);
+      while( !serial_available() ) delay(50);
+      char c = serial_read();
+      if( c>31 && c<127 ) Serial.println(c);
+
+      switch( c )
+        {
+        case 'F': 
+          toggle_flag(CF_HDSK_RT, r_realtime, 26); 
+          break;
+
+        case 'R': 
+          Serial.print(F("\n\nResetting hard disk controller..."));
+          hdsk_reset(); 
+          delay(1000);
+          Serial.print(F("\033[33D\033[K"));
+          break;
+
+        case 27:
+        case 'x': go = false; break;
+
+        default:
+          {
+            int d = -1;
+            if( c>='0' && c<='9' ) 
+              d = c-48;
+            else if( c>='a' && c<='f' )
+              d = c-87;
+
+            if( d>=0 && d<4*NUM_HDSK_UNITS )
+              {
+                byte u = d/4, p = d % 4;
+                byte next = find_hdsk_image(mounted[d]+1);
+                if( hdsk_get_mounted_image(u, p)>0 && 
+                    hdsk_get_image_filename(hdsk_get_mounted_image(u, p))==NULL &&
+                    mounted[d] < hdsk_get_mounted_image(u, p) &&
+                    (next      > hdsk_get_mounted_image(u, p) || next<mounted[d]) )
+                  next = hdsk_get_mounted_image(u, p);
+
+                mounted[d] = next;
+                set_cursor(r_drives[d], col);
+                print_hdsk_mounted_image(mounted[d]);
+              }
+          }
+        }
+    }
+
+  hdsk_set_realtime((config_flags & CF_HDSK_RT)!=0);
+  for(i=0; i<NUM_HDSK_UNITS; i++)
+    for(j=0; j<4; j++)
+      if( mounted[i*4+j] != hdsk_get_mounted_image(i, j) )
+        hdsk_mount(i, j, mounted[i*4+j]);
+}
+#endif
+
+
 // --------------------------------------------------------------------------------
 
 
-byte find_vi_conn(byte interrupt)
+byte find_vi_conn(uint32_t interrupt)
 {
   for(int i=0; i<8; i++)
     if( config_interrupt_vi_mask[i] & interrupt )
@@ -903,6 +1119,7 @@ void config_edit_interrupts()
   byte conn_rtc   = find_vi_conn(INT_RTC);
   byte conn_lpc   = find_vi_conn(INT_LPC);
   byte conn_drive = find_vi_conn(INT_DRIVE);
+  byte conn_hdsk  = find_vi_conn(INT_HDSK);
 
   bool go = true;
   while( go )
@@ -919,6 +1136,7 @@ void config_edit_interrupts()
       Serial.print(F("(5) 88-SIO interrupt          : ")); print_interrupt_conn(INT_SIO, conn_sio); Serial.println();
       Serial.print(F("(6) 88-ACR interrupt          : ")); print_interrupt_conn(INT_ACR, conn_acr); Serial.println();
       Serial.print(F("(7) 88-LPC interrupt          : ")); print_interrupt_conn(INT_LPC, conn_lpc); Serial.println();
+      Serial.print(F("(8) 88-HDSK interrupt         : ")); print_interrupt_conn(INT_HDSK, conn_hdsk); Serial.println();
 
       Serial.println(F("\nE(x)it to main menu"));
 
@@ -937,12 +1155,13 @@ void config_edit_interrupts()
         case 'v': toggle_flag(CF_HAVE_VI, 0, 0); break;
 
         case '1': conn_drive = toggle_interrupt_conn(INT_DRIVE, conn_drive); break;
-        case '2': conn_rtc   = toggle_interrupt_conn(INT_RTC, conn_rtc);   break;
+        case '2': conn_rtc   = toggle_interrupt_conn(INT_RTC, conn_rtc);     break;
         case '3': conn_2sio1 = toggle_interrupt_conn(INT_2SIO1, conn_2sio1); break;
         case '4': conn_2sio2 = toggle_interrupt_conn(INT_2SIO2, conn_2sio2); break;
-        case '5': conn_sio   = toggle_interrupt_conn(INT_SIO, conn_sio);   break;
-        case '6': conn_acr   = toggle_interrupt_conn(INT_ACR, conn_acr);   break;
-        case '7': conn_lpc   = toggle_interrupt_conn(INT_LPC, conn_lpc);   break;
+        case '5': conn_sio   = toggle_interrupt_conn(INT_SIO, conn_sio);     break;
+        case '6': conn_acr   = toggle_interrupt_conn(INT_ACR, conn_acr);     break;
+        case '7': conn_lpc   = toggle_interrupt_conn(INT_LPC, conn_lpc);     break;
+        case '8': conn_hdsk  = toggle_interrupt_conn(INT_HDSK, conn_hdsk);   break;
 
         case 27:
         case 'x': go = false; break;
@@ -957,6 +1176,7 @@ void config_edit_interrupts()
   if( conn_rtc   < 0xff ) config_interrupt_vi_mask[conn_rtc]   |= INT_RTC;
   if( conn_drive < 0xff ) config_interrupt_vi_mask[conn_drive] |= INT_DRIVE;
   if( conn_lpc   < 0xff ) config_interrupt_vi_mask[conn_lpc]   |= INT_LPC;
+  if( conn_hdsk  < 0xff ) config_interrupt_vi_mask[conn_hdsk]  |= INT_HDSK;
 }
 
 
@@ -1090,6 +1310,9 @@ void config_edit()
 #if NUM_DRIVES>0
           Serial.print(F("(D) Configure disk drives   : ")); print_drive_mounted(); Serial.println(); row++;
 #endif
+#if NUM_HDSK_UNITS>0
+          Serial.print(F("(H) Configure hard disks    : ")); print_hdsk_mounted(); Serial.println(); row++;
+#endif
           Serial.print(F("(I) Configure interrupts    : ")); print_vi_flag(); Serial.println(); row++;
           row += 1;
 
@@ -1148,6 +1371,9 @@ void config_edit()
 #if NUM_DRIVES>0
         case 'D': config_edit_drives(); break;
 #endif
+#if NUM_HDSK_UNITS>0
+        case 'H': config_edit_hdsk(); break;
+#endif
           
         case 'M': filesys_manage(); break;
         case 'A': apply_host_serial_settings(); break;
@@ -1172,7 +1398,10 @@ void config_edit()
             byte i = (byte) numsys_read_word();
             Serial.println();
             if( !load_config(i & 0xff) )
-              Serial.println(F("Load failed. File does not exist?"));
+              {
+                Serial.println(F("Load failed. File does not exist?"));
+                delay(2000);
+              }
             break;
           }
         case 'R': config_defaults(false); break;
@@ -1245,7 +1474,8 @@ void config_defaults(bool apply)
   
   config_aux1_prog = prog_find("16k ROM Basic");
 
-  //drive_set_realtime(config_flags & CF_DRIVE_RT);
+  drive_set_realtime(config_flags & CF_DRIVE_RT);
+  hdsk_set_realtime(config_flags & CF_DRIVE_RT);
   for(byte i=0; i<NUM_DRIVES; i++)
     drive_unmount(i);
 

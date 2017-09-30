@@ -1,6 +1,6 @@
 
 ---------------------------------------------
-Available disks:
+Available disks images:
 ---------------------------------------------
 0001) DISK01.DSK: CP/M (63k)
 0010) DISK02.DSK: ALTAIR DOS 1.0
@@ -19,3 +19,5 @@ Available disks:
 1111) DISK0F.DSK: Altair Mini-Disk DOS programs
 ---------------------------------------------
 
+These images were put together by Mike Douglas.
+See README.TXT for more information.

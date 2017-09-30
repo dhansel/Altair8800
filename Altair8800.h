@@ -38,22 +38,23 @@
 #define ST_HLDA    0x0400
 #define ST_WAIT    0x0800
 
-#define INT_SW_STOP     0x8000
-#define INT_SW_RESET    0x4000
-#define INT_SW_CLR      0x2000
-#define INT_SW_AUX2UP   0x1000
-#define INT_SW_AUX2DOWN 0x0800
-#define INT_SWITCH      0xff00
+#define INT_SW_STOP     0x80000000
+#define INT_SW_RESET    0x40000000
+#define INT_SW_CLR      0x20000000
+#define INT_SW_AUX2UP   0x10000000
+#define INT_SW_AUX2DOWN 0x08000000
+#define INT_SWITCH      0xff000000
 
-#define INT_SIO         0x0001
-#define INT_ACR         0x0002
-#define INT_2SIO1       0x0004
-#define INT_2SIO2       0x0008
-#define INT_DRIVE       0x0010
-#define INT_RTC         0x0020
-#define INT_LPC         0x0040
-#define INT_VECTOR      0x0080
-#define INT_DEVICE      0x00ff
+#define INT_SIO         0x00000001
+#define INT_ACR         0x00000002
+#define INT_2SIO1       0x00000004
+#define INT_2SIO2       0x00000008
+#define INT_DRIVE       0x00000010
+#define INT_RTC         0x00000020
+#define INT_LPC         0x00000040
+#define INT_VECTOR      0x00000080
+#define INT_HDSK        0x00000100
+#define INT_DEVICE      0x00ffffff
 
 extern word status_wait;
 extern word status_inte;
@@ -62,8 +63,8 @@ extern bool have_ps2;
 byte altair_in(byte addr);
 void altair_out(byte addr, byte val);
 void altair_hlt();
-void altair_interrupt(uint16_t i, bool set = true);
-bool altair_interrupt_active(uint16_t i);
+void altair_interrupt(uint32_t i, bool set = true);
+bool altair_interrupt_active(uint32_t i);
 void altair_interrupt_enable();
 void altair_interrupt_disable();
 bool altair_isreset();

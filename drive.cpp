@@ -23,16 +23,17 @@
 #include "cpucore.h"
 #include "Altair8800.h"
 #include "timer.h"
+#include "image.h"
 
 #if NUM_DRIVES == 0
 
 void drive_setup() {}
 void drive_dir() {}
-const char *drive_disk_filename(byte disk_num, bool check_exist) { return NULL; }
-const char *drive_disk_description(byte disk_num) { return NULL; }
-bool drive_mount(byte drive_num, byte disk_num) { return false; }
+const char *drive_get_image_filename(byte image_num, bool check_exist) { return NULL; }
+const char *drive_get_image_description(byte image_num) { return NULL; }
+bool drive_mount(byte drive_num, byte image_num) { return false; }
 bool drive_unmount(byte drive_num) { return false; }
-byte drive_get_mounted_disk(byte drive_num) { return 0; }
+byte drive_get_mounted_image(byte drive_num) { return 0; }
 void drive_reset() {}
 void drive_set_realtime(bool b) {}
 byte drive_in(byte addr) { return 0; }
@@ -67,40 +68,6 @@ static byte drive_num_tracks[NUM_DRIVES];
 #define DRIVE_SECTOR_NOT_TRUE_DELAY     30
 #define DRIVE_HEAD_STEP_DELAY        40000
 static bool drive_sector_true = false;
-
-static const char *get_dir_content()
-{
-  const char *dirfilename = "DISKDIR.TXT";
-  static char *content = NULL;
-
-  if( content==NULL )
-    {
-      int dirlen = host_get_file_size(dirfilename);
-      if( dirlen>0 )
-        {
-          content = (char *) malloc(dirlen+1);
-          if( content!=NULL )
-            {
-              if( host_read_file(dirfilename, 0, dirlen, content) )
-                content[dirlen] = 0;
-              else
-                {
-                  free(content);
-                  content = (char *) "";
-                }
-            }
-          else
-            {
-              free(content);
-              content = (char *) "";
-            }
-        }
-      else
-        content = (char *) "";
-    }
-
-  return content;
-}
 
 static uint32_t drive_get_file_pos(byte drive_num)
 {
@@ -178,7 +145,7 @@ void drive_setup()
 
 void drive_dir()
 {
-  Serial.print(get_dir_content());
+  Serial.print(image_get_dir_content(IMAGE_FLOPPY));
 }
 
 
@@ -196,64 +163,33 @@ bool drive_unmount(byte drive_num)
 }
 
 
-byte drive_get_mounted_disk(byte drive_num)
+byte drive_get_mounted_image(byte drive_num)
 {
   return drive_mounted_disk[drive_num];
 }
 
-static const char *get_filename(byte disk_num, char *filename, int buf_len, bool check_exist)
+
+const char *drive_get_image_description(byte disk_num)
 {
-  snprintf(filename, buf_len, "DISK%02X.DSK", disk_num);
-  return !check_exist || host_file_exists(filename) ? filename : NULL;
+  return image_get_description(IMAGE_FLOPPY, disk_num);
 }
 
 
-const char *drive_disk_description(byte disk_num)
+const char *drive_get_image_filename(byte image_num, bool check_exist)
 {
-  static char *buf = NULL;
-  const char *fname = drive_disk_filename(disk_num);
-
-  if( fname!=NULL )
-    {
-      const char *c = strstr(get_dir_content(), fname);
-      if( c )
-        {
-          if( buf ) free(buf);
-          buf = (char *) malloc(strlen(c)+1);
-          if( buf )
-            {
-              char *b = buf;
-              while(*c != 13 && *c!=10 && *c!=0) *b++ = *c++;
-              *b = 0;
-              return buf;
-            }
-          else
-            return fname;
-        }
-      else
-        return fname;
-    }
-  else
-    return fname;
+  return image_get_filename(IMAGE_FLOPPY, image_num, check_exist);
 }
 
 
-const char *drive_disk_filename(byte disk_num, bool check_exist)
-{
-  static char buf[13];
-  return get_filename(disk_num, buf, 13, check_exist);
-}
-
-
-bool drive_mount(byte drive_num, byte disk_num)
+bool drive_mount(byte drive_num, byte image_num)
 {
   if( drive_num<NUM_DRIVES )
     {
       if( drive_status[drive_num] & DRIVE_STATUS_HAVEDISK ) drive_unmount(drive_num);
-      if( disk_num>0 )
+      if( image_num>0 )
         {
-          get_filename(disk_num, drive_file_name[drive_num], 13, false);
-          drive_mounted_disk[drive_num] = disk_num;
+          image_get_filename(IMAGE_FLOPPY, image_num, drive_file_name[drive_num], 13, false);
+          drive_mounted_disk[drive_num] = image_num;
           drive_status[drive_num] |= DRIVE_STATUS_HAVEDISK;
 
           int32_t s = host_get_file_size(drive_file_name[drive_num]);

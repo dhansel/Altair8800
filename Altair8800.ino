@@ -30,6 +30,7 @@
 #include "numsys.h"
 #include "filesys.h"
 #include "drive.h"
+#include "hdsk.h"
 #include "timer.h"
 #include "prog.h"
 
@@ -40,8 +41,8 @@ uint16_t dswitch = 0;
 
 uint16_t p_regPC = 0xFFFF;
 
-volatile byte     altair_interrupts_buf = 0;
-volatile uint16_t altair_interrupts     = 0;
+volatile uint32_t altair_interrupts_buf = 0;
+volatile uint32_t altair_interrupts     = 0;
 volatile byte     altair_vi_level_cur   = 0;
 volatile byte     altair_vi_level       = 0;
 volatile bool     altair_interrupts_enabled = false;
@@ -56,6 +57,8 @@ void print_dbg_info();
 void read_inputs_panel();
 void read_inputs_serial();
 void process_inputs();
+bool read_intel_hex();
+void empty_input_buffer();
 void rtc_setup();
 
 uint32_t  throttle_micros = 0;
@@ -195,6 +198,17 @@ void process_inputs()
             
           serial_update_hlda_led();
         }
+      else if (dswitch & 0x40 )
+        {
+          Serial.println(F("\nReceiving Intel HEX data..."));
+          if( read_intel_hex() )
+            Serial.println(F("Success."));
+          else
+            Serial.println(F("Error!"));
+          
+          // skip any remaining input
+          empty_input_buffer();
+        }
       else
         {
           // SW7 is down => load program
@@ -233,12 +247,25 @@ void process_inputs()
           byte p = config_aux1_program();
           if( p & 0x80 )
             {
-              // run disk (first mount disk then install and run disk boot ROM)
-              if( drive_mount(0, p & 0x7f) )
+              if( p & 0x40 )
                 {
-                  dswitch = (dswitch & 0xff00) | 0x08;
-                  cswitch = BIT(SW_AUX1DOWN);
-                  process_inputs();
+                  // run hard disk (first mount disk then install and run hard disk boot ROM)
+                  if( hdsk_mount(0, 0, p & 0x3f) )
+                    {
+                      dswitch = (dswitch & 0xff00) | 14;
+                      cswitch = BIT(SW_AUX1DOWN);
+                      process_inputs();
+                    }
+                }
+              else
+                {
+                  // run disk (first mount disk then install and run disk boot ROM)
+                  if( drive_mount(0, p & 0x3f) )
+                    {
+                      dswitch = (dswitch & 0xff00) | 8;
+                      cswitch = BIT(SW_AUX1DOWN);
+                      process_inputs();
+                    }
                 }
             }
           else if( p>0 && prog_get_name(p)!=NULL )
@@ -253,21 +280,51 @@ void process_inputs()
 
   if( cswitch & BIT(SW_AUX2DOWN) )
     {
-      if( (dswitch&0xF000)==0x1000 )
+      if( false )
+        {}
+#if NUM_DRIVES>0
+      else if( (dswitch&0xF000)==0x1000 )
 	{
 	  if( (dswitch & 0xff)==0 )
 	    drive_dir();
 	  else if( drive_mount((dswitch >> 8) & 0x0f, dswitch & 0xff) )
 	    {
-	      const char *desc = drive_disk_description(dswitch&0xff);
+	      const char *desc = drive_get_image_description(dswitch&0xff);
 	      if( desc==NULL )
-                DBG_FILEOPS4(2, "mounted new disk ", drive_disk_filename(dswitch&0xff, false), F(" in drive "), (dswitch>>8) & 0x0f);
+                DBG_FILEOPS4(2, "mounted new disk image ", drive_get_image_filename(dswitch&0xff, false), F(" in drive "), (dswitch>>8) & 0x0f);
 	      else
-		DBG_FILEOPS4(2, "mounted disk '", desc, F("' in drive "), (dswitch>>8) & 0x0f);
+		DBG_FILEOPS4(2, "mounted disk image '", desc, F("' in drive "), (dswitch>>8) & 0x0f);
 	    }
 	  else
-	    DBG_FILEOPS4(1, "error mounting disk ", drive_disk_filename(dswitch&0xff, false), F(" in drive "), (dswitch>>8) & 0x0f);
+	    DBG_FILEOPS4(1, "error mounting disk image ", drive_get_image_filename(dswitch&0xff, false), F(" in drive "), (dswitch>>8) & 0x0f);
 	}
+#endif
+#if NUM_HDSK_UNITS>0
+      else if( (dswitch&0xF000)==0x3000 )
+	{
+	  if( (dswitch & 0xff)==0 )
+	    hdsk_dir();
+	  else 
+            {
+              char buf[50];
+              byte unit    = (dswitch >> 10) & 0x03;
+              byte platter = (dswitch >>  8) & 0x03;
+              sprintf(buf, "' in platter %i of unit %i", platter, unit+1);
+
+              if( hdsk_mount(unit, platter, dswitch & 0xff) )
+                {
+                  const char *desc = hdsk_get_image_description(dswitch&0xff);
+
+                  if( desc==NULL )
+                    DBG_FILEOPS3(2, "mounted new hard disk image '", hdsk_get_image_filename(dswitch&0xff, false), buf);
+                  else
+                    DBG_FILEOPS3(2, "mounted hard disk image '", desc, buf);
+                }
+              else
+                DBG_FILEOPS3(1, "error mounting hard disk image '", hdsk_get_image_filename(dswitch&0xff, false), buf);
+            }
+	}
+#endif
       else
 	{
 	  print_panel_serial();
@@ -282,13 +339,31 @@ void process_inputs()
     }
   else if( cswitch & BIT(SW_AUX2UP) )
     {
-      if( (dswitch&0xF000)==0x1000 )
+      if( false )
+        {}
+#if NUM_DRIVES>0
+      else if( (dswitch&0xF000)==0x1000 )
 	{
 	  if( drive_unmount((dswitch >> 8) & 0x0f) )
 	    DBG_FILEOPS2(2, "unmounted drive ", (dswitch>>8) & 0x0f);
 	  else
 	    DBG_FILEOPS2(1, "error unmounting drive ", (dswitch>>8) & 0x0f);
 	}
+#endif
+#if NUM_HDSK_UNITS>0
+      else if( (dswitch&0xF000)==0x3000 )
+	{
+          char buf[50];
+          byte unit    = (dswitch >> 10) & 0x03;
+          byte platter = (dswitch >>  8) & 0x03;
+          sprintf(buf, "platter %i of unit %i", platter, unit+1);
+
+	  if( hdsk_unmount(unit, platter) )
+	    DBG_FILEOPS2(1, "unmounted ", buf);
+	  else
+	    DBG_FILEOPS2(1, "error unmounting ", buf);
+        }
+#endif
       else
 	{
 	  print_panel_serial();
@@ -387,6 +462,7 @@ byte read_device()
 
 bool read_intel_hex()
 {
+  word aa = 0xffff;
   while( 1 )
     {
       // expect line to start with a colon
@@ -407,12 +483,22 @@ bool read_intel_hex()
 
       // next byte is record type
       byte r = numsys_read_hex_byte(); cs -= r;
-      
+
       switch( r )
         {
         case 0:
           {
             // data record
+
+            if( a != aa && n>0 )
+              { 
+                if( aa!=0xffff ) { numsys_print_word(aa-1); Serial.println(); }
+                numsys_print_word(a); 
+                aa = a; 
+              }
+            aa += n;
+            Serial.print('.');
+
             for(byte i=0; i<n; i++)
               {
                 d = numsys_read_hex_byte();
@@ -420,7 +506,6 @@ bool read_intel_hex()
                 cs -= d;
                 a++;
               }
-            Serial.print('.');
             break;
           }
 
@@ -438,7 +523,12 @@ bool read_intel_hex()
         return false; // checksum error
 
       // empty record means we're done
-      if( n==0 ) return true;
+      if( n==0 ) 
+        {
+          numsys_print_word(aa-1); 
+          Serial.println(); 
+          return true;
+        }
     }
 }
 
@@ -509,6 +599,17 @@ void read_inputs_serial()
     cswitch |= BIT(SW_AUX1UP);
   else if( data == 'u' )
     cswitch |= BIT(SW_AUX1DOWN);
+  else if( data == '>' )
+    {
+      Serial.print(F("\nRun from address: "));
+      regPC = numsys_read_word()-1;
+      p_regPC = ~regPC;
+      if( config_serial_debug_enabled() )
+        Serial.print(F("\n\n--- RUNNING (press ESC twice to stop) ---\n\n"));
+      Serial.println();
+      host_clr_status_led_WAIT();
+    }
+#if STANDALONE>0
   else if( data == 's' )
     {
       Serial.print(F("\nCapture from "));
@@ -555,14 +656,60 @@ void read_inputs_serial()
     }
   else if( data == 'm' )
     {
-      dswitch = 0x1000;
-      Serial.print(F("\nDrive number: "));
-      dswitch |= (numsys_read_word() & 0x0f) << 8;
-      Serial.print(F(" Disk number: "));
-      dswitch |= numsys_read_word() & 0xff;
-      cswitch |= BIT(SW_AUX2DOWN);
-      Serial.println();
+      char c;
+      Serial.print(F("\n(F)loppy or (H)ard disk? "));
+      do { c=serial_read(); } while(c!='f' && c!='F' && c!='h' && c!='H' && c!=27);
+      if( c!=27 )
+        {
+          bool ok = true;
+          Serial.print(c);
+          if( (c=='f' || c=='F') )
+            {
+              dswitch = 0x1000;
+              Serial.print(F(" Drive number (0-15): "));
+              word w = numsys_read_word();
+              if( w<16 )
+                dswitch |= w << 8;
+              else
+                ok = false;
+            }
+          else
+            {
+              dswitch = 0x3000;
+#if NUM_HDSK_UNITS>1
+              Serial.print(F(" Unit number (1-")); 
+              Serial.print(NUM_HDSK_UNITS);
+              Serial.print(F("): "));
+              do { c=serial_read(); } while( (c<'1' || c>'0'+NUM_HDSK_UNITS) && c!=27);
+              if( c==27 ) 
+                ok = false;
+              else
+                { Serial.print(c); dswitch |= (c-'1') << 10; }
+#endif
+              if( ok )
+                {
+                  Serial.print(F(" Platter number (0-3): "));
+                  do { c=serial_read(); } while( (c<'0' || c>'3') && c!=27);
+                  if( c==27 )
+                    ok = false;
+                  else
+                    { Serial.print(c); dswitch |= (c-'0') << 8; }
+                }
+            }
+          
+          if( ok )
+            {
+              Serial.print(F(" Image number: "));
+              dswitch |= numsys_read_word() & 0xff;
+              cswitch |= BIT(SW_AUX2DOWN);
+            }
+          else
+            dswitch = 0;
+
+          Serial.println();
+        }
     }
+#endif
   else if( data == 'Q' )
     cswitch |= BIT(SW_PROTECT);
   else if( data == 'q' )
@@ -614,14 +761,8 @@ void read_inputs_serial()
     }
   else if( data == 'H' )
     {
-      Serial.println(F("\nReading HEX data..."));
-      if( read_intel_hex() )
-        Serial.println(F("Success.\n"));
-      else
-        Serial.println(F("Error!\n"));
-      
-      // skip any remaining input
-      empty_input_buffer();
+      dswitch = 0x40;
+      cswitch = BIT(SW_AUX1DOWN);
     }
   else if( data == 'L' )
     {
@@ -964,7 +1105,7 @@ void altair_interrupt_disable()
 }
 
 
-void altair_interrupt(uint16_t i, bool set)
+void altair_interrupt(uint32_t i, bool set)
 {
   if( i & INT_DEVICE )
     {
@@ -986,7 +1127,7 @@ void altair_interrupt(uint16_t i, bool set)
 }
 
 
-bool altair_interrupt_active(uint16_t i)
+bool altair_interrupt_active(uint32_t i)
 {
   return (altair_interrupts_buf & i)!=0;
 }
@@ -1127,6 +1268,14 @@ void altair_out(byte addr, byte data)
     case 0010:
     case 0011:
     case 0012: drive_out(addr, data); break;
+    case 0240:
+    case 0241:
+    case 0242:
+    case 0243:
+    case 0244:
+    case 0245:
+    case 0246:
+    case 0247: hdsk_4pio_out(addr, data); break;
     case 0020: serial_2sio1_out_ctrl(data); break;
     case 0021: serial_2sio1_out_data(data); break;
     case 0022: serial_2sio2_out_ctrl(data); break;
@@ -1164,6 +1313,14 @@ byte altair_in(byte addr)
     case 0010:
     case 0011:
     case 0012: data = drive_in(addr); break;
+    case 0240:
+    case 0241:
+    case 0242:
+    case 0243:
+    case 0244:
+    case 0245:
+    case 0246:
+    case 0247: data = hdsk_4pio_in(addr); break;
     case 0001: data = serial_sio_in_data(); break;
     case 0007: data = serial_acr_in_data(); break;
     case 0021: data = serial_2sio1_in_data(); break;
@@ -1196,6 +1353,7 @@ void setup()
   host_setup();
   filesys_setup();
   drive_setup();
+  hdsk_setup();
   config_setup();
   serial_setup();
   profile_setup();

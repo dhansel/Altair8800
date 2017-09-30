@@ -29,6 +29,10 @@
 #error Arduino MEGA port does not support disk drives. Set NUM_DRIVES to 0 in config.h
 #endif
 
+#if NUM_HDSK_UNITS>0
+#error Arduino MEGA port does not support hard disks. Set NUM_HDSK_UNITS to 0 in config.h
+#endif
+
 #if USE_THROTTLE>0
 #error Throttling neither supported nor necessary for Arduino MEGA. Set USE_THROTTLE to 0 in config.h
 #endif
@@ -147,8 +151,9 @@ volatile static uint16_t switches_pulse = 0;
 volatile static uint16_t switches_debounced = 0;
 static uint32_t debounceTime[16];
 static const byte function_switch_pin[16] = {20, 21, 4, 5, 6, 7, 8, 9, 18, 19, 16, 17, 14, 15, 3, 2};
-static const uint16_t function_switch_irq[16] = {0, INT_SW_STOP, 0, 0, 0, 0, 0, 0, INT_SW_RESET, INT_SW_CLR, 
-                                                 0, 0, 0, 0, INT_SW_AUX2UP, INT_SW_AUX2DOWN};
+static const uint8_t function_switch_irq[16] = {0, INT_SW_STOP>>24, 0, 0, 0, 0, 0, 0, 
+                                                INT_SW_RESET>>24, INT_SW_CLR>>24, 0, 0, 0, 0, 
+                                                INT_SW_AUX2UP>>24, INT_SW_AUX2DOWN>>24};
 
 
 static void switch_check(byte i)
@@ -163,7 +168,7 @@ static void switch_check(byte i)
         {
           switches_debounced |= bitval;
           switches_pulse     |= bitval;
-          if( function_switch_irq[i] ) altair_interrupt(function_switch_irq[i]);
+          if( function_switch_irq[i] ) altair_interrupt(function_switch_irq[i]<<24);
           debounceTime[i] = millis() + 100;
         }
       else if( !d1 && d2 ) 
