@@ -400,7 +400,7 @@ static byte serial_read(byte dev)
 
   set_serial_status(dev, status);
 
-  // note that we're reading whatever there is, even
+  // note that we're reading whatever is there, even
   // if nothing new has arrived
   return serial_data[dev];
 }
@@ -603,18 +603,15 @@ byte serial_2sio_in_data(byte dev)
 {
   byte data = 0;
 
-  if( serial_status[dev] & SST_RDRF )
-    {
-      // get character
-      data = serial_read(dev);
+  // get character
+  data = serial_read(dev);
+  
+  // map character (for BASIC etc)
+  data = serial_map_characters_in(dev, data);
 
-      // map character (for BASIC etc)
-      data = serial_map_characters_in(dev, data);
-
-      // if interrupts are not enabled, prepare the next byte for replay now
-      if( !(serial_ctrl[dev] & (SSC_INTRX|SSC_REALTIME)) )
-        serial_replay(dev);
-    }
+  // if interrupts are not enabled, prepare the next byte for replay now
+  if( !(serial_ctrl[dev] & (SSC_INTRX|SSC_REALTIME)) )
+    serial_replay(dev);
 
   return data;
 }
@@ -714,18 +711,15 @@ byte serial_sio_in_data()
 {
   byte data = 0;
 
-  if( serial_status[CSM_SIO] & SST_RDRF )
-    {
-      // get character
-      data = serial_read(CSM_SIO);
+  // get character
+  data = serial_read(CSM_SIO);
 
-      // map character (for BASIC etc)
-      data = serial_map_characters_in(CSM_SIO, data);
+  // map character (for BASIC etc)
+  data = serial_map_characters_in(CSM_SIO, data);
       
-      // if interrupts are not enabled, prepare the next byte for replay now
-      if( !(serial_ctrl[CSM_SIO] & (SSC_INTRX|SSC_REALTIME)) )
-        serial_replay(CSM_SIO);
-    }
+  // if interrupts are not enabled, prepare the next byte for replay now
+  if( !(serial_ctrl[CSM_SIO] & (SSC_INTRX|SSC_REALTIME)) )
+    serial_replay(CSM_SIO);
 
   return data;
 }
@@ -1015,15 +1009,12 @@ byte serial_acr_in_data()
 {
   byte data = 0;
 
-  if( serial_status[CSM_ACR] & SST_RDRF )
-    {
-      // get character
-      data = serial_read(CSM_ACR);
+  // get character
+  data = serial_read(CSM_ACR);
 
-      // if interrupts are not enabled, prepare the next byte for replay now
-      if( !(serial_ctrl[CSM_ACR] & (SSC_INTRX|SSC_REALTIME)) )
-        acr_read_next_byte();
-    }
+  // if interrupts are not enabled, prepare the next byte for replay now
+  if( !(serial_ctrl[CSM_ACR] & (SSC_INTRX|SSC_REALTIME)) )
+    acr_read_next_byte();
 
   DBG_FILEOPS2(5, "ACR reading data: ", int(data));
 
