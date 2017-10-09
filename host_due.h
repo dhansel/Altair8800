@@ -101,7 +101,7 @@ uint16_t host_read_addr_switches();
 #define host_set_status_leds_READMEM_M1()     REG_PIOC_SODR = 0x10A00000
 
 // reading from stack (MEMR on, WO on, STACK on)
-#define host_set_status_leds_READMEM_STACK()  REG_PIOC_SODR = 0x10200000
+#define host_set_status_leds_READMEM_STACK()  REG_PIOC_SODR = 0x14200000
 
 // writing to memory (MEMR off, WO off)
 #define host_set_status_leds_WRITEMEM()       REG_PIOC_CODR = 0x10200000
