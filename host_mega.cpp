@@ -25,6 +25,12 @@
 #include "mem.h"
 #include "host_mega.h"
 
+
+// setting this to 0 disables the bits/parity/stop-bits selection 
+// (always uses 8N1) but saves 30 bytes of RAM
+#define USE_SERIAL_CONFIGS 1
+
+
 #if NUM_DRIVES>0
 #error Arduino MEGA port does not support disk drives. Set NUM_DRIVES to 0 in config.h
 #endif
@@ -253,14 +259,65 @@ static void switches_setup()
 // --------------------------------------------------------------------------------------------------
 
 
-void host_serial_setup(byte iface, unsigned long baud, bool set_primary_interface)
+void host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_primary_interface)
 {
   if( iface==0 )
     {
       Serial.end();
+#if USE_SERIAL_CONFIGS>0
+      Serial.begin(baud, config);
+#else
       Serial.begin(baud);
+#endif
       Serial.setTimeout(10000);
     }
+}
+
+
+int host_serial_available_for_write(byte i)
+{
+  return Serial.availableForWrite();
+}
+
+
+size_t host_serial_write(byte i, uint8_t b)
+{
+  Serial.write(b);
+}
+
+
+const char *host_serial_port_name(byte i)
+{
+  return "Serial";
+}
+
+
+bool host_serial_port_baud_limits(byte i, uint32_t *min, uint32_t *max)
+{
+  if( i==0 )
+    {
+      *min = 600; 
+      *max = 115200;
+      return true;
+    }
+  else
+    return false;
+}
+
+
+bool host_serial_port_has_configs(byte i)
+{
+#if USE_SERIAL_CONFIGS>0
+  return i==0;
+#else
+  return false;
+#endif
+}
+
+
+bool host_is_reset()
+{
+  return host_read_function_switch(SW_RESET);
 }
 
 

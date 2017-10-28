@@ -200,7 +200,7 @@ void process_inputs()
         }
       else if (dswitch & 0x40 )
         {
-          Serial.println(F("\nReceiving Intel HEX data..."));
+          Serial.println(F("\r\nReceiving Intel HEX data..."));
           if( read_intel_hex() )
             Serial.println(F("Success."));
           else
@@ -390,7 +390,7 @@ void process_inputs()
   if( cswitch & BIT(SW_RUN) )
     {
       if( config_serial_debug_enabled() && config_serial_input_enabled() )
-        Serial.print(F("\n\n--- RUNNING (press ESC twice to stop) ---\n\n"));
+        Serial.print(F("\r\n\n--- RUNNING (press ESC twice to stop) ---\r\n\n"));
       host_clr_status_led_WAIT();
     }
   if( cswitch & (BIT(SW_PROTECT)) )
@@ -436,10 +436,18 @@ byte read_device()
 {
   byte dev = 0xff;
 
-  Serial.print(F("(s=SIO,a=ACR,1=2SIO-1, 2=2SIO-2, SPACE=last, ESC=abort): "));
+#if USE_SECOND_2SIO>0
+  Serial.print(F("(s=SIO,a=ACR,1=2SIO-1,2=2SIO-2,3=2nd 2SIO-1,4=2nd 2SIO-2,SPACE=last,ESC=abort): "));
+#else
+  Serial.print(F("(s=SIO,a=ACR,1=2SIO-1,2=2SIO-2,SPACE=last,ESC=abort): "));
+#endif
 
   int c = -1;
+#if USE_SECOND_2SIO>0
+  while( c!='s' && c!='a' && c!='1' && c!='2' && c!='3' && c!='4' && c!=' ' && c!=27 )
+#else
   while( c!='s' && c!='a' && c!='1' && c!='2' && c!=' ' && c!=27 )
+#endif
     c = serial_read();
 
   if( c!=27 )
@@ -450,6 +458,10 @@ byte read_device()
 	case 'a': dev = CSM_ACR;   break;
 	case '1': dev = CSM_2SIO1; break;
 	case '2': dev = CSM_2SIO2; break;
+#if USE_SECOND_2SIO>0
+	case '3': dev = CSM_2SIO3; break;
+	case '4': dev = CSM_2SIO4; break;
+#endif
         case ' ': dev = 0x80;      break;
 	}
 
@@ -535,11 +547,11 @@ bool read_intel_hex()
 
 void read_data()
 {
-  Serial.print(F("\n\nStart address: "));
+  Serial.print(F("\r\n\nStart address: "));
   uint16_t addr = numsys_read_word();
-  Serial.print(F("\nNumber of bytes: "));
+  Serial.print(F("\r\nNumber of bytes: "));
   uint16_t len  = numsys_read_word();
-  Serial.print(F("\nData: "));
+  Serial.print(F("\r\nData: "));
   while( len>0 )
     {
       Serial.write(' ');
@@ -547,7 +559,7 @@ void read_data()
       ++addr;
       --len;
     }
-  Serial.write('\n');
+  Serial.println();
 }
 
 void empty_input_buffer()
@@ -572,7 +584,7 @@ void read_inputs_serial()
     dswitch = dswitch ^ (1 << (data - 'a' + 10));
   else if( data == '/' )
     {
-      Serial.print(F("\nSet Addr switches to: "));
+      Serial.print(F("\r\nSet Addr switches to: "));
       dswitch = numsys_read_word();
       Serial.println('\n');
     }
@@ -601,18 +613,18 @@ void read_inputs_serial()
     cswitch |= BIT(SW_AUX1DOWN);
   else if( data == '>' )
     {
-      Serial.print(F("\nRun from address: "));
+      Serial.print(F("\r\nRun from address: "));
       regPC = numsys_read_word()-1;
       p_regPC = ~regPC;
       if( config_serial_debug_enabled() )
-        Serial.print(F("\n\n--- RUNNING (press ESC twice to stop) ---\n\n"));
+        Serial.print(F("\r\n\n--- RUNNING (press ESC twice to stop) ---\r\n\n"));
       Serial.println();
       host_clr_status_led_WAIT();
     }
 #if STANDALONE>0
   else if( data == 's' )
     {
-      Serial.print(F("\nCapture from "));
+      Serial.print(F("\r\nCapture from "));
       byte dev = read_device();
       if( dev < 0xff )
 	{
@@ -628,7 +640,7 @@ void read_inputs_serial()
     }
   else if( data == 'l' )
     {
-      Serial.print(F("\nReplay to "));
+      Serial.print(F("\r\nReplay to "));
       byte dev = read_device();
       if( dev < 0xff )
         {
@@ -657,7 +669,7 @@ void read_inputs_serial()
   else if( data == 'm' )
     {
       char c;
-      Serial.print(F("\n(F)loppy or (H)ard disk? "));
+      Serial.print(F("\r\n(F)loppy or (H)ard disk? "));
       do { c=serial_read(); } while(c!='f' && c!='F' && c!='h' && c!='H' && c!=27);
       if( c!=27 )
         {
@@ -786,16 +798,16 @@ void read_inputs_serial()
         {
           if( numBreakpoints<MAX_BREAKPOINTS )
             {
-              Serial.print(F("\nAdd breakpoint at: "));
+              Serial.print(F("\r\nAdd breakpoint at: "));
               breakpoint_add(numsys_read_word());
             }
           else
-            Serial.print(F("\nToo many breakpoints!"));
+            Serial.print(F("\r\nToo many breakpoints!"));
         }
       else if( numBreakpoints>0 )
         breakpoint_remove_last();
 
-      Serial.print(F("\nBreakpoints at: "));
+      Serial.print(F("\r\nBreakpoints at: "));
       breakpoint_print();
       Serial.println('\n');
     }
@@ -818,7 +830,7 @@ void print_panel_serial(bool force)
 
   if( force || p_cswitch != cswitch || p_dswitch != dswitch || p_abus != abus || p_dbus != dbus || p_status != status )
     {
-      Serial.print(F("\033[s\033[0;0HINTE PROT MEMR INP M1 OUT HLTA STACK WO INT  D7  D6  D5  D4  D3  D2  D1  D0\n"));
+      Serial.print(F("\033[s\033[0;0HINTE PROT MEMR INP M1 OUT HLTA STACK WO INT  D7  D6  D5  D4  D3  D2  D1  D0\r\n"));
 
       if( status & ST_INTE  ) Serial.print(F(" *  "));    else Serial.print(F(" .  "));
       if( status & ST_PROT  ) Serial.print(F("  *  "));   else Serial.print(F("  .  "));
@@ -839,7 +851,7 @@ void print_panel_serial(bool force)
       if( dbus&0x04 )   Serial.print(F("   *")); else Serial.print(F("   ."));
       if( dbus&0x02 )   Serial.print(F("   *")); else Serial.print(F("   ."));
       if( dbus&0x01 )   Serial.print(F("   *")); else Serial.print(F("   ."));
-      Serial.print(("\nWAIT HLDA   A15 A14 A13 A12 A11 A10  A9  A8  A7  A6  A5  A4  A3  A2  A1  A0\n"));
+      Serial.print(("\r\nWAIT HLDA   A15 A14 A13 A12 A11 A10  A9  A8  A7  A6  A5  A4  A3  A2  A1  A0\r\n"));
       if( status & ST_WAIT ) Serial.print(F(" *  "));   else Serial.print(F(" .  "));
       if( status & ST_HLDA ) Serial.print(F("  *   ")); else Serial.print(F("  .   "));
       if( abus&0x8000 ) Serial.print(F("   *")); else Serial.print(F("   ."));
@@ -858,7 +870,7 @@ void print_panel_serial(bool force)
       if( abus&0x0004 ) Serial.print(F("   *")); else Serial.print(F("   ."));
       if( abus&0x0002 ) Serial.print(F("   *")); else Serial.print(F("   ."));
       if( abus&0x0001 ) Serial.print(F("   *")); else Serial.print(F("   ."));
-      Serial.print(F("\n            S15 S14 S13 S12 S11 S10  S9  S8  S7  S6  S5  S4  S3  S2  S1  S0\n"));
+      Serial.print(F("\r\n            S15 S14 S13 S12 S11 S10  S9  S8  S7  S6  S5  S4  S3  S2  S1  S0\r\n"));
       Serial.print(F("          "));
       if( dswitch&0x8000 ) Serial.print(F("   ^")); else Serial.print(F("   v"));
       if( dswitch&0x4000 ) Serial.print(F("   ^")); else Serial.print(F("   v"));
@@ -876,7 +888,7 @@ void print_panel_serial(bool force)
       if( dswitch&0x0004 ) Serial.print(F("   ^")); else Serial.print(F("   v"));
       if( dswitch&0x0002 ) Serial.print(F("   ^")); else Serial.print(F("   v"));
       if( dswitch&0x0001 ) Serial.print(F("   ^")); else Serial.print(F("   v"));
-      Serial.print(F("\n            Stop  Step  Examine  Deposit  Reset  Protect   Aux  Aux\n"));
+      Serial.print(F("\r\n            Stop  Step  Examine  Deposit  Reset  Protect   Aux  Aux\r\n"));
       Serial.print(F("           "));
       if( cswitch & BIT(SW_STOP) )    Serial.print(F("  ^ "));       else if( cswitch & BIT(SW_RUN) )       Serial.print(F("  v "));      else Serial.print(F("  o "));
       if( cswitch & BIT(SW_STEP) )    Serial.print(F("    ^ "));     else if( cswitch & BIT(SW_SLOW) )      Serial.print(F("    v "));    else Serial.print(F("    o "));
@@ -886,7 +898,7 @@ void print_panel_serial(bool force)
       if( cswitch & BIT(SW_PROTECT) ) Serial.print(F("      ^  "));  else if( cswitch & BIT(SW_UNPROTECT) ) Serial.print(F("      v  ")); else Serial.print(F("      o  "));
       if( cswitch & BIT(SW_AUX1UP) )  Serial.print(F("     ^  "));   else if( cswitch & BIT(SW_AUX1DOWN) )  Serial.print(F("     v  "));  else Serial.print(F("     o  "));
       if( cswitch & BIT(SW_AUX2UP) )  Serial.print(F("  ^  "));      else if( cswitch & BIT(SW_AUX2DOWN) )  Serial.print(F("  v  "));     else Serial.print(F("  o  "));
-      Serial.print(F("\n            Run         E.Next   D.Next    CLR   Unprotect\n\033[K\n\033[K\n\033[K\n\033[K\n\033[K\033[u"));
+      Serial.print(F("\r\n            Run         E.Next   D.Next    CLR   Unprotect\r\n\033[K\n\033[K\n\033[K\n\033[K\n\033[K\033[u"));
       p_cswitch = cswitch;
       p_dswitch = dswitch;
       p_abus = abus;
@@ -903,12 +915,12 @@ void print_dbg_info()
 
   if( regPC != p_regPC )
     {
-      Serial.print(F("\n PC   = "));   numsys_print_word(regPC);
+      Serial.print(F("\r\n PC   = "));   numsys_print_word(regPC);
       Serial.print(F(" = ")); numsys_print_mem(regPC, 3, true); 
       Serial.print(F(" = ")); disassemble(Mem, regPC);
-      Serial.print(F("\n SP   = ")); numsys_print_word(regSP);
+      Serial.print(F("\r\n SP   = ")); numsys_print_word(regSP);
       Serial.print(F(" = ")); numsys_print_mem(regSP, 8, true); 
-      Serial.print(F("\n regA = ")); numsys_print_byte(regA);
+      Serial.print(F("\r\n regA = ")); numsys_print_byte(regA);
       Serial.print(F(" regS = "));   numsys_print_byte(regS);
       Serial.print(F(" = "));
       if( regS & PS_SIGN )     Serial.print('S'); else Serial.print('.');
@@ -920,7 +932,7 @@ void print_dbg_info()
       Serial.print('.');
       if( regS & PS_CARRY )    Serial.print('C'); else Serial.print('.');
 
-      Serial.print(F("\n regB = ")); numsys_print_byte(regB);
+      Serial.print(F("\r\n regB = ")); numsys_print_byte(regB);
       Serial.print(F(" regC = "));   numsys_print_byte(regC);
       Serial.print(F(" regD = "));   numsys_print_byte(regD);
       Serial.print(F(" regE = "));   numsys_print_byte(regE);
@@ -966,9 +978,6 @@ void reset(bool resetPC)
 
       // close all open files
       serial_close_files();
-
-      // unmount all drives
-      drive_reset();
     }
 
   altair_interrupts     = 0;
@@ -987,9 +996,9 @@ void switch_interrupt_handler()
       if( !config_serial_debug_enabled() ) 
         {}
       else if( config_serial_panel_enabled() )
-        Serial.print(F("\033[2J\033[14B\n------ STOP ------\n\n"));
+        Serial.print(F("\033[2J\033[14B\r\n------ STOP ------\r\n\n"));
       else
-        Serial.print(F("\n\n------ STOP ------\n\n"));
+        Serial.print(F("\r\n\n------ STOP ------\r\n\n"));
       p_regPC = ~regPC;
     }
   else if( altair_interrupts & INT_SW_RESET )
@@ -1158,7 +1167,7 @@ static byte altair_interrupt_handler()
 
   if( host_read_status_led_WAIT() )
     {
-      if( config_serial_debug_enabled() ) { Serial.print(F("\nInterrupt! opcode=")); numsys_print_byte(opcode); Serial.println(); }
+      if( config_serial_debug_enabled() ) { Serial.print(F("\r\nInterrupt! opcode=")); numsys_print_byte(opcode); Serial.println(); }
       altair_set_outputs(regPC, opcode);
       altair_wait_step();
     }
@@ -1255,6 +1264,15 @@ void altair_out(byte addr, byte data)
   host_set_status_led_OUT();
   host_set_status_led_WO();
   host_set_addr_leds(addr|addr*256);
+
+  // The S-100 bus on the real Altair has separate data
+  // buses for data in (to CPU) and data out (from CPU).
+  // The data LEDs on the front panel are connected to
+  // the "data in" lines. For output operations those
+  // lines are in high-Z state and therefore the LEDs
+  // are all on regardless of the data. 
+  // We simulate the original behavior here even though
+  // we could just as well show the proper data.
   host_set_data_leds(0xff);
 
   switch( addr )
@@ -1280,6 +1298,12 @@ void altair_out(byte addr, byte data)
     case 0021: serial_2sio1_out_data(data); break;
     case 0022: serial_2sio2_out_ctrl(data); break;
     case 0023: serial_2sio2_out_data(data); break;
+#if USE_SECOND_2SIO>0
+    case 0024: serial_2sio3_out_ctrl(data); break;
+    case 0025: serial_2sio3_out_data(data); break;
+    case 0026: serial_2sio4_out_ctrl(data); break;
+    case 0027: serial_2sio4_out_data(data); break;
+#endif
     case 0376: altair_vi_out_control(data); break;
     }
   
@@ -1309,6 +1333,10 @@ byte altair_in(byte addr)
     case 0006: data = serial_acr_in_ctrl(); break;
     case 0020: data = serial_2sio1_in_ctrl(); break;
     case 0022: data = serial_2sio2_in_ctrl(); break;
+#if USE_SECOND_2SIO>0
+    case 0024: data = serial_2sio3_in_ctrl(); break;
+    case 0026: data = serial_2sio4_in_ctrl(); break;
+#endif
     case 0377: data = altair_read_sense_switches(); break;
     case 0010:
     case 0011:
@@ -1325,6 +1353,10 @@ byte altair_in(byte addr)
     case 0007: data = serial_acr_in_data(); break;
     case 0021: data = serial_2sio1_in_data(); break;
     case 0023: data = serial_2sio2_in_data(); break;
+#if USE_SECOND_2SIO>0
+    case 0025: data = serial_2sio3_in_data(); break;
+    case 0027: data = serial_2sio4_in_data(); break;
+#endif
     case 0002: data = printer_in_ctrl(); break;
     case 0003: data = printer_in_data(); break;
     default:   data = 0xff; break;
@@ -1361,7 +1393,7 @@ void setup()
   printer_setup();
 
   // if RESET switch is held up during powerup then use default configuration settings
-  if( host_read_function_switch(SW_RESET) )
+  if( host_is_reset() )
     {
       // temporarily reset configuration (also calls host_serial_setup)
       config_defaults(true);
@@ -1374,8 +1406,9 @@ void setup()
   else
     {
       // set up serial connection on the host
-      host_serial_setup(0, config_host_serial_baud_rate(0), config_host_serial_primary()==0);
-      host_serial_setup(1, config_host_serial_baud_rate(1), config_host_serial_primary()==1);
+      for(byte i=0; i<HOST_NUM_SERIAL_PORTS; i++)
+        host_serial_setup(i, config_host_serial_baud_rate(i), config_host_serial_config(i),
+                          config_host_serial_primary()==i);
     }
 
   host_set_status_led_WAIT();
@@ -1402,7 +1435,7 @@ void setup()
 
   reset(false);
 
-  if( config_serial_panel_enabled() ) Serial.print(F("\033[2J\033[14B\n"));
+  if( config_serial_panel_enabled() ) Serial.print(F("\033[2J\033[14B\r\n"));
 }
 
 
@@ -1434,6 +1467,14 @@ void loop()
 
       while( true )
         {
+          /*static int i = 0;
+          {
+            Mem[i%MEMSIZE] = 0;
+            if( (++i % 100)==0 )
+              if( host_serial_available_for_write(3) )
+                host_serial_write(3, 0x55);
+                }*/
+
           // put PC on address bus LEDs
           host_set_addr_leds(regPC);
 

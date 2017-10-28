@@ -39,6 +39,8 @@
  **   after a byte of data has been received. Note that the call-back will be
  **   invoked from within an interrupt handler so it should be coded to finish
  **   quickly.
+ ** - fixed bug that allowed interrupts occuring during call to print or write 
+ **   to mess up sending (causes lost and/or garbled characters)
  */
 
 
@@ -701,6 +703,43 @@ namespace arduino_due
 	  );
 	}
 
+	void begin(uint32_t rx_pin, uint32_t tx_pin, unsigned long baud_rate, unsigned long config)
+	{
+	  data_bit_codes bits = data_bit_codes::EIGHT_BITS;
+	  parity_codes parity = parity_codes::NO_PARITY;
+	  stop_bit_codes stop = stop_bit_codes::ONE_STOP_BIT;
+          
+          switch( config )
+            {
+            case SERIAL_5N1: bits = data_bit_codes::FIVE_BITS;  parity=parity_codes::NO_PARITY;   stop = stop_bit_codes::ONE_STOP_BIT;  break;
+            case SERIAL_6N1: bits = data_bit_codes::SIX_BITS ;  parity=parity_codes::NO_PARITY;   stop = stop_bit_codes::ONE_STOP_BIT;  break;
+            case SERIAL_7N1: bits = data_bit_codes::SEVEN_BITS; parity=parity_codes::NO_PARITY;   stop = stop_bit_codes::ONE_STOP_BIT;  break;
+            case SERIAL_8N1: bits = data_bit_codes::EIGHT_BITS; parity=parity_codes::NO_PARITY;   stop = stop_bit_codes::ONE_STOP_BIT;  break;
+            case SERIAL_5N2: bits = data_bit_codes::FIVE_BITS;  parity=parity_codes::NO_PARITY;   stop = stop_bit_codes::TWO_STOP_BITS; break;
+            case SERIAL_6N2: bits = data_bit_codes::SIX_BITS ;  parity=parity_codes::NO_PARITY;   stop = stop_bit_codes::TWO_STOP_BITS; break;
+            case SERIAL_7N2: bits = data_bit_codes::SEVEN_BITS; parity=parity_codes::NO_PARITY;   stop = stop_bit_codes::TWO_STOP_BITS; break;
+            case SERIAL_8N2: bits = data_bit_codes::EIGHT_BITS; parity=parity_codes::NO_PARITY;   stop = stop_bit_codes::TWO_STOP_BITS; break;
+            case SERIAL_5E1: bits = data_bit_codes::FIVE_BITS;  parity=parity_codes::EVEN_PARITY; stop = stop_bit_codes::ONE_STOP_BIT;  break;
+            case SERIAL_6E1: bits = data_bit_codes::SIX_BITS ;  parity=parity_codes::EVEN_PARITY; stop = stop_bit_codes::ONE_STOP_BIT;  break;
+            case SERIAL_7E1: bits = data_bit_codes::SEVEN_BITS; parity=parity_codes::EVEN_PARITY; stop = stop_bit_codes::ONE_STOP_BIT;  break;
+            case SERIAL_8E1: bits = data_bit_codes::EIGHT_BITS; parity=parity_codes::EVEN_PARITY; stop = stop_bit_codes::ONE_STOP_BIT;  break;
+            case SERIAL_5E2: bits = data_bit_codes::FIVE_BITS;  parity=parity_codes::EVEN_PARITY; stop = stop_bit_codes::TWO_STOP_BITS; break;
+            case SERIAL_6E2: bits = data_bit_codes::SIX_BITS ;  parity=parity_codes::EVEN_PARITY; stop = stop_bit_codes::TWO_STOP_BITS; break;
+            case SERIAL_7E2: bits = data_bit_codes::SEVEN_BITS; parity=parity_codes::EVEN_PARITY; stop = stop_bit_codes::TWO_STOP_BITS; break;
+            case SERIAL_8E2: bits = data_bit_codes::EIGHT_BITS; parity=parity_codes::EVEN_PARITY; stop = stop_bit_codes::TWO_STOP_BITS; break;
+            case SERIAL_5O1: bits = data_bit_codes::FIVE_BITS;  parity=parity_codes::ODD_PARITY;  stop = stop_bit_codes::ONE_STOP_BIT;  break;
+            case SERIAL_6O1: bits = data_bit_codes::SIX_BITS ;  parity=parity_codes::ODD_PARITY;  stop = stop_bit_codes::ONE_STOP_BIT;  break;
+            case SERIAL_7O1: bits = data_bit_codes::SEVEN_BITS; parity=parity_codes::ODD_PARITY;  stop = stop_bit_codes::ONE_STOP_BIT;  break;
+            case SERIAL_8O1: bits = data_bit_codes::EIGHT_BITS; parity=parity_codes::ODD_PARITY;  stop = stop_bit_codes::ONE_STOP_BIT;  break;
+            case SERIAL_5O2: bits = data_bit_codes::FIVE_BITS;  parity=parity_codes::ODD_PARITY;  stop = stop_bit_codes::TWO_STOP_BITS; break;
+            case SERIAL_6O2: bits = data_bit_codes::SIX_BITS ;  parity=parity_codes::ODD_PARITY;  stop = stop_bit_codes::TWO_STOP_BITS; break;
+            case SERIAL_7O2: bits = data_bit_codes::SEVEN_BITS; parity=parity_codes::ODD_PARITY;  stop = stop_bit_codes::TWO_STOP_BITS; break;
+            case SERIAL_8O2: bits = data_bit_codes::EIGHT_BITS; parity=parity_codes::ODD_PARITY;  stop = stop_bit_codes::TWO_STOP_BITS; break;
+            }
+
+	  _tc_uart_.config(rx_pin, tx_pin, static_cast<uint32_t>(baud_rate), bits, parity, stop);
+	}
+
 	void begin(
 	  uint32_t rx_pin = default_pins::DEFAULT_RX_PIN,
 	  uint32_t tx_pin = default_pins::DEFAULT_TX_PIN,
@@ -748,6 +787,8 @@ namespace arduino_due
 	int available(void) { return _tc_uart_.available(); }
 
 	int availableForWrite(void) { return _tc_uart_.availableForWrite(); }
+
+        int idle(void) { return _tc_uart_.get_tx_status()==tx_status_codes::IDLE; }
 
 	int peek(void) 
 	{
@@ -1179,34 +1220,32 @@ namespace arduino_due
       else
         data_to_send=data_to_send|(0x3<<first_stop_bit_pos);
 
-      register bool not_full;
-	
-      disable_tc_interrupts();
-      not_full=tx_buffer.push(data_to_send);
-      enable_tc_interrupts();
+      bool ok = true;
 
-      if(!not_full) return false;
-      
-      enable_tc_rc_interrupt();
+      // the following block of code must not be interrupted
+      noInterrupts();
+      if( tx_status == tx_status_codes::IDLE )
+        {
+          // TX is idle => switch it to sending mode
+          // TX can only be idle if tx_buffer is empty
+          // so we can ignore the buffer here
+          tx_data=data_to_send; 
+          tx_bit_counter=0; 
+          tx_status=tx_status_codes::SENDING;
+          enable_tc_rc_interrupt();
 
-      disable_rx_interrupts();
-      if(rx_status==rx_status_codes::LISTENING)
-        start_tc_interrupts();
-      enable_rx_interrupts();
+          // if TX was IDLE and RX was LISTENING (i.e. also idle) then 
+          // timer interrupts are stopped => start them now
+          if(rx_status==rx_status_codes::LISTENING) start_tc_interrupts();
+        }
+      else
+        {
+          // TX is busy sending so queue the new data
+          ok = tx_buffer.push(data_to_send);
+        }
+      interrupts();
 
-      disable_tc_interrupts();
-      
-      if(tx_status==tx_status_codes::IDLE)
-      {
-	tx_buffer.pop(data_to_send); 
-	tx_data=data_to_send; tx_bit_counter=0; 
-      }
-
-      tx_status=tx_status_codes::SENDING;
-      
-      enable_tc_interrupts();
-
-      return true;
+      return ok;
     }
   
   }

@@ -32,6 +32,8 @@
  * ROC-SIANI - Universidad de Las Palmas de Gran Canaria - Spain
  */
 
+#ifdef __SAM3X8E__
+
 #include "soft_uart.h"
 
 namespace arduino_due
@@ -59,4 +61,4 @@ namespace arduino_due
 
 }
 
-
+#endif

@@ -15,7 +15,6 @@ using namespace std;
 #include <ncurses.h>
 #include <termios.h>
 #include <unistd.h>
-#define endl "\r\n" << std::flush
 
 #define _getch   getch
 #define _ungetch ungetch
@@ -75,37 +74,18 @@ void delay(unsigned long i)
 }
 
 
-void SerialClass::print(char c) { write(c); }
-void SerialClass::print(const char *s) { cout << FixNewline(s) << std::flush; }
-void SerialClass::print(int i) { cout << i << std::flush; }
-void SerialClass::print(unsigned int i) { cout << i << std::flush; }
-void SerialClass::print(long int i) { cout << i << std::flush; }
-void SerialClass::print(unsigned long i) { cout << i << std::flush; }
-void SerialClass::print(float f) { cout << f << std::flush; }
-void SerialClass::print(double d)  { cout << d << std::flush; }
-
-void SerialClass::println() { cout << endl; }
-void SerialClass::println(char c) { write(c); cout << endl; }
-void SerialClass::println(const char *s) { cout << FixNewline(s) << endl; }
-void SerialClass::println(int i) { cout << i << endl; }
-void SerialClass::println(unsigned int i) { cout << i << endl; }
-void SerialClass::println(long int i) { cout << i << endl; }
-void SerialClass::println(unsigned long i) { cout << i << endl; }
-void SerialClass::println(float f) { cout << f << endl; }
-void SerialClass::println(double d)  { cout << d << endl; }
-
 static bool kbhit_prev_result = false;
 static unsigned long kbhit_next_check = 0;
 
 void SerialClass::flush() { cout << std::flush; }
 char SerialClass::peek() { if( _kbhit() ) { char c =  _getch(); _ungetch(c); return c; } else return 0; }
-bool SerialClass::availableForWrite() { return true; }
-bool SerialClass::available() { return _kbhit(); }
+int  SerialClass::availableForWrite() { return 1; }
+int  SerialClass::available() { return _kbhit(); }
 
 #ifdef _WIN32
-void SerialClass::write(char c) { cout << (c==127 ? string("\b \b") : string(1,c)) << std::flush; }
+size_t SerialClass::write(uint8_t c) { cout << (c==127 ? string("\b \b") : string(1,(char) c)) << std::flush; return 1; }
 #else
-void SerialClass::write(char c) { cout << (c=='\n' ? "\r\n" : (c==127 ? "\b \b" : string(1,c))) << std::flush; }
+size_t SerialClass::write(uint8_t c) { cout << (c=='\n' ? "\r\n" : (c==127 ? "\b \b" : string(1,c))) << std::flush; return 1; }
 #endif
 
 
@@ -127,11 +107,16 @@ char SerialClass::read()
     return 0;
 }
 
+int    g_argc;
+char **g_argv;
 
 void setup();
 void loop();
 int main(int argc, char **argv)
 {
+  g_argc = argc;
+  g_argv = argv;
+
 #ifndef _WIN32
   // initialize ncurses library
   initscr();

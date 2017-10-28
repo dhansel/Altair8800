@@ -41,11 +41,19 @@
 byte     acr_cload_fid     = 0;
 uint32_t acr_cload_timeout = 0;
 
-volatile byte serial_ctrl[4], serial_data[4];
-volatile byte serial_status[4], serial_status_dev[4];
-byte serial_fid[4];
+
+#if USE_SECOND_2SIO>0
+#define NUM_SERIAL_DEVICES 6
+static const uint32_t serial_device_interrupts[6] = {INT_SIO, INT_ACR, INT_2SIO1, INT_2SIO2, INT_2SIO3, INT_2SIO4};
+#else
+#define NUM_SERIAL_DEVICES 4
+static const uint32_t serial_device_interrupts[4] = {INT_SIO, INT_ACR, INT_2SIO1, INT_2SIO2};
+#endif
+
+volatile byte serial_ctrl[NUM_SERIAL_DEVICES], serial_data[NUM_SERIAL_DEVICES];
+volatile byte serial_status[NUM_SERIAL_DEVICES], serial_status_dev[NUM_SERIAL_DEVICES];
+byte serial_fid[NUM_SERIAL_DEVICES];
 static byte last_active_primary_device = CSM_SIO;
-static const byte serial_device_interrupts[4] = {INT_SIO, INT_ACR, INT_2SIO1, INT_2SIO2};
 
 static void serial_replay(byte dev);
 static void acr_read_next_byte();
@@ -77,7 +85,7 @@ void set_serial_status(byte dev, byte status)
   altair_interrupt(serial_device_interrupts[dev], intr);
 
   // set the device status register
-  if( dev==CSM_2SIO1 || dev==CSM_2SIO2 )
+  if( dev>=CSM_2SIO1 && dev<=CSM_2SIO4 )
     serial_status_dev[dev] = status & ~SST_OVRN2;
   else
     {
@@ -96,7 +104,7 @@ void set_serial_status(byte dev, byte status)
 void serial_update_hlda_led()
 {
   bool on = false;
-  for(byte dev=0; !on && dev<4; dev++) 
+  for(byte dev=0; !on && dev<NUM_SERIAL_DEVICES; dev++) 
     if( serial_fid[dev] ) on = true;
 
   if( on )
@@ -115,6 +123,10 @@ void serial_replay_start(byte dev, bool example, byte filenum)
     case CSM_SIO:   DBG_FILEOPS(3, "replaying to 88-SIO");    break;
     case CSM_2SIO1: DBG_FILEOPS(3, "replaying to 88-2SIO-1"); break;
     case CSM_2SIO2: DBG_FILEOPS(3, "replaying to 88-2SIO-2"); break;
+#if USE_SECOND_2SIO>0
+    case CSM_2SIO3: DBG_FILEOPS(3, "replaying to 2nd 88-2SIO-1"); break;
+    case CSM_2SIO4: DBG_FILEOPS(3, "replaying to 2nd 88-2SIO-2"); break;
+#endif
     case CSM_ACR:   DBG_FILEOPS(3, "replaying to ACR");       break;
     default:        DBG_FILEOPS(1, "invalid replay device");  break;
     }
@@ -162,6 +174,10 @@ void serial_capture_start(byte dev, byte filenum)
 	case CSM_SIO:   DBG_FILEOPS(3, "capturing from 88-SIO");    break;
 	case CSM_2SIO1: DBG_FILEOPS(3, "capturing from 88-2SIO-1"); break;
 	case CSM_2SIO2: DBG_FILEOPS(3, "capturing from 88-2SIO-2"); break;
+#if USE_SECOND_2SIO>0
+	case CSM_2SIO3: DBG_FILEOPS(3, "capturing from 2nd 88-2SIO-1"); break;
+	case CSM_2SIO4: DBG_FILEOPS(3, "capturing from 2nd 88-2SIO-2"); break;
+#endif
 	case CSM_ACR:   DBG_FILEOPS(3, "capturing from ACR");       break;
 	default:        DBG_FILEOPS(1, "invalid capture device");  break;
 	}
@@ -212,7 +228,7 @@ void serial_stop(byte dev)
 
 void serial_close_files()
 {
-  for(byte dev=0; dev<4; dev++)
+  for(byte dev=0; dev<NUM_SERIAL_DEVICES; dev++)
     if( serial_fid[dev]>0 ) serial_stop(dev);
 
   if( acr_cload_fid>0 ) filesys_close(acr_cload_fid);
@@ -230,7 +246,7 @@ void serial_reset(byte dev)
 {
   if( dev==0xff )
     {
-      for(dev=0; dev<4; dev++) serial_reset(dev);
+      for(dev=0; dev<NUM_SERIAL_DEVICES; dev++) serial_reset(dev);
     }
   else
     {
@@ -280,7 +296,7 @@ void serial_receive_host_data(byte host_interface, byte b)
         }
       else
         {
-          for(byte dev=0; dev<4; dev++)
+          for(byte dev=0; dev<NUM_SERIAL_DEVICES; dev++)
             if( config_serial_map_sim_to_host(dev)==host_interface )
               serial_receive_data(dev, b);
         }
@@ -289,7 +305,7 @@ void serial_receive_host_data(byte host_interface, byte b)
     }
   else
     {
-      for(byte dev=0; dev<4; dev++)
+      for(byte dev=0; dev<NUM_SERIAL_DEVICES; dev++)
         if( config_serial_map_sim_to_host(dev)==host_interface )
           serial_receive_data(dev, b);
     }
@@ -409,7 +425,7 @@ static byte serial_read(byte dev)
 void serial_write(byte dev, byte data)
 {
   byte host_interface = config_serial_map_sim_to_host(dev);
-  
+
   if( host_interface!=0xff )
     {
       host_serial_write(host_interface, data);
@@ -448,7 +464,7 @@ void serial_timer_interrupt_check_enable(byte dev)
         timer_stop(dev);
     }
   else
-    for(dev=0; dev<4; dev++)
+    for(dev=0; dev<NUM_SERIAL_DEVICES; dev++)
       serial_timer_interrupt_check_enable(dev);
 }
 
@@ -474,6 +490,10 @@ static void serial_timer_interrupt_SIO()   { serial_timer_interrupt(CSM_SIO); }
 static void serial_timer_interrupt_ACR()   { serial_timer_interrupt(CSM_ACR); }
 static void serial_timer_interrupt_2SIO1() { serial_timer_interrupt(CSM_2SIO1); }
 static void serial_timer_interrupt_2SIO2() { serial_timer_interrupt(CSM_2SIO2); }
+#if USE_SECOND_2SIO>0
+static void serial_timer_interrupt_2SIO3() { serial_timer_interrupt(CSM_2SIO3); }
+static void serial_timer_interrupt_2SIO4() { serial_timer_interrupt(CSM_2SIO4); }
+#endif
 
 
 void serial_timer_interrupt_setup(byte dev)
@@ -491,6 +511,10 @@ void serial_timer_interrupt_setup(byte dev)
         case CSM_ACR:   timer_setup(dev, us_per_byte, serial_timer_interrupt_ACR);   break;
         case CSM_2SIO1: timer_setup(dev, us_per_byte, serial_timer_interrupt_2SIO1); break;
         case CSM_2SIO2: timer_setup(dev, us_per_byte, serial_timer_interrupt_2SIO2); break;
+#if USE_SECOND_2SIO>0
+        case CSM_2SIO3: timer_setup(dev, us_per_byte, serial_timer_interrupt_2SIO3); break;
+        case CSM_2SIO4: timer_setup(dev, us_per_byte, serial_timer_interrupt_2SIO4); break;
+#endif
         }
 
       if( config_serial_realtime(dev) )
@@ -501,7 +525,7 @@ void serial_timer_interrupt_setup(byte dev)
       serial_timer_interrupt_check_enable(dev);
     }
   else
-    for(dev=0; dev<4; dev++)
+    for(dev=0; dev<NUM_SERIAL_DEVICES; dev++)
       serial_timer_interrupt_setup(dev);
 }
 
@@ -681,6 +705,17 @@ byte serial_2sio2_in_data() { return serial_2sio_in_data(CSM_2SIO2); }
 void serial_2sio2_out_ctrl(byte data) { serial_2sio_out_ctrl(CSM_2SIO2, data); }
 void serial_2sio2_out_data(byte data) { serial_2sio_out_data(CSM_2SIO2, data); }
 
+#if USE_SECOND_2SIO>0
+byte serial_2sio3_in_ctrl() { return serial_2sio_in_ctrl(CSM_2SIO3); }
+byte serial_2sio3_in_data() { return serial_2sio_in_data(CSM_2SIO3); }
+void serial_2sio3_out_ctrl(byte data) { serial_2sio_out_ctrl(CSM_2SIO3, data); }
+void serial_2sio3_out_data(byte data) { serial_2sio_out_data(CSM_2SIO3, data); }
+
+byte serial_2sio4_in_ctrl() { return serial_2sio_in_ctrl(CSM_2SIO4); }
+byte serial_2sio4_in_data() { return serial_2sio_in_data(CSM_2SIO4); }
+void serial_2sio4_out_ctrl(byte data) { serial_2sio_out_ctrl(CSM_2SIO4, data); }
+void serial_2sio4_out_data(byte data) { serial_2sio_out_data(CSM_2SIO4, data); }
+#endif
 
 // ------------------------------------------------------------------------------------------------------------
 

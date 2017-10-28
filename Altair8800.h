@@ -54,6 +54,8 @@
 #define INT_LPC         0x00000040
 #define INT_VECTOR      0x00000080
 #define INT_HDSK        0x00000100
+#define INT_2SIO3       0x00000200
+#define INT_2SIO4       0x00000400
 #define INT_DEVICE      0x00ffffff
 
 extern word status_wait;

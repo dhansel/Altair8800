@@ -55,15 +55,8 @@ static bool print_character(byte c, unsigned long delay)
 {
   bool res = false;
 
-  int ser = config_printer_map_to_host_serial();
-  if( ser==1 )
-    ser = config_host_serial_primary();
-  else if( ser==2 )
-    ser = 1-config_host_serial_primary();
-  else
-    ser = -1;
-
-  if( ser>=0 && host_serial_available_for_write(ser) )
+  byte ser = config_printer_map_to_host_serial();
+  if( host_serial_available_for_write(ser) )
     {
       // printer is assigned to serial device and device is ready
       host_serial_write(ser, c);

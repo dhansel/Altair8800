@@ -30,6 +30,11 @@
 #include "profile.h"
 #include "timer.h"
 
+// un-define Serial which was #define'd to SwitchSerialClass in switch_serial.h
+// otherwise we get infinite loops when calling Serial.* functions below
+#undef Serial
+
+
 #ifdef _WIN32
 
 #define _WINSOCKAPI_
@@ -285,9 +290,9 @@ uint32_t host_get_random()
 }
 
 
-static int      inp_serial0 = -1, inp_serial1 = -1;
-static uint32_t cycles_per_char[2];
-static SOCKET   iface_socket = INVALID_SOCKET;
+static int      inp_serial[HOSTPC_NUM_SOCKET_CONN+1];
+static uint32_t cycles_per_char[HOSTPC_NUM_SOCKET_CONN+1];
+static SOCKET   iface_socket[HOSTPC_NUM_SOCKET_CONN];
 
 static SOCKET set_up_listener(const char* pcAddress, int nPort)
 {
@@ -323,51 +328,46 @@ static HANDLE signalEvent;
 
 DWORD WINAPI host_input_thread(void *data)
 {
-  WSAEVENT eventHandles[3], socket_event;
+  WSAEVENT eventHandles[6], socket_accept_event, socket_read_event[HOSTPC_NUM_SOCKET_CONN];
   SOCKET accept_socket = INVALID_SOCKET;
 
   // initialize socket for secondary interface
   WSADATA wsaData;
   WSAStartup(MAKEWORD(1,1), &wsaData);
+#if HOSTPC_NUM_SOCKET_CONN>0
   accept_socket = set_up_listener("127.0.0.1", htons(8800));
   if( accept_socket == INVALID_SOCKET )
     printf("Can not listen on port 8800 => secondary interface not available\n");
   else
     {
-      socket_event = WSACreateEvent();
-      WSAEventSelect(accept_socket, socket_event, FD_ACCEPT);
+      socket_accept_event = WSACreateEvent();
+      WSAEventSelect(accept_socket, socket_accept_event, FD_ACCEPT);
+      for(int i=0; i<HOSTPC_NUM_SOCKET_CONN; i++) socket_read_event[i] = WSACreateEvent();
     }
+#endif
   
   // initialize stdin handle
   HANDLE stdIn = GetStdHandle(STD_INPUT_HANDLE);
 
   while( 1 )
     {
-      int n = 0;
-      int console_id = -1, socket_id = -1;
+      int i, n = 0;
 
-      if( inp_serial0<0 )
+      if( inp_serial[0]<0 )
         { 
           // ready to receive more data on console (primary input)
-          console_id = WSA_WAIT_EVENT_0+n; 
           eventHandles[n++] = stdIn; 
         }
 
-      if( iface_socket != INVALID_SOCKET )
-        {
-          if( inp_serial1<0 )
-            {
-              // ready to receive more data on socket (secondary input)
-              socket_id = WSA_WAIT_EVENT_0+n; 
-              eventHandles[n++] = socket_event; 
-            }
-        }
-      else if( accept_socket != INVALID_SOCKET )
-        { 
-          // ready to accept connection on socket
-          socket_id = WSA_WAIT_EVENT_0+n; 
-          eventHandles[n++] = socket_event; 
-        }
+     if( accept_socket != INVALID_SOCKET )
+       eventHandles[n++] = socket_accept_event; 
+
+      for(i=0; i<HOSTPC_NUM_SOCKET_CONN; i++)
+        if( iface_socket[i] != INVALID_SOCKET && inp_serial[i+1]<0 )
+          {
+            // ready to receive more data on this socket
+            eventHandles[n++] = socket_read_event[i]; 
+          }
 
       // adding this allows host_check_interrupts to signal this thread that 
       // an input has been read and we can accept more inputs now (otherwise
@@ -382,63 +382,89 @@ DWORD WINAPI host_input_thread(void *data)
       // - host_check_interrupts has signaled that there was a change in
       //   whether we are ready to accept more data
       DWORD result = WSAWaitForMultipleEvents(n, eventHandles, false, WSA_INFINITE, true);
-      if( console_id>=0 && result == WSA_WAIT_EVENT_0 + console_id )
+      if( result >= WSA_WAIT_EVENT_0 && result < WSA_WAIT_EVENT_0+n )
         {
-          if( Serial.available() )
+          result -= WSA_WAIT_EVENT_0;
+          if( eventHandles[result]==stdIn )
             {
-              // we received some console input (reading it resets the event)
-              inp_serial0 = Serial.read();
-            }
-          else
-            {
-              // some sort of other events => clear it from the queue
-              INPUT_RECORD r[512];
-              DWORD read;
-              ReadConsoleInput(stdIn, r, 512, &read );
-            }          
-        }
-      else if( socket_id>=0 && result == WSA_WAIT_EVENT_0+socket_id )
-        {
-          // activity on socket
-          if( iface_socket==INVALID_SOCKET )
-            {
-              // if we don't have an iface_socket then we're currently
-              // waiting for connections
-              sockaddr_in sinRemote;
-              socklen_t nAddrSize = sizeof(sinRemote);
-              iface_socket = accept(accept_socket, (sockaddr*)&sinRemote, &nAddrSize);
-              if( iface_socket != INVALID_SOCKET )
+              if( Serial.available() )
                 {
-                  // success => prepare to receive data
-                  WSAResetEvent(socket_event);
-                  WSAEventSelect(iface_socket, socket_event, FD_READ | FD_CLOSE);
-                 }
-            }
-          else
-            {
-              // we have an iface_socket => either input or connection drop
-              char c;
-              if( recv(iface_socket, &c, 1, 0)==0 )
-                {
-                  // no input => connection was dropped
-                  iface_socket = INVALID_SOCKET;
-                  
-                  // prepare to accept more connections
-                  WSAResetEvent(socket_event);
-                  WSAEventSelect(accept_socket, socket_event, FD_ACCEPT);
+                  // we received some console input (reading it resets the event)
+                  inp_serial[0] = Serial.read();
                 }
               else
                 {
-                  // received input on socket
-                  DWORD n;
-                  inp_serial1 = (byte) c;
-
-                  // if no more data to read then reset the event
-                  if( ioctlsocket(iface_socket, FIONREAD, &n)==0 && n==0 ) WSAResetEvent(socket_event);
+                  // some sort of other events => clear it from the queue
+                  INPUT_RECORD r[512];
+                  DWORD read;
+                  ReadConsoleInput(stdIn, r, 512, &read );
                 }
+            }
+          else if( eventHandles[result] == socket_accept_event )
+            {
+              sockaddr_in sinRemote;
+              socklen_t nAddrSize = sizeof(sinRemote);
+              for(i=0; i<HOSTPC_NUM_SOCKET_CONN; i++)
+                if( iface_socket[i]==INVALID_SOCKET )
+                  break;
+
+              if( i<HOSTPC_NUM_SOCKET_CONN )
+                {
+                  iface_socket[i] = accept(accept_socket, (sockaddr*)&sinRemote, &nAddrSize);
+                  if( iface_socket[i]!=INVALID_SOCKET )
+                    {
+                      const char *s = "[Connected as: ";
+                      send(iface_socket[i],s,strlen(s), 0);
+                      s = host_serial_port_name(i+1);
+                      send(iface_socket[i],s,strlen(s), 0);
+                      s = "]\r\n";
+                      send(iface_socket[i],s,strlen(s), 0);
+                      
+                      //printf("Connected client to serial #%i\n", i+1);
+                      WSAResetEvent(socket_read_event[i]);
+                      WSAEventSelect(iface_socket[i], socket_read_event[i], FD_READ | FD_CLOSE);
+                    }
+                }
+              else
+                {
+                  SOCKET s = accept(accept_socket, (sockaddr*)&sinRemote, &nAddrSize);
+                  const char *msg = "[Too many client connections]";
+                  send(s,msg,strlen(msg), 0);
+                  shutdown(s, 2);
+                }
+              
+              WSAResetEvent(socket_accept_event);
+            }
+          else
+            {
+              for(i=0; i<HOSTPC_NUM_SOCKET_CONN; i++)
+                if( eventHandles[result]==socket_read_event[i] )
+                  {
+                    // either input or connection drop
+                    char c;
+                    if( recv(iface_socket[i], &c, 1, 0)==0 )
+                      {
+                        // no input => connection was dropped
+                        iface_socket[i] = INVALID_SOCKET;
+                        inp_serial[i+1] = -1;
+                        //printf("Disconnected serial #%i\n", i+2);
+                      }
+                    else
+                      {
+                        // received input on socket
+                        DWORD n;
+                        inp_serial[i+1] = (byte) c;
+                        //printf("Received %i on serial #%i\n", c, i+2);
+                        
+                        // if no more data to read then reset the event
+                        if( ioctlsocket(iface_socket[i], FIONREAD, &n)==0 && n==0 ) WSAResetEvent(socket_read_event[i]);
+                      }
+                  }
             }
         }
     }
+
+  return 0;
 }
 
 #else
@@ -449,11 +475,14 @@ void *host_input_thread(void *data)
 {
   SOCKET accept_socket = INVALID_SOCKET;
   fd_set s_rd, s_wr, s_ex;
+  int i;
 
   // initialize socket for secondary interface
-  accept_socket = set_up_listener("127.0.0.1", htons(8800));
+#if HOSTPC_NUM_SOCKET_CONN>0
+  accept_socket = set_up_listener("0.0.0.0", htons(8800));
   if( accept_socket == INVALID_SOCKET )
     printf("Can not listen on port 8800 => secondary interface not available\r\n");
+#endif
 
   FD_ZERO(&s_wr);
   FD_ZERO(&s_ex);
@@ -462,23 +491,22 @@ void *host_input_thread(void *data)
       FD_ZERO(&s_rd);
 
       int nfds = 0;
-      if( inp_serial0<0 )
+      if( inp_serial[0]<0 )
 	{
-          // ready to receive more data on console (primary input)
+          // ready to receive more data on console (primary interface)
 	  FD_SET(fileno(stdin), &s_rd);
 	  if( fileno(stdin)>=nfds ) nfds = fileno(stdin)+1;
 	}
 
-      if( iface_socket != INVALID_SOCKET )
-        {
-          if( inp_serial1<0 )
-	    {
-              // ready to receive more data on socket (secondary input)
-	      FD_SET(iface_socket, &s_rd); 
-	      if( iface_socket>=nfds ) nfds = iface_socket+1;
-	    }
-        }
-      else if( accept_socket != INVALID_SOCKET )
+      for(i=0; i<HOSTPC_NUM_SOCKET_CONN; i++)
+	if( iface_socket[i] != INVALID_SOCKET && inp_serial[i+1]<0 )
+	  {
+	    // ready to receive more data on socket
+	    FD_SET(iface_socket[i], &s_rd); 
+	    if( iface_socket[i]>=nfds ) nfds = iface_socket[i]+1;
+	  }
+
+      if( accept_socket != INVALID_SOCKET )
 	{
           // ready to accept connection on socket
 	  FD_SET(accept_socket, &s_rd); 
@@ -508,33 +536,58 @@ void *host_input_thread(void *data)
 	    }
 
           if( FD_ISSET(fileno(stdin), &s_rd) )
-	    inp_serial0 = Serial.read();
-          
-          if( iface_socket != INVALID_SOCKET && FD_ISSET(iface_socket, &s_rd) )
+	    inp_serial[0] = Serial.read();
+
+	  for(i=0; i<HOSTPC_NUM_SOCKET_CONN; i++)
+	    if( iface_socket[i] != INVALID_SOCKET && FD_ISSET(iface_socket[i], &s_rd) )
             {
               char c;
-              if( recv(iface_socket, &c, 1, MSG_NOSIGNAL)==0 )
+              if( recv(iface_socket[i], &c, 1, MSG_NOSIGNAL)==0 )
                 {
                   // no input => connection was dropped
-                  iface_socket = INVALID_SOCKET;
+                  iface_socket[i] = INVALID_SOCKET;
+                  inp_serial[i+1] = -1;
                 }
               else
                 {
                   // received input on socket
-                  inp_serial1 = (byte) c;
+		  //printf("Received %02X on serial #%i\r\n", (byte) c, i+1);
+                  inp_serial[i+1] = (byte) c;
                 }
             }
-          else if( accept_socket != INVALID_SOCKET && FD_ISSET(accept_socket, &s_rd) )
+
+	  if( accept_socket != INVALID_SOCKET && FD_ISSET(accept_socket, &s_rd) )
             {
-              // accept a new connection
               sockaddr_in sinRemote;
               socklen_t nAddrSize = sizeof(sinRemote);
-              iface_socket = accept(accept_socket, (sockaddr*)&sinRemote, &nAddrSize);
-	      if( iface_socket!=INVALID_SOCKET )
+
+	      for(i=0; i<HOSTPC_NUM_SOCKET_CONN; i++)
+		if( iface_socket[i]==INVALID_SOCKET )
+		  break;
+
+	      if( i<HOSTPC_NUM_SOCKET_CONN )
 		{
-		  // make a connected telnet client enter CHAR mode
-		  write(iface_socket,"\377\375\042\377\373\001",6)!=0;
+		  // accept a new connection
+		  iface_socket[i] = accept(accept_socket, (sockaddr*)&sinRemote, &nAddrSize);
+		  if( iface_socket[i]!=INVALID_SOCKET )
+		    {
+		      // make a connected telnet client enter CHAR mode
+		      //write(iface_socket[i],"\377\375\042\377\373\001",6)==0;
+		      const char *s = "[Connected as: ";
+		      send(iface_socket[i],s,strlen(s), 0);
+		      s = host_serial_port_name(i+1);
+		      send(iface_socket[i],s,strlen(s), 0);
+		      s = "]\r\n";
+		      send(iface_socket[i],s,strlen(s), 0);
+		    }
 		}
+              else
+                {
+                  SOCKET s = accept(accept_socket, (sockaddr*)&sinRemote, &nAddrSize);
+                  const char *msg = "[Too many client connections]";
+                  send(s,msg,strlen(msg), 0);
+                  shutdown(s, 2);
+                }
             }
         }
     }
@@ -545,78 +598,195 @@ void *host_input_thread(void *data)
 #endif
 
 
+static void host_check_ctrlc(char c)
+{
+  static unsigned long prevCtrlC = 0;
+
+  if( c==3 )
+    {
+      // CTRL-C was pressed.  If we receive two CTRL-C in short order
+      // then we terminate the emulator.
+      if( millis()>prevCtrlC+250 )
+        prevCtrlC = millis();
+      else
+        exit(0);
+    }
+}
+
+
 void host_check_interrupts()
 {
   static unsigned long prevCtrlC = 0;
-  static uint32_t prev_char_cycles0 = 0, prev_char_cycles1 = 0;
+  static uint32_t prev_char_cycles[HOSTPC_NUM_SOCKET_CONN+1] = {0};
 
   // check input from interface 0 (console)
-  if( inp_serial0>=0 || ctrlC>0 )
-    if( host_read_status_led_WAIT() || (timer_get_cycles()-prev_char_cycles0) >= cycles_per_char[0] )
+  if( inp_serial[0]>=0 || ctrlC>0 )
+    if( host_read_status_led_WAIT() || (timer_get_cycles()-prev_char_cycles[0]) >= cycles_per_char[0] )
       {
 	int c = -1;
 	
 	if( ctrlC>0 )
 	  { c = 3; ctrlC--; }
-	else if( inp_serial0>=0 )
+	else if( inp_serial[0]>=0 )
 	  { 
-	    c = inp_serial0; 
+	    c = inp_serial[0]; 
 	    
 	    // we have consumed the input => signal input thread to receive more
-	    inp_serial0 = -1; 
+	    inp_serial[0] = -1; 
 	    SignalEvent(signalEvent); 
 	  }
-	
-	if( c==3 )
-	  {
-	    // CTRL-C was pressed.  If we receive two CTRL-C in short order
-	    // then we terminate the emulator.
-	    if( millis()>prevCtrlC+250 )
-	      prevCtrlC = millis();
-	    else
-	      exit(0);
-	  }
+
+        // double ctrl-c on console quits emulator
+        host_check_ctrlc(c);
 	
 	if( c>=0 )
-	  serial_receive_host_data(0, (byte) c);
+          serial_receive_host_data(0, (byte) c);
 	
-	prev_char_cycles0 = timer_get_cycles();
+	prev_char_cycles[0] = timer_get_cycles();
       }
 
-  // check input from interface 1 (socket)
-  if( inp_serial1>=0 )
-    if( (timer_get_cycles()-prev_char_cycles1) >= cycles_per_char[1] )
-      {
-	serial_receive_host_data(1, (byte) inp_serial1);
-	
-	// we have consumed the input => signal input thread to receive more
-	inp_serial1 = -1;
-	SignalEvent(signalEvent); 
-	
-	prev_char_cycles1 = timer_get_cycles();
-      }
+  // check input from interface 1-HOSTPC_NUM_SOCKET_CONN+1 (sockets)
+  for(int i=1; i<HOSTPC_NUM_SOCKET_CONN+1; i++)
+    if( inp_serial[i]>=0 )
+      if( host_read_status_led_WAIT() || (timer_get_cycles()-prev_char_cycles[i]) >= cycles_per_char[i] )
+        {
+          // double ctrl-c on primary interface quits emulator
+          if( i==SwitchSerial.getSelected() ) host_check_ctrlc(inp_serial[i]);
+
+          serial_receive_host_data(i, (byte) inp_serial[i]);
+          
+          // we have consumed the input => signal input thread to receive more
+          inp_serial[i] = -1;
+          SignalEvent(signalEvent); 
+          
+          prev_char_cycles[i] = timer_get_cycles();
+        }
 }
 
 
-void host_serial_setup(byte iface, unsigned long baud, bool set_primary_interface)
+// ----------------------------------------------------------------------------------------------------
+
+
+void host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_primary_interface)
 {
   // assuming 10 bits (start bit + 8 data bits + stop bit) per character
-  if( iface<2 ) cycles_per_char[iface]  = (10*2000000)/baud;
+  if( iface<HOSTPC_NUM_SOCKET_CONN+1 ) cycles_per_char[iface]  = (10*2000000)/baud;
+
+  // switch the primary serial interface (if requested)
+  if( set_primary_interface ) SwitchSerial.select(iface); 
 }
 
 
-void host_serial_write(byte iface, byte data)
+void host_serial_end(byte i)
+{}
+
+
+bool host_serial_ok(byte i)
 {
-  if( iface==0 )
-    Serial.write(data);
+  return i==0 || (i<HOSTPC_NUM_SOCKET_CONN+1 && iface_socket[i-1]!=INVALID_SOCKET);
+}
+
+
+int host_serial_available(byte i)
+{
+  return i<HOSTPC_NUM_SOCKET_CONN+1 && inp_serial[i]>=0 ? 1 : 0;
+}
+
+
+int host_serial_peek(byte i)
+{
+  return i<HOSTPC_NUM_SOCKET_CONN+1 ? inp_serial[i] : -1;
+}
+
+
+int host_serial_read(byte i)
+{
+  if( i<HOSTPC_NUM_SOCKET_CONN+1 )
+    {
+      int res = inp_serial[i];
+      inp_serial[i] = -1;
+      return res;
+    }
   else
-    send(iface_socket, (char *) &data, 1, 0 /*MSG_NOSIGNAL*/);
+    return -1;
 }
 
 
-bool host_serial_available_for_write(byte iface)
+void host_serial_flush(byte i)
+{}
+
+
+int host_serial_available_for_write(byte i)
 {
-  return iface==0 ? Serial.availableForWrite() : (iface_socket != INVALID_SOCKET);
+  if( i==0 )
+    return Serial.availableForWrite();
+  else if( i<HOSTPC_NUM_SOCKET_CONN+1 )
+    return iface_socket[i-1] != INVALID_SOCKET;
+  else
+    return false;
+}
+
+
+size_t host_serial_write(byte i, uint8_t data)
+{
+  if( i==0 )
+    { Serial.write(data); return 1; }
+  else if( i<HOSTPC_NUM_SOCKET_CONN+1 && iface_socket[i-1] != INVALID_SOCKET )
+    { send(iface_socket[i-1], (char *) &data, 1, 0 /*MSG_NOSIGNAL*/); return 1; }
+
+  return 0;
+}
+
+
+const char *host_serial_port_name(byte i)
+{
+  switch(i)
+    {
+    case 0: return "Console";
+    case 1: return "1st client on socket 8800";
+    case 2: return "2nd client on socket 8800";
+    case 3: return "3rd client on socket 8800";
+    case 4: return "4th client on socket 8800";
+    }
+
+ return "???";
+}
+
+
+bool host_serial_port_baud_limits(byte i, uint32_t *min, uint32_t *max)
+{
+  if( i<HOSTPC_NUM_SOCKET_CONN+1 )
+    {
+      *min = 110;
+      *max = 115200;
+      return true;
+    }
+  else
+    return false;
+}
+
+
+bool host_serial_port_has_configs(byte i)
+{
+  return false;
+}
+
+
+// ----------------------------------------------------------------------------------------------------
+
+
+// these are defined and initialized in the main() function in Arduino/Arduino.cpp
+extern int    g_argc;
+extern char **g_argv;
+
+bool host_is_reset()
+{
+  bool res = false;
+  for(int i=0; i<g_argc; i++)
+    if( strcmp(g_argv[i], "-r")==0 )
+      return true;
+
+  return false;
 }
 
 
@@ -643,6 +813,13 @@ void host_setup()
         }
       
       storagefile = fopen("AltairStorage.dat", "r+b");
+    }
+
+  inp_serial[0] = -1;
+  for(int i=0; i<HOSTPC_NUM_SOCKET_CONN; i++)
+    {
+      iface_socket[i] = INVALID_SOCKET;
+      inp_serial[i+1] = -1;
     }
 
 #if defined(_WIN32)

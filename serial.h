@@ -53,6 +53,16 @@ byte serial_2sio2_in_data();
 void serial_2sio2_out_ctrl(byte data);
 void serial_2sio2_out_data(byte data);
 
+byte serial_2sio3_in_ctrl();
+byte serial_2sio3_in_data();
+void serial_2sio3_out_ctrl(byte data);
+void serial_2sio3_out_data(byte data);
+
+byte serial_2sio4_in_ctrl();
+byte serial_2sio4_in_data();
+void serial_2sio4_out_ctrl(byte data);
+void serial_2sio4_out_data(byte data);
+
 byte serial_sio_in_ctrl();
 byte serial_sio_in_data();
 void serial_sio_out_ctrl(byte data);

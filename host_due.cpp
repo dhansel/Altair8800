@@ -33,7 +33,12 @@
 #include <SD.h>
 
 
-// un-define Serial which was #define'd to SwitchSerialClass in host_due.h.
+#if USE_PROTECT>0 && USE_SERIAL_ON_A6A7>0
+#error Only one of USE_PROTECT (in config.h) and USE_SERIAL_ON_A6A7 (in host_due.h) can be set to 1.
+#endif
+
+
+// un-define Serial which was #define'd to SwitchSerialClass in switch_serial.h
 // otherwise we get infinite loops when calling Serial.* functions below
 #undef Serial
 
@@ -321,7 +326,12 @@ void TC1_Handler() { TC_GetStatus(TC0, 1); host_timer_fn[1](); }
 void TC2_Handler() { TC_GetStatus(TC0, 2); host_timer_fn[2](); }
 void TC3_Handler() { TC_GetStatus(TC1, 0); host_timer_fn[3](); }
 void TC4_Handler() { TC_GetStatus(TC1, 1); host_timer_fn[4](); }
+#if USE_SERIAL_ON_A6A7==0
+// if the additional software serial interface is enabled then
+// TC5 is used by that interface so we can not define a TC5_Handler 
+// function here.  Timer 5 can not be used.
 void TC5_Handler() { TC_GetStatus(TC1, 2); host_timer_fn[5](); }
+#endif
 void TC6_Handler() { TC_GetStatus(TC2, 0); host_timer_fn[6](); }
 void TC7_Handler() { TC_GetStatus(TC2, 1); host_timer_fn[7](); }
 void TC8_Handler() { TC_GetStatus(TC2, 2); host_timer_fn[8](); }
@@ -435,110 +445,18 @@ void host_interrupt_timer_setup(byte tid, uint32_t period_us, TimerFnTp f)
 
 //------------------------------------------------------------------------------------------------------
 
-
-static void host_serial_receive_finished_interrupt_if0()
-{
-  // a complete character should have been received
-  if( Serial.available() )
-    serial_receive_host_data(0, Serial.read());
-  else 
-    host_interrupt_timer_stop(7);
-}
-
-
-static void host_serial_receive_start_interrupt_if0()
-{
-  // we have seen a signal change on the RX serial line so
-  // a serial character is being received => wait until it is finished
-  if( !host_interrupt_timer_running(7) )
-    host_interrupt_timer_start(7);
-}
-
-
-static void host_serial_receive_finished_interrupt_if1()
-{
-  // a complete character should have been received
-  if( Serial1.available() )
-    serial_receive_host_data(1, Serial1.read());
-  else 
-    host_interrupt_timer_stop(8);
-}
-
-
-static void host_serial_receive_start_interrupt_if1()
-{
-  // we have seen a signal change on the RX serial line so
-  // a serial character is being received => wait until it is finished
-  if( !host_interrupt_timer_running(8) )
-    host_interrupt_timer_start(8);
-}
-
-
-void host_serial_setup(byte iface, unsigned long baud, bool set_primary_interface)
-{
-  byte rxPin, timer;
-  void (*fnStarting)(), (*fnFinished)();
-
-  if( iface==0 )
-    {
-      rxPin = 0; 
-      timer = 7; 
-      fnStarting = host_serial_receive_start_interrupt_if0; 
-      fnFinished = host_serial_receive_finished_interrupt_if0; 
-    }
-  else
-    { 
-      rxPin = 19; 
-      timer = 8; 
-      fnStarting = host_serial_receive_start_interrupt_if1; 
-      fnFinished = host_serial_receive_finished_interrupt_if1; 
-    }
-
-  // detach interrupt (if it was already set)
-  detachInterrupt(digitalPinToInterrupt(rxPin));
-
-  // stop timer interrupt (if running)
-  if( host_interrupt_timer_running(timer) ) host_interrupt_timer_stop(timer);
-
-  // set up timer such that we produce an interrupt after 1 byte
-  // (8 bits + 1 stop bit) has been received at the given baud rate.
-  host_interrupt_timer_setup(timer, (9*1000000)/baud, fnFinished);
-
-  // interrupt to see activity on serial RX pin
-  attachInterrupt(digitalPinToInterrupt(rxPin), fnStarting, RISING);
-
-  // switch the primary serial interface (if requested)
-  if( set_primary_interface ) SwitchSerial.select(iface); 
-
-  if( iface==0 )
-    { 
-      //if( Serial ) Serial.end(); 
-      Serial.begin(baud); 
-      Serial.setTimeout(10000); 
-    }
-  else if( iface==1 )
-    { 
-      //if( Serial1 ) Serial1.end(); 
-      Serial1.begin(baud); 
-      Serial1.setTimeout(10000); 
-    }
-}
-
-
-//------------------------------------------------------------------------------------------------------
-
 static bool use_sd = false;
-uint32_t due_storagesize = 0x8000;
+uint32_t due_storagesize = 0x4000;
 
 
 // The Due has 512k FLASH memory (addresses 0x00000-0x7ffff).
-// We use 32k (0x8000 bytes) for storage
+// We use 16k (0x4000 bytes) for storage
 // DueFlashStorage address 0 is the first address of the second memory bank,
-// i.e. 0x40000. We add 0x39000 so we use at 0x79000-0x7ffff
+// i.e. 0x40000. We add 0x3C000 so we use at 0x7C000-0x7ffff
 // => MUST make sure that our total program size (shown in Arduine IDE after compiling)
-//    is less than 495616 (0x78fff)! Otherwise we would overwrite our own program when
+//    is less than 507903 (0x7Bfff)! Otherwise we would overwrite our own program when
 //    saving memory pages.
-#define FLASH_STORAGE_OFFSET 0x39000
+#define FLASH_STORAGE_OFFSET 0x3C000
 DueFlashStorage dueFlashStorage;
 
 #define MOVE_BUFFER_SIZE 1024
@@ -680,6 +598,369 @@ void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
 }
 
 
+//------------------------------------------------------------------------------------------------------
+
+
+static void host_serial_receive_finished_interrupt_if0()
+{
+  // a complete character should have been received
+  if( Serial.available() )
+    serial_receive_host_data(0, Serial.read());
+  else 
+    host_interrupt_timer_stop(8);
+}
+
+
+static void host_serial_receive_start_interrupt_if0()
+{
+  // we have seen a signal change on the RX serial line so
+  // a serial character is being received => wait until it is finished
+  if( !host_interrupt_timer_running(8) )
+    host_interrupt_timer_start(8);
+}
+
+
+static void host_serial_receive_finished_interrupt_if1()
+{
+  // a complete character should have been received
+  if( Serial1.available() )
+    serial_receive_host_data(1, Serial1.read());
+  else 
+    host_interrupt_timer_stop(7);
+}
+
+
+static void host_serial_receive_start_interrupt_if1()
+{
+  // we have seen a signal change on the RX serial line so
+  // a serial character is being received => wait until it is finished
+  if( !host_interrupt_timer_running(7) )
+    host_interrupt_timer_start(7);
+}
+
+
+static void host_serial_receive_finished_interrupt_if2()
+{
+  // a complete character should have been received
+  if( SerialUSB.available() )
+    serial_receive_host_data(2, SerialUSB.read());
+  else 
+    host_interrupt_timer_stop(6);
+}
+
+
+extern void (*gpf_isr)(void);
+void (*gpf_isr_orig)(void) = NULL;
+void host_serial_receive_start_interrupt_if2()
+{
+  // check whether this is an interrupt due to communication with an endpoint
+  bool isEndpointInterrupt = Is_udd_endpoint_interrupt(CDC_RX);
+
+  // call original ISR to handle USB communication
+  gpf_isr_orig();
+  
+  if( isEndpointInterrupt && !host_interrupt_timer_running(6) )
+    {
+      // receive data
+      if( SerialUSB.available() )
+        serial_receive_host_data(2, SerialUSB.read());
+
+      // if more to receive then schedule timer
+      if( SerialUSB.available() )
+        host_interrupt_timer_start(6);
+    }
+}
+
+
+#if USE_SERIAL_ON_A6A7>0
+// define a software UART on interrupt 5 with 16 byte
+// transmit and receive buffers
+#include "soft_uart.h"
+serial_tc5_declaration(16,16);
+
+static void host_serial_receive_finished_interrupt_if3()
+{
+  // a new character has been received
+  serial_receive_host_data(3, serial_tc5.read());
+}
+#endif
+
+
+static byte num_bits(uint32_t config)
+{
+  switch( config )
+    {
+    case SERIAL_5N1: return 7;
+    case SERIAL_6N1: return 8;
+    case SERIAL_7N1: return 9;
+    case SERIAL_8N1: return 10;
+    case SERIAL_5N2: return 8;
+    case SERIAL_6N2: return 9;
+    case SERIAL_7N2: return 10;
+    case SERIAL_8N2: return 11;
+    case SERIAL_5E1: return 8;
+    case SERIAL_6E1: return 9;
+    case SERIAL_7E1: return 10;
+    case SERIAL_8E1: return 11;
+    case SERIAL_5E2: return 9;
+    case SERIAL_6E2: return 10;
+    case SERIAL_7E2: return 11;
+    case SERIAL_8E2: return 12;
+    case SERIAL_5O1: return 8;
+    case SERIAL_6O1: return 9;
+    case SERIAL_7O1: return 10;
+    case SERIAL_8O1: return 11;
+    case SERIAL_5O2: return 9;
+    case SERIAL_6O2: return 10;
+    case SERIAL_7O2: return 11;
+    case SERIAL_8O2: return 12;
+    }
+
+  return 10;
+}
+
+
+void host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_primary_interface)
+{
+  byte rxPin, timer;
+  void (*fnStarting)() = NULL, (*fnFinished)() = NULL;
+
+  if( iface==0 )
+    {
+      rxPin = 0; 
+      timer = 8; 
+      fnStarting = host_serial_receive_start_interrupt_if0; 
+      fnFinished = host_serial_receive_finished_interrupt_if0; 
+    }
+  else if( iface==1 )
+    { 
+      rxPin = 19; 
+      timer = 7; 
+      fnStarting = host_serial_receive_start_interrupt_if1; 
+      fnFinished = host_serial_receive_finished_interrupt_if1; 
+    }
+  else if( iface==2 )
+    {
+      // hook into the SerialUSB interrupt service routine
+      if( gpf_isr_orig==NULL ) gpf_isr_orig = gpf_isr;
+      gpf_isr = host_serial_receive_start_interrupt_if2;
+
+      timer = 6;
+      fnFinished = host_serial_receive_finished_interrupt_if2;
+    }
+
+  if( fnStarting!=NULL )
+    {
+      // detach interrupt (if it was already set)
+      detachInterrupt(rxPin);
+
+      // interrupt to see activity on serial RX pin
+      attachInterrupt(digitalPinToInterrupt(rxPin), fnStarting, FALLING);
+    }
+
+  if( fnFinished!=NULL )
+    {
+      // stop timer interrupt (if running)
+      if( host_interrupt_timer_running(timer) ) host_interrupt_timer_stop(timer);
+      
+      // set up timer such that we produce an interrupt after 1 byte
+      // has been received at the given baud rate.
+      host_interrupt_timer_setup(timer, ((num_bits(config)*1000000)/baud)+20, fnFinished);
+    }
+
+  // switch the primary serial interface (if requested)
+  if( set_primary_interface ) SwitchSerial.select(iface); 
+
+  if( iface==0 )
+    { 
+      Serial.begin(baud); 
+      Serial.setTimeout(10000); 
+    }
+  else if( iface==1 )
+    { 
+      Serial1.begin(baud);
+      if( config==SERIAL_8N1 || config==SERIAL_8O1 || config==SERIAL_8E1 )
+        Serial1.begin(baud, (UARTClass::UARTModes) config);
+      else
+        Serial1.begin(baud, (USARTClass::USARTModes) config);
+
+      Serial1.setTimeout(10000); 
+    }
+  else if( iface==2 )
+    { 
+      SerialUSB.begin(baud); 
+      SerialUSB.setTimeout(10000); 
+    }
+#if USE_SERIAL_ON_A6A7>0
+  else if( iface==3 )
+    { 
+      serial_tc5.begin(60, 61, baud, config);
+      serial_tc5.setTimeout(10000); 
+
+      // rx_handler will be called (from within serial_tc5's ISR) after 
+      // a complete byte has been received
+      serial_tc5.set_rx_handler(host_serial_receive_finished_interrupt_if3);
+    }
+#endif
+}
+
+
+void host_serial_end(byte i)
+{
+  switch( i )
+    {
+    case 0: Serial.end(); break;
+    case 1: Serial1.end(); break;
+    case 2: SerialUSB.end(); break;
+#if USE_SERIAL_ON_A6A7>0
+    case 3: serial_tc5.end(); break;
+#endif
+    }
+}
+
+int host_serial_available(byte i)
+{
+  switch( i )
+    {
+    case 0: return Serial.available(); break;
+    case 1: return Serial1.available(); break;
+    case 2: return SerialUSB.available(); break;
+#if USE_SERIAL_ON_A6A7>0
+    case 3: return serial_tc5.available(); break;
+#endif
+    }
+
+ return 0;
+}
+
+int host_serial_available_for_write(byte i)
+{
+  switch( i )
+    {
+    case 0: return Serial.availableForWrite(); break;
+    case 1: return Serial1.availableForWrite(); break;
+    case 2: return SerialUSB.availableForWrite(); break;
+#if USE_SERIAL_ON_A6A7>0
+    case 3: return serial_tc5.availableForWrite(); break;
+#endif
+    }
+
+ return 0;
+}
+
+int host_serial_peek(byte i)
+{
+  switch( i )
+    {
+    case 0: return Serial.peek(); break;
+    case 1: return Serial1.peek(); break;
+    case 2: return SerialUSB.peek(); break;
+#if USE_SERIAL_ON_A6A7>0
+    case 3: return serial_tc5.peek(); break;
+#endif
+    }
+
+ return -1;
+}
+
+int host_serial_read(byte i)
+{
+  switch( i )
+    {
+    case 0: return Serial.read(); break;
+    case 1: return Serial1.read(); break;
+    case 2: return SerialUSB.read(); break;
+#if USE_SERIAL_ON_A6A7>0
+    case 3: return serial_tc5.read(); break;
+#endif
+    }
+
+  return -1;
+}
+
+void host_serial_flush(byte i)
+{
+  switch( i )
+    {
+    case 0: Serial.flush(); break;
+    case 1: Serial1.flush(); break;
+    case 2: SerialUSB.flush(); break;
+#if USE_SERIAL_ON_A6A7>0
+    case 3: serial_tc5.flush(); break;
+#endif
+    }
+}
+
+size_t host_serial_write(byte i, uint8_t b)
+{
+  switch( i )
+    {
+    case 0: return Serial.write(b); break;
+    case 1: return Serial1.write(b); break;
+    case 2: return SerialUSB.write(b); break;
+#if USE_SERIAL_ON_A6A7>0
+    case 3: return serial_tc5.write(b); break;
+#endif
+    }
+
+  return 0;
+}
+
+
+bool host_serial_ok(byte i)
+{ 
+  switch( i )
+    {
+    case 0: return (bool) Serial; break;
+    case 1: return (bool) Serial1; break;
+    case 2: return (bool) SerialUSB; break;
+#if USE_SERIAL_ON_A6A7>0
+    case 3: return (bool) serial_tc5; break;
+#endif
+    }
+
+  return false;
+  }
+
+
+const char *host_serial_port_name(byte i)
+{
+  switch(i)
+    {
+    case 0: return "USB Programming Port";
+    case 1: return "Serial (pin 18/19)";
+    case 2: return "USB Native Port";
+#if USE_SERIAL_ON_A6A7>0
+    case 3: return "Serial (pin A6/A7)";
+#endif
+    default: return "???";
+    }
+}
+
+
+bool host_serial_port_baud_limits(byte i, uint32_t *min, uint32_t *max)
+{
+  switch(i)
+    {
+    case 0:
+    case 1:
+    case 2: *min = 600; *max = 115200; break;
+#if USE_SERIAL_ON_A6A7>0
+    case 3: *min = 110; *max =  38400; break;
+#endif
+    default: return false;
+    }
+
+  return true;
+}
+
+
+bool host_serial_port_has_configs(byte i)
+{
+  return i==1 || i==3;
+}
+
+
 // --------------------------------------------------------------------------------------------------
 
 
@@ -785,8 +1066,10 @@ static void switches_setup()
   attachInterrupt(function_switch_pin[ 7], switch_interrupt_7,  CHANGE);
   attachInterrupt(function_switch_pin[ 8], switch_interrupt_8,  CHANGE);
   attachInterrupt(function_switch_pin[ 9], switch_interrupt_9,  CHANGE);
+#if USE_PROTECT>0
   attachInterrupt(function_switch_pin[10], switch_interrupt_10, CHANGE);
   attachInterrupt(function_switch_pin[11], switch_interrupt_11, CHANGE);
+#endif
   attachInterrupt(function_switch_pin[12], switch_interrupt_12, CHANGE);
   attachInterrupt(function_switch_pin[13], switch_interrupt_13, CHANGE);
   attachInterrupt(function_switch_pin[14], switch_interrupt_14, CHANGE);
@@ -862,8 +1145,13 @@ signed char isinput[] =
     1, // D57 (A3)    => EXAMINE NEXT
     1, // D58 (A4)    => DEPOSIT
     1, // D59 (A5)    => DEPOSIT NEXT
+#if USE_PROTECT>0
     1, // D60 (A6)    => PROTECT
     1, // D61 (A7)    => UNPROTECT
+#else
+   -1, // D60 (A6)    => serial_tc5 RX (don't set)
+   -1, // D61 (A7)    => serial_tc5 TX (don't set)
+#endif
     1, // D62 (A8)    => SW0
     1, // D63 (A9)    => SW1
     1, // D64 (A10)   => SW2
@@ -881,6 +1169,12 @@ uint32_t host_get_random()
 {
   delayMicroseconds(1);
   return (uint32_t) trng_read_output_data(TRNG);
+}
+
+
+bool host_is_reset()
+{
+  return host_read_function_switch(SW_RESET);
 }
 
 
@@ -1053,131 +1347,5 @@ uint32_t host_set_file(const char *filename, uint32_t offset, uint32_t len, byte
   return res;
 }
 
-
-// --------------------------------------------------------
-
-SwitchSerialClass SwitchSerial;
-
-SwitchSerialClass::SwitchSerialClass() : Stream()
-{
-  m_selected = 0;
-}
-
-
-void SwitchSerialClass::begin(unsigned long baud)
-{
-  switch( m_selected )
-    {
-    case 0: Serial.begin(baud); break;
-    case 1: Serial1.begin(baud); break;
-    }
-}
-
-void SwitchSerialClass::end()
-{
-  switch( m_selected )
-    {
-    case 0: Serial.end(); break;
-    case 1: Serial1.end(); break;
-    }
-}
-
-int SwitchSerialClass::available(void)
-{
-  switch( m_selected )
-    {
-    case 0: return Serial.available(); break;
-    case 1: return Serial1.available(); break;
-    }
-
- return 0;
-}
-
-int SwitchSerialClass::availableForWrite(void)
-{
-  switch( m_selected )
-    {
-    case 0: return Serial.availableForWrite(); break;
-    case 1: return Serial1.availableForWrite(); break;
-    }
-
- return 0;
-}
-
-int SwitchSerialClass::peek(void)
-{
-  switch( m_selected )
-    {
-    case 0: return Serial.peek(); break;
-    case 1: return Serial1.peek(); break;
-    }
-
- return -1;
-}
-
-int SwitchSerialClass::read(void)
-{
-  switch( m_selected )
-    {
-    case 0: return Serial.read(); break;
-    case 1: return Serial1.read(); break;
-    }
-
-  return -1;
-}
-
-void SwitchSerialClass::flush(void)
-{
-  switch( m_selected )
-    {
-    case 0: Serial.flush(); break;
-    case 1: Serial1.flush(); break;
-    }
-}
-
-size_t SwitchSerialClass::write(uint8_t b)
-{
-  switch( m_selected )
-    {
-    case 0: return Serial.write(b); break;
-    case 1: return Serial1.write(b); break;
-    }
-
-  return 0;
-}
-
-
-SwitchSerialClass::operator bool() 
-{ 
-  switch( m_selected )
-    {
-    case 0: return (bool) Serial; break;
-    case 1: return (bool) Serial1; break;
-    }
-
-  return false;
-  }
-
-
-
-void host_serial_write(byte iface, byte data)
-{
-  switch( iface )
-    {
-    case 0 : Serial.write(data); break;
-    case 1 : Serial1.write(data); break;
-    }
-}
-
-bool host_serial_available_for_write(byte iface)
-{
-  switch( iface )
-    {
-    case 0 : return Serial.availableForWrite();
-    case 1 : return Serial1.availableForWrite();
-    }
-
-  return 0;
-}
 
 #endif

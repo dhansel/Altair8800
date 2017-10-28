@@ -1710,7 +1710,7 @@ uint16_t prog_tools_copy_diskboot(byte *dst)
       host_copy_flash_to_ram(dst+0xFF00, prog_cdbl, sizeof(prog_cdbl));
 
       // disk boot rom starts at 0xff00 so RAM goes up to 0xfeff
-      mem_set_ram_limit(0xfeff);
+      mem_set_ram_limit_sys(0xfeff);
 
       return 0xFF00;
     }
@@ -1724,7 +1724,7 @@ uint16_t prog_tools_copy_hdbl(byte *dst)
   if( MEMSIZE > 0xFCFF )
     {
       host_copy_flash_to_ram(dst+0xFC00, prog_hdbl, sizeof(prog_hdbl));
-      mem_set_ram_limit(0xfbff);
+      mem_set_ram_limit_sys(0xfbff);
       return 0xFC00;
     }
   else

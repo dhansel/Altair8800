@@ -1415,7 +1415,7 @@ uint16_t prog_basic_copy_4k(byte *dst)
 
   // 4k BASIC will get into an infinite loop if a full 64k RAM are
   // available => purposely reduce the RAM size by 1 byte
-  mem_set_ram_limit(0xfffe);
+  mem_set_ram_limit_sys(0xfffe);
 
   return addr;
 }
@@ -1428,7 +1428,7 @@ uint16_t prog_basic_copy_16k(byte *dst)
 
 #if MEMSIZE>=0x10000
   // ROM BASIC starts at 0xC000 so RAM goes up to 0xBFFF
-  mem_set_ram_limit(0xbfff);
+  mem_set_ram_limit_sys(0xbfff);
   host_copy_flash_to_ram(dst+0xC000, basic16k, 0x4000);
 #endif
 

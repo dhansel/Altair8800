@@ -98,6 +98,7 @@ inline uint16_t MEM_WRITE_WORD(uint16_t addr, uint16_t v)
     {
       byte b;
       host_set_status_leds_WRITEMEM();
+      host_set_data_leds(0xff);
       host_set_addr_leds(addr);
       b = v & 255;
       MWRITE(addr, b);
@@ -105,7 +106,6 @@ inline uint16_t MEM_WRITE_WORD(uint16_t addr, uint16_t v)
       host_set_addr_leds(addr);
       b = v / 256;
       MWRITE(addr, b);
-      host_set_data_leds(b);
     }
 }
 

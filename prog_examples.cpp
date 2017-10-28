@@ -56,7 +56,7 @@ bool prog_examples_read_start(byte idx)
         {
           // 4k BASIC will get into an infinite loop if a full 64k RAM are
           // available => purposely reduce the RAM size by 1 byte
-          mem_set_ram_limit(0xfffe);
+          mem_set_ram_limit_sys(0xfffe);
         }
 
       return true;

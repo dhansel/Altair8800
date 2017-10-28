@@ -26,7 +26,7 @@
 
 // Enables function of the PROTECT/UNPROTECT switches.
 // Reduces performance and uses 33 bytes of RAM.
-#define USE_PROTECT 1
+#define USE_PROTECT 0
 
 
 // Enables support for disk drives. Each drive uses about 160 bytes
@@ -42,6 +42,10 @@
 
 // Enables printer emulation which uses about 140 bytes of RAM.
 #define USE_PRINTER 1
+
+
+// Enable two 88-2SIO devices (instead of one).
+#define USE_SECOND_2SIO 1
 
 
 // If enabled, Address switch state will be set by issuing the '/'
@@ -62,13 +66,15 @@
 #define CF_CLEARMEM     0x20
 #define CF_HAVE_VI      0x40
 #define CF_DRIVE_RT     0x80
-#define CF_PRINTER_RT   0x00200000
-#define CF_HDSK_RT      0x00400000
+#define CF_PRINTER_RT   0x00020000
+#define CF_HDSK_RT      0x00040000
 
 #define CSM_SIO         0
 #define CSM_ACR         1
 #define CSM_2SIO1       2
 #define CSM_2SIO2       3
+#define CSM_2SIO3       4
+#define CSM_2SIO4       5
 
 #define CSF_OFF         0
 #define CSF_ON          1
@@ -109,6 +115,7 @@ float    config_rtc_rate();
 byte     config_aux1_program();
 
 uint32_t config_host_serial_baud_rate(byte iface);
+uint32_t config_host_serial_config(byte iface);
 byte     config_host_serial_primary();
 
 byte     config_serial_map_sim_to_host(byte dev); 

@@ -35,14 +35,14 @@
  ** Modifications by David Hansel on 10/18/17:
  ** - Made _items_ variable volatile such that it can be read
  **   from outside the interrupt routine in a continuous loop
- **   (for availableForWrite function)
+ **   (for availableForWrite function in soft_uart.h)
  */
 
 
 #ifndef FIFO_H
 #define FIFO_H
 
-#include <cstddef>
+//#include <cstddef>
 
 namespace arduino_due
 {
@@ -82,8 +82,8 @@ namespace arduino_due
 
     private:
 
-      T _buffer_p_[LENGTH];
-      int _first_,_last_;
+      volatile T _buffer_p_[LENGTH];
+      volatile int _first_,_last_;
       volatile int _items_;
 
       void _init_() { _first_=_last_=-1; _items_=0; }

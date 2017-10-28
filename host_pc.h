@@ -6,9 +6,16 @@
 #ifndef HOST_PC_H
 #define HOST_PC_H
 
+#include "switch_serial.h"
+
 #define MEMSIZE          0x10000 /* 64k */
 #define HOST_STORAGESIZE 0x80000 /* 512k */
 #define HOST_BUFFERSIZE  0x400   /* 1k */
+
+// maximum is 4
+#define HOSTPC_NUM_SOCKET_CONN  4
+
+#define HOST_NUM_SERIAL_PORTS   (HOSTPC_NUM_SOCKET_CONN+1)
 
 #define HOST_PERFORMANCE_FACTOR 75.0
 
@@ -87,8 +94,5 @@ extern byte stop_request;
 
 
 void host_check_interrupts();
-
-void host_serial_write(byte iface, byte data);
-bool host_serial_available_for_write(byte iface);
 
 #endif

@@ -81,6 +81,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Arduino\Arduino.cpp" />
+    <ClCompile Include="Arduino\Print.cpp" />
     <ClCompile Include="breakpoint.cpp" />
     <ClCompile Include="config.cpp" />
     <ClCompile Include="cpucore.cpp" />
@@ -107,6 +108,7 @@
     <ClCompile Include="prog_ps2.cpp" />
     <ClCompile Include="prog_tools.cpp" />
     <ClCompile Include="serial.cpp" />
+    <ClCompile Include="switch_serial.cpp" />
     <ClCompile Include="timer.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -143,6 +145,7 @@
     <ClInclude Include="prog_ps2.h" />
     <ClInclude Include="prog_tools.h" />
     <ClInclude Include="serial.h" />
+    <ClInclude Include="switch_serial.h" />
     <ClInclude Include="timer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

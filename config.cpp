@@ -27,7 +27,7 @@
 #include "hdsk.h"
 #include "prog.h"
 
-#define CONFIG_FILE_VERSION 1
+#define CONFIG_FILE_VERSION 3
 
 #define  BAUD_110    0
 #define  BAUD_150    1
@@ -42,8 +42,18 @@
 #define  BAUD_57600  10
 #define  BAUD_115200 11
 
+#if HOST_NUM_SERIAL_PORTS>5
+#error "Maximum number of host serial interfaces supported is 5"
+#endif
+
+#if USE_SECOND_2SIO>0
+#define NUM_SERIAL_DEVICES 6
+#else
+#define NUM_SERIAL_DEVICES 4
+#endif
+
 // config_flags:
-// vvvvvvvv xhrppmmt ttttRRRR dVCDIPFT
+// vvvvvvvv mmmpphrt ttttRRRR dVCDIPFT
 // T = Throttle
 // t = Throttle delay if throttle is enabled (0=auto)
 // F = Profile
@@ -63,25 +73,37 @@ uint32_t config_flags;
 
 
 // cofig_serial_settings:
-// xxxxxxxx xxxxxxxx xxxxxxxI bbbbBBBB
-// BBBB = baud rate for Serial  host interface (see baud rates above)
-// bbbb = baud rate for Serial1 host interface (see baud rates above)
-// I    = select primary serial interface (0=Serial, 1=Serial1)
+// xxxxxxxx 44443333 2222xPPP 11110000
+// 0000 = baud rate for fist   host interface (see baud rates above)
+// 1111 = baud rate for second host interface (see baud rates above)
+// 2222 = baud rate for third  host interface (see baud rates above)
+// 3333 = baud rate for fourth host interface (see baud rates above)
+// 4444 = baud rate for fifth  host interface (see baud rates above)
+// PPP  = primary serial interface (maximum number depends on host)
 // x    = unused
 uint32_t config_serial_settings, new_config_serial_settings;
 
 
+// cofig_serial_settings2:
+// xxxxxxxB BPPSBBPP SBBPPSBB PPSBBPPS
+// for all 5 host interfaces:
+// BB = number of bits (0=5, 1=6, 2=7, 3=8)
+// PP = parity         (0=none, 1=even, 2=odd)
+// S  = stop bits      (0=1, 1=2)
+uint32_t config_serial_settings2, new_config_serial_settings2;
+
+
 // config_serial_device_settings[0-3]
-// xxxxxxxx xxxxxxxR TT77UUMM CNNNBBBB
+// xxxxxxxx xxxxMMMR TT77UUxx CNNNBBBB
 // BBBB = baud rate for serial playback (see baud rates above)
 // NNN  = NULs to send after a carriage return when playing back examples
 // C    = trap CLOAD/CSAVE in extended BASIC (for CSM_ACR device only)
-// MM   = map device to host interface (00=NONE, 01=primary, 02=secondary)
+// MMM  = map device to host interface (000=NONE, 001=first, 010=second, 011=third, 100=fourth, 101=fifth, 111=primary)
 // UU   = only uppercase for inputs (00=off, 01=on, 10=autodetect)
 // 77   = use 7 bit for serial outputs (00=off [use 8 bit], 01=on, 10=autodetect)
 // TT   = translate backspace to (00=off, 01=underscore, 10=autodetect, 11=rubout)
 // R    = force realtime operation (use baud rate even if not using interrupts)
-uint32_t config_serial_device_settings[4];
+uint32_t config_serial_device_settings[NUM_SERIAL_DEVICES];
 
 
 // masks defining which interrupts (INT_*) are at which vector interrupt levels
@@ -94,6 +116,10 @@ uint32_t config_interrupt_mask;
 
 // program to be run when AUX1 is raised
 byte config_aux1_prog;
+
+
+// amount of RAM installed
+uint32_t config_mem_size;
 
 
 // --------------------------------------------------------------------------------
@@ -118,6 +144,20 @@ static uint32_t toggle_bits(uint32_t v, byte i, byte n, byte min = 0x00, byte ma
   return set_bits(v, i, n, b>max ? min : (b<min ? min : b));
 }
 
+static byte config_baud_rate_bits(byte iface)
+{
+  byte n = 0;
+  switch( iface )
+    {
+    case 0: n = 0;  break;
+    case 1: n = 4;  break;
+    case 2: n = 12; break;
+    case 3: n = 16; break;
+    case 4: n = 20; break;
+    }
+
+  return n;
+}
 
 static uint32_t config_baud_rate(byte b)
 {
@@ -218,15 +258,19 @@ byte config_serial_playback_example_nuls(byte dev)
   return get_bits(config_serial_device_settings[dev], 4, 3);
 }
 
+byte config_map_device_to_host_interface(byte s)
+{
+  if( s==7 )
+    return config_host_serial_primary();
+  else if( s<=HOST_NUM_SERIAL_PORTS )
+    return s-1;
+  else
+    return 0xff;
+}
+
 byte config_serial_map_sim_to_host(byte dev)
 {
-  switch( get_bits(config_serial_device_settings[dev], 8, 2) )
-    {
-    case 1: return   config_host_serial_primary();
-    case 2: return 1-config_host_serial_primary();
-    }
-
-  return 0xff;
+  return config_map_device_to_host_interface(get_bits(config_serial_device_settings[dev], 17, 3));
 }
 
 bool config_serial_realtime(byte dev)
@@ -236,24 +280,69 @@ bool config_serial_realtime(byte dev)
 
 byte config_host_serial_primary()
 {
-  return get_bits(config_serial_settings, 8, 1);
+  return get_bits(config_serial_settings, 8, 3);
 }
-
-uint32_t config_host_serial_baud_rate(byte iface)
-{
-  return config_baud_rate(get_bits(config_serial_settings, iface==0 ? 0 : 4, 4));
-}
-
 
 uint32_t config_host_serial_baud_rate(uint32_t settings, byte iface)
 {
-  return config_baud_rate(get_bits(settings, iface==0 ? 0 : 4, 4));
+  return config_baud_rate(get_bits(settings, config_baud_rate_bits(iface), 4));
+}
+
+
+uint32_t config_host_serial_config(uint32_t settings2, byte iface)
+{
+  byte v = get_bits(settings2, iface * 5, 5);
+  switch( v )
+    {
+    case 0x00: return SERIAL_5N1;
+    case 0x01: return SERIAL_5N2;
+    case 0x02: return SERIAL_5E1;
+    case 0x03: return SERIAL_5E2;
+    case 0x04: return SERIAL_5O1;
+    case 0x05: return SERIAL_5O2;
+
+    case 0x08: return SERIAL_6N1;
+    case 0x09: return SERIAL_6N2;
+    case 0x0A: return SERIAL_6E1;
+    case 0x0B: return SERIAL_6E2;
+    case 0x0C: return SERIAL_6O1;
+    case 0x0D: return SERIAL_6O2;
+  
+    case 0x10: return SERIAL_7N1;
+    case 0x11: return SERIAL_7N2;
+    case 0x12: return SERIAL_7E1;
+    case 0x13: return SERIAL_7E2;
+    case 0x14: return SERIAL_7O1;
+    case 0x15: return SERIAL_7O2;
+
+    case 0x18: return SERIAL_8N1;
+    case 0x19: return SERIAL_8N2;
+    case 0x1A: return SERIAL_8E1;
+    case 0x1B: return SERIAL_8E2;
+    case 0x1C: return SERIAL_8O1;
+    case 0x1D: return SERIAL_8O2;
+
+    // fall back to default 8N1 settings
+    default  : return SERIAL_8N1;
+    }
+}
+
+
+uint32_t config_host_serial_config(byte iface)
+{
+  return config_host_serial_config(config_serial_settings2, iface);
+}
+
+
+uint32_t config_host_serial_baud_rate(byte iface)
+{
+  return config_host_serial_baud_rate(config_serial_settings, iface);
 }
 
 
 byte config_printer_map_to_host_serial()
 {
-  return get_bits(config_flags, 17, 2);
+  return config_map_device_to_host_interface(get_bits(config_flags, 21, 3));
 }
 
 
@@ -276,6 +365,23 @@ static void set_cursor(byte row, byte col)
 }
 
 
+static void print_mem_size(uint32_t s, byte row=0, byte col=0)
+{
+  if( row!=0 || col!=0 ) set_cursor(row, col);
+
+  if( (s&0x3FF)==0 )
+    {
+      Serial.print(s/1024); 
+      Serial.println(F(" KB     "));
+    }
+  else
+    {
+      Serial.print(s); 
+      Serial.println(F(" bytes     "));
+    }
+}
+
+
 static void print_flag(uint32_t data, uint32_t value, byte row=0, byte col=0)
 {
   if( row!=0 || col!=0 ) set_cursor(row, col);
@@ -295,15 +401,43 @@ static void print_vi_flag()
 }
 
 
-static void print_host_serial_baud_rate(byte iface, byte row=0, byte col=0)
+static void print_host_serial_config(uint32_t settings2, byte iface)
+{
+  byte v = get_bits(settings2, iface * 5, 5);
+  Serial.print(get_bits(settings2, iface * 5 + 3, 2)+5);
+  switch( get_bits(settings2, iface * 5 + 1, 2) )
+    {
+    case 0 : Serial.print('N'); break;
+    case 1 : Serial.print('E'); break;
+    case 2 : Serial.print('O'); break;
+    case 3 : Serial.print('?'); break;
+    }
+  Serial.print(get_bits(settings2, iface * 5, 1)+1);
+}
+
+
+static void print_host_serial_config(byte iface, byte row, byte col)
 {
   if( row!=0 || col!=0 ) set_cursor(row, col);
   Serial.print(config_host_serial_baud_rate(new_config_serial_settings, iface)); 
+  Serial.print(F(" baud"));
+  if( host_serial_port_has_configs(iface) )
+    {
+      Serial.print(' ');
+      print_host_serial_config(new_config_serial_settings2, iface);
+    }
 
-  if( config_host_serial_baud_rate(new_config_serial_settings, iface) != config_host_serial_baud_rate(iface) )
+  if( config_host_serial_baud_rate(new_config_serial_settings, iface) != config_host_serial_baud_rate(iface) 
+      ||
+      get_bits(new_config_serial_settings2, iface * 5, 5) != get_bits(config_serial_settings2, iface * 5, 5) )
     {
       Serial.print(F(" (current: ")); 
       Serial.print(config_host_serial_baud_rate(iface));
+      if( host_serial_port_has_configs(iface) )
+        {
+          Serial.print(' ');
+          print_host_serial_config(config_serial_settings2, iface);
+        }
       Serial.print(')');
     }
 }
@@ -334,20 +468,16 @@ static void print_serial_device_sim(byte dev)
 
 static void print_host_primary_interface_aux(byte iface)
 {
-  switch( iface )
-    {
-    case 0: Serial.print(F("Serial (USB, pin 0/1)")); break;
-    case 1: Serial.print(F("Serial1 (pin 18/19)")); break;
-    }
+  Serial.print(host_serial_port_name(iface));
 }
 
 
 static void print_host_primary_interface(byte row = 0, byte col = 0)
 {
   if( row!=0 || col!=0 ) set_cursor(row, col);
-  print_host_primary_interface_aux(get_bits(new_config_serial_settings, 8, 1));
+  print_host_primary_interface_aux(get_bits(new_config_serial_settings, 8, 3));
 
-  if( get_bits(new_config_serial_settings, 8, 1) != config_host_serial_primary() )
+  if( get_bits(new_config_serial_settings, 8, 3) != config_host_serial_primary() )
     {
       Serial.print(F(" (current: ")); 
       print_host_primary_interface_aux(config_host_serial_primary());
@@ -379,25 +509,30 @@ static void print_serial_flag_backspace(uint32_t settings)
 }
 
 
-static void print_device_mapped_to(uint32_t settings)
+static void print_device_mapped_to(byte s)
 {
-  switch( settings )
+  if( s==0 )
+    Serial.print(F("Not mapped")); 
+  else if( s==7 )
     {
-#if defined(__SAM3X8E__) || defined(HOST_PC_H)
-    case 0: Serial.print("Not mapped"); break;
-    case 1: Serial.print("Primary serial host interface"); break;
-    case 2: Serial.print("Secondary serial host interface"); break;
-#else
-    case 0: Serial.print(F("Not mapped")); break;
-    case 1: Serial.print(F("Serial")); break;
-#endif
+      Serial.print(F("Primary interface ("));
+      print_host_primary_interface();
+      Serial.print(')');
     }
+  else
+    Serial.print(host_serial_port_name(s-1));
 }
 
 
 static void print_serial_device_mapped_to(uint32_t settings)
 {
-  print_device_mapped_to(get_bits(settings, 8, 2));
+  print_device_mapped_to(get_bits(settings, 17, 3));
+}
+
+
+static void print_printer_mapped_to()
+{
+  print_device_mapped_to(get_bits(config_flags, 21, 3));
 }
 
 
@@ -510,39 +645,55 @@ static void print_printer_type()
 }
 
 
-// --------------------------------------------------------------------------------
-
-
-static void apply_host_serial_settings(uint32_t settings)
+static void print_parity(byte p)
 {
-  config_serial_settings = settings;
-  host_serial_setup(0, config_host_serial_baud_rate(0), config_host_serial_primary()==0);
-  host_serial_setup(1, config_host_serial_baud_rate(1), config_host_serial_primary()==1);
+  switch( p ) 
+    {
+    case 0  : Serial.print(F("None")); break;
+    case 1  : Serial.print(F("Even")); break;
+    case 2  : Serial.print(F("Odd "));  break;
+    default : Serial.print(F("??? "));  break;
+    }
 }
 
 
-static void toggle_host_serial_baud_rate(byte iface, byte row, byte col)
-{
-#ifdef HOST_PC_H
-  new_config_serial_settings = toggle_bits(new_config_serial_settings, iface==0 ? 0 : 4, 4, BAUD_110, BAUD_115200);
-  apply_host_serial_settings(new_config_serial_settings);
-#else
-  new_config_serial_settings = toggle_bits(new_config_serial_settings, iface==0 ? 0 : 4, 4, BAUD_600, BAUD_115200);
-#if defined(__SAM3X8E__)
-  // connecting to Arduino Due at 1200 baud over USB will cause it to erase its flash memory
-  // and go into programming mode => skip 1200 baud setting for USB interface
-  if( iface==0 && get_bits(new_config_serial_settings, 0, 4)==BAUD_1200 )
-    new_config_serial_settings = toggle_bits(new_config_serial_settings, 0, 4);
-#endif
-#endif
+// --------------------------------------------------------------------------------
 
-  print_host_serial_baud_rate(iface, row, col);
+
+static void apply_host_serial_settings(uint32_t settings, uint32_t settings2)
+{
+  config_serial_settings  = settings;
+  config_serial_settings2 = settings2;
+  for(byte i=0; i<HOST_NUM_SERIAL_PORTS; i++)
+    host_serial_setup(i, config_host_serial_baud_rate(i), 
+                      config_host_serial_config(settings2, i),
+                      config_host_serial_primary()==i);
+}
+
+
+static byte toggle_host_serial_baud_rate(byte iface, byte n)
+{
+  uint32_t min, max;
+  if( host_serial_port_baud_limits(iface, &min, &max) )
+    {
+      do 
+        { n = (n + 1) % 12; }
+      while( config_baud_rate(n) < min || config_baud_rate(n) > max );
+      
+#if defined(__SAM3X8E__)
+      // connecting to Arduino Due at 1200 baud over USB will cause it to erase its flash memory
+      // and go into programming mode => skip 1200 baud setting for USB interface
+      if( iface==0 && n==BAUD_1200 ) n++;
+#endif
+    }
+
+  return n;
 }
 
 
 static void toggle_host_primary_interface(byte row, byte col)
 {
-  new_config_serial_settings = toggle_bits(new_config_serial_settings, 8, 1);
+  new_config_serial_settings = toggle_bits(new_config_serial_settings, 8, 3, 0, HOST_NUM_SERIAL_PORTS-1);
   print_host_primary_interface(row, col);
 }
 
@@ -592,6 +743,24 @@ static byte toggle_interrupt_conn(uint32_t mask, byte c)
     config_interrupt_mask = (config_interrupt_mask & ~mask) | (~config_interrupt_mask & mask);
 
   return c;
+}
+
+
+static uint32_t toggle_map_to_serial(uint32_t settings, byte start_bit)
+{
+  byte i = get_bits(settings, start_bit, 3);
+  if( i==HOST_NUM_SERIAL_PORTS )
+    i = 0;
+#if HOST_NUM_SERIAL_PORTS>1
+  else if( i==0 )
+    i = 7;
+  else if( i==7 )
+    i = 1;
+#endif
+  else
+    i++;
+    
+  return set_bits(settings, start_bit, 3, i);
 }
 
 
@@ -707,17 +876,18 @@ static bool apply_host_serial_settings()
 {
   char c;
   uint32_t old_config_serial_settings = config_serial_settings;
+  uint32_t old_config_serial_settings2 = config_serial_settings2;
 
-#if defined(__SAM3X8E__)
-  if( config_host_serial_primary() != get_bits(new_config_serial_settings, 8, 1) )
-    Serial.println("\nChange must be confirmed by answering 'y' through new primary interface.\n"
+#if HOST_NUM_SERIAL_PORTS>1
+  if( config_host_serial_primary() != get_bits(new_config_serial_settings, 8, 3) )
+    Serial.println("\r\nChange must be confirmed by answering 'y' through new primary interface.\r\n"
                    "[will revert back to this interface if new interface is not confirmed within 30 seconds]");
   else
 #endif
-  Serial.println(F("\n[will revert to old settings if new settings not confirmed within 30 seconds]\n"));
+  Serial.println(F("\r\n[will revert to old settings if new settings not confirmed within 30 seconds]\r\n"));
   Serial.flush();
 
-  apply_host_serial_settings(new_config_serial_settings);
+  apply_host_serial_settings(new_config_serial_settings, new_config_serial_settings2);
 
   uint32_t timeout = millis() + 30000, timeout2 = 0;
   c = 0;
@@ -725,7 +895,7 @@ static bool apply_host_serial_settings()
     {
       if( millis()>timeout2 )
         {
-          Serial.print(F("\nKeep new host interface settings (y/n)? "));
+          Serial.print(F("\r\nKeep new host interface settings (y/n)? "));
           timeout2 = millis() + 2000;
         }
 
@@ -734,13 +904,13 @@ static bool apply_host_serial_settings()
     }
   while( c!='y' && c!='n' && millis()<timeout );
   Serial.println(c);
-  if( c!='y' ) 
+  if( c!='y' )
     { 
-      apply_host_serial_settings(old_config_serial_settings);
+      apply_host_serial_settings(old_config_serial_settings, old_config_serial_settings2);
       if( c!='n' ) 
         {
           delay(100);
-          Serial.println(F("\nSettings were not confirmed within 30 seconds."));
+          Serial.println(F("\r\nSettings were not confirmed within 30 seconds."));
           delay(3000);
 
           // flush serial input that may have accumulated while waiting
@@ -761,18 +931,20 @@ static bool save_config(byte fileno)
   // better to write all data at once (will overwrite instead
   // of deleting/creating the file)
   byte s = sizeof(uint32_t);
-  byte data[15*sizeof(uint32_t)+1+NUM_DRIVES+1+NUM_HDSK_UNITS*4+1];
+  byte data[(12+NUM_SERIAL_DEVICES)*sizeof(uint32_t)+1+1+NUM_DRIVES+1+NUM_HDSK_UNITS*4+1+1];
 
   // merge version number into config_flags
-  config_flags = (config_flags & 0x00ffffff) | (CONFIG_FILE_VERSION << 24);
+  config_flags = (config_flags & 0x00ffffff) | (((uint32_t) CONFIG_FILE_VERSION) << 24);
 
-  memcpy(data+0*s,  &config_flags, s);
-  memcpy(data+1*s,  &new_config_serial_settings, s);
-  memcpy(data+2*s,   config_serial_device_settings, 4*s);
-  memcpy(data+6*s,   config_interrupt_vi_mask, 8*s);
-  memcpy(data+14*s, &config_interrupt_mask, s);
+  word n = 0;
+  memcpy(data+n, &config_flags, s); n+=s;
+  memcpy(data+n, &new_config_serial_settings, s); n+=s;
+  memcpy(data+n, &new_config_serial_settings2, s); n+=s;
+  data[n] = NUM_SERIAL_DEVICES; n++;
+  memcpy(data+n,  config_serial_device_settings, NUM_SERIAL_DEVICES*s); n+=NUM_SERIAL_DEVICES*s;
+  memcpy(data+n,  config_interrupt_vi_mask, 8*s); n+=8*s;
+  memcpy(data+n, &config_interrupt_mask, s); n+=s;
 
-  word n = 15*s;
   data[n++] = config_aux1_prog;
   
   data[n++] = NUM_DRIVES;
@@ -783,6 +955,7 @@ static bool save_config(byte fileno)
     for(byte j=0; j<4; j++)
       data[n++] = hdsk_get_mounted_image(i, j);
 
+  data[n++] = config_mem_size/256;
   return filesys_write_file('C', fileno, (void *) data, n);
 }
 
@@ -790,7 +963,7 @@ static bool save_config(byte fileno)
 static bool load_config(byte fileno)
 {
   bool ok = false;
-  byte n, d, fid = filesys_open_read('C', fileno);
+  byte i, j, n, d, fid = filesys_open_read('C', fileno);
   if( fid )
     {
       // initialize all settings with defaults so configuration settings
@@ -805,13 +978,35 @@ static bool load_config(byte fileno)
       byte v = config_flags >> 24;
 
       filesys_read_data(fid, &new_config_serial_settings, s);
-      filesys_read_data(fid, config_serial_device_settings, 4*s);
+
+      if( v<3 )
+        {
+          // config file before version 3 does not include serial port configuration
+          // => default to 8N1
+          new_config_serial_settings2 = 0;
+          for(i=0; i<HOST_NUM_SERIAL_PORTS; i++) 
+            new_config_serial_settings2 |= 0x18 << (i*5);
+        }
+      else
+        filesys_read_data(fid, &new_config_serial_settings2, s);
+
+      n = 4;
+      // in config file version 2, the number of serial devices is in the file, 
+      // before it was fixed at 4
+      if( v>=2 ) filesys_read_data(fid, &n, 1);
+      filesys_read_data(fid, config_serial_device_settings, min(NUM_SERIAL_DEVICES, n)*s);
+
+      // skip extra serial device data in config
+      if( NUM_SERIAL_DEVICES<n )
+        for(i=NUM_SERIAL_DEVICES*s; i<n*s; i++)
+          filesys_read_data(fid, &d, 1);
+
       if( v==0 )
         {
           // in config file version 0 the interrupt masks are 8 bits
           byte b[9];
           filesys_read_data(fid, b, 9);
-          for(byte i=0; i<8; i++) config_interrupt_vi_mask[i] = b[i];
+          for(i=0; i<8; i++) config_interrupt_vi_mask[i] = b[i];
           config_interrupt_mask = b[8];
         }
       else
@@ -826,7 +1021,7 @@ static bool load_config(byte fileno)
       
       // disk drive settings
       if( filesys_read_data(fid, &n, 1)!=1 ) n = 0;
-      for(byte i=0; i<n; i++) 
+      for(i=0; i<n; i++) 
         if( filesys_read_data(fid, &d, 1)==1 && i<NUM_DRIVES )
           {
             if( d>0 )
@@ -838,8 +1033,8 @@ static bool load_config(byte fileno)
 
       // hard disk settings
       if( filesys_read_data(fid, &n, 1)!=1 ) n = 0;
-      for(byte i=0; i<n; i++) 
-        for(byte j=0; j<4; j++) 
+      for(i=0; i<n; i++) 
+        for(j=0; j<4; j++) 
           if( filesys_read_data(fid, &d, 1)==1 && i<NUM_HDSK_UNITS )
             {
               if( d>0 )
@@ -848,19 +1043,58 @@ static bool load_config(byte fileno)
                 hdsk_unmount(i, j);
             }
       hdsk_set_realtime((config_flags & CF_HDSK_RT)!=0);
+
+      // memory (RAM) size
+      if( filesys_read_data(fid, &d, 1) )
+        config_mem_size = (d==0) ? 0x10000 : (d*256);
+      else
+        config_mem_size = MEMSIZE;
       
       filesys_close(fid);
+
 #if defined(__AVR_ATmega2560__)
-      // on MEGA, early versions accidentally set bits 16-31 on serial settings
-      for(byte dev=0; dev<4; dev++)
-        if( (config_serial_device_settings[dev] & 0xFFFF0000)==0xFFFF0000 )
-          config_serial_device_settings[dev] &= 0x0000FFFF;
+      if( v==0 )
+        {
+          // on MEGA, early versions accidentally set bits 16-31 on serial settings
+          for(byte dev=0; dev<4; dev++)
+            if( (config_serial_device_settings[dev] & 0xFFFF0000)==0xFFFF0000 )
+              config_serial_device_settings[dev] &= 0x0000FFFF;
+        }
 #endif
+
+      if( v<2 )
+        {
+          // in version 2, serial device to host serial mapping changed:
+          // previous: bits  8- 9 (00=NONE, 01=primary, 02=secondary)
+          // now:      bits 17-19 (000=NONE, 001=first, 010=second, 011=third, 100=fourth, 101=fifth, 111=primary)
+          for(i=0; i<4; i++)
+            {
+              byte map = get_bits(config_serial_device_settings[i], 8, 2);
+              config_serial_device_settings[i] = set_bits(config_serial_device_settings[i],  8, 2, 0);
+              config_serial_device_settings[i] = set_bits(config_serial_device_settings[i], 17, 3, map==1 && HOST_NUM_SERIAL_PORTS>1 ? 7 : map);
+            }
+
+          // in version 2, printer to host serial mapping changed:
+          // previous: bits 17-18 (realtime mode flags bits 21-22)
+          // now     : bits 21-23 (realtime mode flags bits 17-18)
+          byte map   = get_bits(config_flags, 17, 2);
+          byte flags = get_bits(config_flags, 21, 2);
+          config_flags = set_bits(config_flags, 17, 2, flags);
+          config_flags = set_bits(config_flags, 21, 3, map==1 ? 7 : map);
+          
+          // version 2 introduces more host serial interfaces: set them all to 9600 baud
+          for(i=2; i<HOST_NUM_SERIAL_PORTS; i++) new_config_serial_settings |= (BAUD_9600 << (config_baud_rate_bits(i)));
+        }
+      else
+        {
+          // make sure nothing is mapped to an illegal host serial port
+          for(i=0; i<NUM_SERIAL_DEVICES; i++) 
+            if( config_serial_map_sim_to_host(i) >= HOST_NUM_SERIAL_PORTS )
+              config_serial_device_settings[i] = set_bits(config_serial_device_settings[i], 17, 3, 0);              
+        }
+
 #if STANDALONE>0
       config_flags |= CF_SERIAL_INPUT;      
-#endif
-#ifdef HOST_PC_H
-      apply_host_serial_settings(new_config_serial_settings);
 #endif
       ok = true;
     }
@@ -883,7 +1117,7 @@ void config_edit_printer()
       
       Serial.println(F("Configure printer settings"));
       Serial.print(F("\n(P)rinter type             : ")); print_printer_type(); Serial.println();
-      Serial.print(F("Map printer to (i)nterface : ")); print_device_mapped_to(config_printer_map_to_host_serial()); Serial.println();
+      Serial.print(F("Map printer to (i)nterface : ")); print_printer_mapped_to(); Serial.println();
       Serial.print(F("(F)orce real-time mode     : ")); print_flag(CF_PRINTER_RT); Serial.println();
       
       Serial.println(F("\nE(x)it to main menu"));
@@ -900,11 +1134,7 @@ void config_edit_printer()
           break;
 
         case 'i':
-#if defined(__SAM3X8E__) || defined(HOST_PC_H)
-          config_flags = toggle_bits(config_flags, 17, 2, 0, 2);
-#else
-          config_flags = toggle_bits(config_flags, 17, 2, 0, 1);
-#endif
+          config_flags = toggle_map_to_serial(config_flags, 21);
           break;
 
         case 'F': toggle_flag(CF_PRINTER_RT, 0, 0); break;
@@ -999,7 +1229,7 @@ void config_edit_drives()
 void config_edit_hdsk()
 {
   bool go = true;
-  byte i, j, k;
+  byte i, j;
 
   byte mounted[NUM_HDSK_UNITS*4];
   for(i=0; i<NUM_HDSK_UNITS; i++)
@@ -1116,6 +1346,8 @@ void config_edit_interrupts()
   byte conn_acr   = find_vi_conn(INT_ACR);
   byte conn_2sio1 = find_vi_conn(INT_2SIO1);
   byte conn_2sio2 = find_vi_conn(INT_2SIO2);
+  byte conn_2sio3 = find_vi_conn(INT_2SIO3);
+  byte conn_2sio4 = find_vi_conn(INT_2SIO4);
   byte conn_rtc   = find_vi_conn(INT_RTC);
   byte conn_lpc   = find_vi_conn(INT_LPC);
   byte conn_drive = find_vi_conn(INT_DRIVE);
@@ -1126,17 +1358,26 @@ void config_edit_interrupts()
     {
       Serial.print(F("\033[2J\033[0;0H\n"));
       Serial.println(F("Configure interrupt settings"));
-      Serial.print(F("\n(R)eal-Time Clock             : ")); print_rtc_frequency(); Serial.println();
-      Serial.print(F("(V)ector Interrupt board      : ")); print_vi_flag(); Serial.println();
+      Serial.print(F("\n(R)eal-Time Clock              : ")); print_rtc_frequency(); Serial.println();
+      Serial.print(F("(V)ector Interrupt board       : ")); print_vi_flag(); Serial.println();
 
-      Serial.print(F("\n(1) Disk drive interrupt      : ")); print_interrupt_conn(INT_DRIVE, conn_drive); Serial.println();
-      Serial.print(F("(2) Real-Time Clock interrupt : ")); print_interrupt_conn(INT_RTC, conn_rtc); Serial.println();
-      Serial.print(F("(3) 88-2SIO port 1 interrupt  : ")); print_interrupt_conn(INT_2SIO1, conn_2sio1); Serial.println();
-      Serial.print(F("(4) 88-2SIO port 2 interrupt  : ")); print_interrupt_conn(INT_2SIO2, conn_2sio2); Serial.println();
-      Serial.print(F("(5) 88-SIO interrupt          : ")); print_interrupt_conn(INT_SIO, conn_sio); Serial.println();
-      Serial.print(F("(6) 88-ACR interrupt          : ")); print_interrupt_conn(INT_ACR, conn_acr); Serial.println();
-      Serial.print(F("(7) 88-LPC interrupt          : ")); print_interrupt_conn(INT_LPC, conn_lpc); Serial.println();
-      Serial.print(F("(8) 88-HDSK interrupt         : ")); print_interrupt_conn(INT_HDSK, conn_hdsk); Serial.println();
+      Serial.println();
+      Serial.print(F("(0) Real-Time Clock interrupt  : ")); print_interrupt_conn(INT_RTC, conn_rtc); Serial.println();
+      Serial.print(F("(1) 88-SIO interrupt           : ")); print_interrupt_conn(INT_SIO, conn_sio); Serial.println();
+      Serial.print(F("(2) 88-ACR interrupt           : ")); print_interrupt_conn(INT_ACR, conn_acr); Serial.println();
+      Serial.print(F("(3) 88-LPC interrupt           : ")); print_interrupt_conn(INT_LPC, conn_lpc); Serial.println();
+      Serial.print(F("(4) 88-2SIO port 1 interrupt   : ")); print_interrupt_conn(INT_2SIO1, conn_2sio1); Serial.println();
+      Serial.print(F("(5) 88-2SIO port 2 interrupt   : ")); print_interrupt_conn(INT_2SIO2, conn_2sio2); Serial.println();
+#if USE_SECOND_2SIO>0
+      Serial.print(F("(6) 88-2SIO-2 port 1 interrupt : ")); print_interrupt_conn(INT_2SIO3, conn_2sio3); Serial.println();
+      Serial.print(F("(7) 88-2SIO-2 port 2 interrupt : ")); print_interrupt_conn(INT_2SIO4, conn_2sio4); Serial.println();
+#endif
+#if NUM_DRIVES>0
+      Serial.print(F("(8) Disk drive interrupt       : ")); print_interrupt_conn(INT_DRIVE, conn_drive); Serial.println();
+#endif
+#if NUM_HDSK_UNITS>0
+      Serial.print(F("(9) 88-HDSK interrupt          : ")); print_interrupt_conn(INT_HDSK, conn_hdsk); Serial.println();
+#endif
 
       Serial.println(F("\nE(x)it to main menu"));
 
@@ -1154,14 +1395,18 @@ void config_edit_interrupts()
         case 'V':
         case 'v': toggle_flag(CF_HAVE_VI, 0, 0); break;
 
-        case '1': conn_drive = toggle_interrupt_conn(INT_DRIVE, conn_drive); break;
-        case '2': conn_rtc   = toggle_interrupt_conn(INT_RTC, conn_rtc);     break;
-        case '3': conn_2sio1 = toggle_interrupt_conn(INT_2SIO1, conn_2sio1); break;
-        case '4': conn_2sio2 = toggle_interrupt_conn(INT_2SIO2, conn_2sio2); break;
-        case '5': conn_sio   = toggle_interrupt_conn(INT_SIO, conn_sio);     break;
-        case '6': conn_acr   = toggle_interrupt_conn(INT_ACR, conn_acr);     break;
-        case '7': conn_lpc   = toggle_interrupt_conn(INT_LPC, conn_lpc);     break;
-        case '8': conn_hdsk  = toggle_interrupt_conn(INT_HDSK, conn_hdsk);   break;
+        case '0': conn_rtc   = toggle_interrupt_conn(INT_RTC, conn_rtc);     break;
+        case '1': conn_sio   = toggle_interrupt_conn(INT_SIO, conn_sio);     break;
+        case '2': conn_acr   = toggle_interrupt_conn(INT_ACR, conn_acr);     break;
+        case '3': conn_lpc   = toggle_interrupt_conn(INT_LPC, conn_lpc);     break;
+        case '4': conn_2sio1 = toggle_interrupt_conn(INT_2SIO1, conn_2sio1); break;
+        case '5': conn_2sio2 = toggle_interrupt_conn(INT_2SIO2, conn_2sio2); break;
+#if USE_SECOND_2SIO>0
+        case '6': conn_2sio3 = toggle_interrupt_conn(INT_2SIO3, conn_2sio3); break;
+        case '7': conn_2sio4 = toggle_interrupt_conn(INT_2SIO4, conn_2sio4); break;
+#endif
+        case '8': conn_drive = toggle_interrupt_conn(INT_DRIVE, conn_drive); break;
+        case '9': conn_hdsk  = toggle_interrupt_conn(INT_HDSK, conn_hdsk);   break;
 
         case 27:
         case 'x': go = false; break;
@@ -1173,6 +1418,8 @@ void config_edit_interrupts()
   if( conn_acr   < 0xff ) config_interrupt_vi_mask[conn_acr]   |= INT_ACR;
   if( conn_2sio1 < 0xff ) config_interrupt_vi_mask[conn_2sio1] |= INT_2SIO1;
   if( conn_2sio2 < 0xff ) config_interrupt_vi_mask[conn_2sio1] |= INT_2SIO2;
+  if( conn_2sio3 < 0xff ) config_interrupt_vi_mask[conn_2sio3] |= INT_2SIO3;
+  if( conn_2sio4 < 0xff ) config_interrupt_vi_mask[conn_2sio4] |= INT_2SIO4;
   if( conn_rtc   < 0xff ) config_interrupt_vi_mask[conn_rtc]   |= INT_RTC;
   if( conn_drive < 0xff ) config_interrupt_vi_mask[conn_drive] |= INT_DRIVE;
   if( conn_lpc   < 0xff ) config_interrupt_vi_mask[conn_lpc]   |= INT_LPC;
@@ -1213,11 +1460,11 @@ void config_edit_serial_device(byte dev)
         case 'i':
           {
             bool ok = true;
-            if( get_bits(settings, 8, 2)==1 )
+            if( get_bits(settings, 17, 3)==7 )
               {
                 ok = false;
                 for(byte d=0; d<4 && !ok; d++)
-                  if( d!=dev && get_bits(config_serial_device_settings[d], 8, 2)==1 )
+                  if( d!=dev && get_bits(config_serial_device_settings[d], 17, 3)==7 )
                     ok = true;
 
                 if( !ok )
@@ -1229,11 +1476,8 @@ void config_edit_serial_device(byte dev)
               }
 
             if( ok )
-#if defined(__SAM3X8E__) || defined(HOST_PC_H)
-              settings = toggle_bits(settings, 8, 2, 0, 2);
-#else
-              settings = toggle_bits(settings, 8, 2, 0, 1);
-#endif
+              settings = toggle_map_to_serial(settings, 17);
+
             break;
           }
 
@@ -1258,16 +1502,213 @@ void config_edit_serial_device(byte dev)
 // --------------------------------------------------------------------------------
 
 
+void config_host_serial_details(byte iface)
+{
+  int i;
+  bool go = true, redraw = true;
+  byte row, col, r_baud, r_bits, r_parity, r_stop, r_cmd;
+
+  byte baud   = get_bits(new_config_serial_settings, config_baud_rate_bits(iface), 4);
+  byte bits   = get_bits(new_config_serial_settings2, iface*5+3, 2) + 5;
+  byte parity = get_bits(new_config_serial_settings2, iface*5+1, 2);
+  byte stop   = get_bits(new_config_serial_settings2, iface*5  , 1) + 1;
+
+  row = 4;
+  col = 15;
+  while( go )
+    {
+      if( redraw )
+        {
+          Serial.print(F("\033[2J\033[0;0H\n"));
+#if HOST_NUM_SERIAL_PORTS>1
+          Serial.print(F("Configure host serial settings for interface: "));
+          Serial.print(host_serial_port_name(i)); 
+          Serial.println();
+#else
+          Serial.println(F("Configure host serial settings"));
+#endif
+          Serial.print(F("\n(B)aud rate : ")); Serial.println(config_baud_rate(baud)); r_baud = row++;
+          Serial.print(F("(b)its      : ")); Serial.println(bits); r_bits = row++;
+          Serial.print(F("(P)arity    : ")); print_parity(parity); Serial.println(); r_parity = row++;
+          Serial.print(F("(S)top bits : ")); Serial.println(stop); r_stop = row++;
+
+          Serial.println(F("\nE(x)it to parent menu"));
+          row += 2;
+          
+          Serial.print(F("\n\nCommand: ")); r_cmd = row+2;
+          redraw = false;
+        }
+      else
+        set_cursor(r_cmd, 10);
+
+      while( !serial_available() ) delay(50);
+      char c = serial_read();
+      if( c>31 && c<127 ) Serial.println(c);
+
+      switch( c )
+        {
+        case 'B': 
+          {
+            baud = toggle_host_serial_baud_rate(iface, baud);
+            set_cursor(r_baud, col);
+            Serial.print(config_baud_rate(baud)); Serial.print(F("    "));
+            break;
+          }
+
+        case 'b':
+          {
+            bits = bits+1; 
+            if( bits>8 ) bits = 5;
+            set_cursor(r_bits, col);
+            Serial.print(bits);
+            break;
+          }
+
+        case 'P':
+          {
+            parity = (parity+1) % 3;
+            set_cursor(r_parity, col);
+            print_parity(parity); 
+            break;
+          }
+
+        case 'S':
+          {
+            stop = stop + 1;
+            if( stop>2 ) stop = 1;
+            set_cursor(r_stop, col);
+            Serial.print(stop);
+            break;
+          }            
+
+        case 27:
+        case 'x': 
+          {
+            go = false; 
+            break;
+          }
+        }
+    }
+
+  byte config = (bits-5) * 8 + (parity * 2) + (stop-1);
+  new_config_serial_settings  = set_bits(new_config_serial_settings, config_baud_rate_bits(iface), 4, baud);
+  new_config_serial_settings2 = set_bits(new_config_serial_settings2, iface*5, 5, config);
+}
+
+
+// --------------------------------------------------------------------------------
+
+
+void config_host_serial()
+{
+  int i;
+  bool go = true, redraw = true;
+  byte row, col, r_baud[HOST_NUM_SERIAL_PORTS], r_primary, r_cmd;
+
+  col = 0;
+#if HOST_NUM_SERIAL_PORTS>1
+  for(i=0; i<HOST_NUM_SERIAL_PORTS; i++)
+    col = max(col, strlen(host_serial_port_name(i)));
+  col += 4;
+#endif
+  col += 28;
+
+  while( go )
+    {
+      if( redraw )
+        {
+          Serial.print(F("\033[2J\033[0;0H\n"));
+          Serial.println(F("Configure host serial settings\n"));
+          
+          row = 4;
+          for(i=0; i<HOST_NUM_SERIAL_PORTS; i++)
+            {
+              r_baud[i] = row++;
+              Serial.print('('); Serial.print(i); Serial.print(F(") Host Serial")); 
+#if HOST_NUM_SERIAL_PORTS>1
+              Serial.print(i);
+              Serial.print(F(" (")); Serial.print(host_serial_port_name(i)); Serial.print(')');
+#endif
+              set_cursor(r_baud[i], col-12);
+              Serial.print(F(" settings : "));
+              print_host_serial_config(i, 0, 0);
+              Serial.println();
+            }
+          
+#if HOST_NUM_SERIAL_PORTS>1
+          Serial.print(F("\n(P)rimary host serial : ")); print_host_primary_interface(); row++; r_primary = row++; Serial.println();
+#endif
+
+          Serial.println(F("\n(A)pply host serial settings")); row+=2;
+
+          Serial.println(F("\nE(x)it to main menu"));
+          row += 2;
+          
+          Serial.print(F("\n\nCommand: ")); r_cmd = row+2;
+          redraw = false;
+        }
+      else
+        set_cursor(r_cmd, 10);
+
+      while( !serial_available() ) delay(50);
+      char c = serial_read();
+      if( c>31 && c<127 ) Serial.println(c);
+
+      switch( c )
+        {
+#if HOST_NUM_SERIAL_PORTS>1
+        case 'P': toggle_host_primary_interface(r_primary, 25); Serial.print(F("\033[K")); break;
+#endif
+
+        case 'A': apply_host_serial_settings(); redraw = true; break;
+
+        case 27:
+        case 'x': 
+          {
+            go = false; 
+            break;
+          }
+
+        default:
+          {
+            i = c-'0';
+            if( i>=0 && i<HOST_NUM_SERIAL_PORTS )
+              {
+                if( host_serial_port_has_configs(i) )
+                  {
+                    config_host_serial_details(i);
+                    redraw = true;
+                  }
+                else
+                  {
+                    byte baud = get_bits(new_config_serial_settings, config_baud_rate_bits(i), 4);
+                    baud = toggle_host_serial_baud_rate(i, baud);
+                    new_config_serial_settings = set_bits(new_config_serial_settings, config_baud_rate_bits(i), 4, baud);
+                    print_host_serial_config(i, r_baud[i], col);
+                  }
+              }
+            break;
+          }
+        }
+    }
+}
+
+
+// --------------------------------------------------------------------------------
+
+
 void config_edit()
 {
-  new_config_serial_settings = config_serial_settings;
+  new_config_serial_settings  = config_serial_settings;
+  new_config_serial_settings2 = config_serial_settings2;
 
   // flush serial input
   while( serial_read()>=0 );
-  
+
   bool redraw = true;
 
-  byte row, col, r_profile, r_throttle, r_panel, r_input, r_debug, r_clearmem, r_aux1, r_baud0, r_baud1, r_primary, r_cmd;
+  config_mem_size = ((uint32_t) mem_get_ram_limit_usr())+1;
+  byte row, col, r_profile, r_throttle, r_panel, r_debug, r_clearmem, r_aux1, r_cmd, r_memsize, r_input;
   while( true )
     {
       char c;
@@ -1276,8 +1717,9 @@ void config_edit()
         {
           row = 2;
           col = 31;
-          Serial.print(F("\033[2J\033[0;0H\n"));
-      
+          Serial.print(F("\033[2J\033[0;0H"));
+          Serial.println();
+
           Serial.print(F("Enable pro(f)iling          : ")); print_flag(CF_PROFILE); Serial.println(); r_profile = row++;
 #if USE_THROTTLE>0
           Serial.print(F("Set (t)hrottle delay        : ")); print_throttle(); Serial.println(); r_throttle = row++;
@@ -1288,23 +1730,28 @@ void config_edit()
 #endif
           Serial.print(F("Enable serial (d)ebug       : ")); print_flag(CF_SERIAL_DEBUG); Serial.println(); r_debug = row++;
           Serial.print(F("Clear (m)emory on powerup   : ")); print_flag(CF_CLEARMEM); Serial.println(); r_clearmem = row++;
+          Serial.print(F("RAM size (+/-)              : ")); print_mem_size(config_mem_size, row, col); r_memsize = row++;
           Serial.print(F("A(u)x1 shortcut program     : ")); print_aux1_program(); Serial.println(); r_aux1 = row++;
-          Serial.print(F("Host Serial (b)aud rate     : ")); print_host_serial_baud_rate(0); Serial.println(); r_baud0 = row++;
-#if defined(__SAM3X8E__) || defined(HOST_PC_H)
-          Serial.print(F("Host Serial1 baud (r)ate    : ")); print_host_serial_baud_rate(1); Serial.println(); r_baud1 = row++;
+          Serial.print(F("Configure host (s)erial     : ")); 
+#if HOST_NUM_SERIAL_PORTS>1
+          Serial.print(F("Primary interface is ")); print_host_primary_interface(); Serial.println(); row++;
+#else
+          print_host_serial_config(0, 0, 0); Serial.println(); row++;
 #endif
-#if defined(__SAM3X8E__)
-          Serial.print(F("(P)rimary host serial       : ")); print_host_primary_interface(); Serial.println(); r_primary = row++;
-#endif
-          Serial.println();
+
+          Serial.println(); row++;
           Serial.print(F("(1) Configure SIO           : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_SIO]); Serial.println(); row++;
           Serial.print(F("(2) Configure ACR           : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_ACR]); Serial.println(); row++;
           Serial.print(F("(3) Configure 2SIO port 1   : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_2SIO1]); Serial.println(); row++;
           Serial.print(F("(4) Configure 2SIO port 2   : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_2SIO2]); Serial.println(); row++;
+#if USE_SECOND_2SIO>0
+          Serial.print(F("(5) Configure 2SIO-2 port 1 : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_2SIO3]); Serial.println(); row++;
+          Serial.print(F("(6) Configure 2SIO-2 port 2 : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_2SIO4]); Serial.println(); row++;
+#endif
 #if USE_PRINTER>0
-          Serial.print(F("(5) Configure printer       : ")); 
+          Serial.print(F("(P) Configure printer       : ")); 
           print_printer_type();
-          if( config_printer_type()!=CP_NONE ) { Serial.print(F(" on ")); print_device_mapped_to(config_printer_map_to_host_serial()); }
+          if( config_printer_type()!=CP_NONE ) { Serial.print(F(" on ")); print_printer_mapped_to(); }
           Serial.println(); row++;
 #endif
 #if NUM_DRIVES>0
@@ -1318,15 +1765,12 @@ void config_edit()
 
           Serial.println();
           Serial.println(F("(M)anage Filesystem"));
-#ifndef HOST_PC_H
-          Serial.println(F("(A)pply host serial settings")); row++;
-#endif
           Serial.println(F("(C)lear memory"));
           Serial.println(F("(S)ave configuration"));
           Serial.println(F("(L)oad configuration"));
           Serial.println(F("(R)eset to defaults"));
           Serial.println(F("\nE(x)it"));
-          row += 8;
+          row += 7;
 
           Serial.print(F("\n\nCommand: ")); r_cmd = row+2;
         }
@@ -1351,20 +1795,18 @@ void config_edit()
         case 'd': toggle_flag(CF_SERIAL_DEBUG, r_debug, col); redraw = false; break;
         case 'm': toggle_flag(CF_CLEARMEM, r_clearmem, col); redraw = false; break;
         case 'u': toggle_aux1_program(r_aux1, col); redraw = false; break;
-
-        case 'b': toggle_host_serial_baud_rate(0, r_baud0, col); redraw = false; break;
-#if defined(__SAM3X8E__) || defined(HOST_PC_H)
-        case 'r': toggle_host_serial_baud_rate(1, r_baud1, col); redraw = false; break;
-#endif
-#if defined(__SAM3X8E__)
-        case 'P': toggle_host_primary_interface(r_primary, col); redraw = false; break;
-#endif
+        case 's': config_host_serial(); break;
+          
         case '1': config_edit_serial_device(CSM_SIO); break;
         case '2': config_edit_serial_device(CSM_ACR); break;
         case '3': config_edit_serial_device(CSM_2SIO1); break;
         case '4': config_edit_serial_device(CSM_2SIO2); break;
+#if USE_SECOND_2SIO>0
+        case '5': config_edit_serial_device(CSM_2SIO3); break;
+        case '6': config_edit_serial_device(CSM_2SIO4); break;
+#endif
 #if USE_PRINTER>0
-        case '5': config_edit_printer(); break;
+        case 'P': config_edit_printer(); break;
 #endif
 
         case 'I': config_edit_interrupts(); break;
@@ -1375,14 +1817,42 @@ void config_edit()
         case 'H': config_edit_hdsk(); break;
 #endif
           
-        case 'M': filesys_manage(); break;
-        case 'A': apply_host_serial_settings(); break;
-        case 'C': 
+        case '-': 
           {
-            mem_clr_ram_limit();
-            for(int i=0; i<MEMSIZE; i++) Mem[i] = 0; 
+            if( config_mem_size > 1024 )
+              config_mem_size -= 1024;
+            else if( config_mem_size > 256 )
+              config_mem_size -= 256;
+            else
+              config_mem_size = MEMSIZE;
+
+            print_mem_size(config_mem_size, r_memsize, col);
+            redraw = false;
             break;
           }
+
+        case '+': 
+          {
+            if( config_mem_size < 1024 )
+              config_mem_size += 256;
+            else if( config_mem_size < MEMSIZE )
+              config_mem_size += 1024;
+            else
+              config_mem_size = 256;
+
+            print_mem_size(config_mem_size, r_memsize, col);
+            redraw = false;
+            break;
+          }
+
+        case 'M': filesys_manage(); break;
+
+        case 'C': 
+          {
+            for(uint16_t i=0; i<mem_ram_limit; i++) Mem[i] = 0; 
+            break;
+          }
+
         case 'S': 
           {
             Serial.print(F("\n\nSave as config # (0=default): "));
@@ -1409,17 +1879,25 @@ void config_edit()
         case 27:
         case 'x':
           {
-            if( (config_serial_settings&0x1FF) != (new_config_serial_settings&0x1FF) )
+            bool exit = false;
+            if( (config_serial_settings&0xFFF7FF) != (new_config_serial_settings&0xFFF7FF) ||
+                (config_serial_settings2) != (new_config_serial_settings2) )
               {
                 Serial.print(F("\nApply new host serial settings (y/n/ESC)? "));
                 do { delay(50); c = serial_read(); } while( c!='y' && c!='n' && c!=27 );
                 Serial.println(c);
-                if( c==27 || (c=='y' && !apply_host_serial_settings()) )
-                  continue;
+                if( c=='n' || (c=='y' && apply_host_serial_settings()) )
+                  exit = true;
               }
+            else 
+              exit = true;
 
-            Serial.print(F("\033[2J"));
-            return;
+            if( exit )
+              {
+                mem_set_ram_limit_usr(config_mem_size-1);
+                Serial.print(F("\033[2J"));
+                return;
+              }
           }
         }
     }
@@ -1428,6 +1906,7 @@ void config_edit()
 
 void config_defaults(bool apply)
 {
+  byte i, j;
   // default settings:
   // - SERIAL_DEBUG, SERIAL_INPUT, SERIAL_PANEL enabled if in STANDALONE mode, otherwise disabled
   // - Profiling disabled
@@ -1442,44 +1921,68 @@ void config_defaults(bool apply)
   config_flags |= CF_THROTTLE;
 
   new_config_serial_settings  = 0;
-  new_config_serial_settings |= (BAUD_115200 << 0); // Serial interface (USB): 115200 baud
-  new_config_serial_settings |= (BAUD_9600   << 4); // Serial1 interface: 9600 baud
-  new_config_serial_settings |= (0           << 8); // USB Serial is primary interface
+  new_config_serial_settings |= (0 << 8); // USB Programming port is primary interface
+
+  // USB ports 115200 baud, serial interfaces 9600 baud
+  for(i=0; i<HOST_NUM_SERIAL_PORTS; i++) 
+    if( strstr(host_serial_port_name(i), "USB") || HOST_NUM_SERIAL_PORTS==1 )
+      new_config_serial_settings |= (BAUD_115200 << (config_baud_rate_bits(i)));
+    else
+      new_config_serial_settings |= (BAUD_9600 << (config_baud_rate_bits(i)));
+
+  // serial configuration defaults to 8N1
+  new_config_serial_settings2 = 0;
+  for(i=0; i<HOST_NUM_SERIAL_PORTS; i++) 
+    new_config_serial_settings2 |= 0x18ul << (i*5);
 
   uint32_t s = 0;
   s |= (BAUD_1200 <<  0); // serial playback baud rate: 1200
   s |= (4         <<  4); // 4 NUL characters after newline
-  s |= (0         <<  8); // not mapped to any host interface
   s |= (CSF_AUTO  << 10); // autodetect uppercase inputs
   s |= (CSF_AUTO  << 12); // autodetect 7 bit 
   s |= (CSFB_NONE << 14); // no backspace translation
+  s |= (0l        << 17); // not mapped to any host interface
 
-  for(byte dev=0; dev<4; dev++)
+  for(byte dev=0; dev<NUM_SERIAL_DEVICES; dev++)
     config_serial_device_settings[dev] = s;
 
-  config_serial_device_settings[CSM_SIO]   |= (1 << 8); // map to SIO to primary host interface
-  config_serial_device_settings[CSM_2SIO1] |= (1 << 8); // map to 2SIO-1 to primary host interface
-  config_serial_device_settings[CSM_ACR]   |= (1 << 7); // enable CLOAD traps
+#if HOST_NUM_SERIAL_PORTS>1
+  config_serial_device_settings[CSM_SIO]   |= (7l << 17); // map to SIO to primary host interface
+  config_serial_device_settings[CSM_2SIO1] |= (7l << 17); // map to 2SIO-1 to primary host interface
+#else
+  config_serial_device_settings[CSM_SIO]   |= (1l << 17); // map to SIO to host interface
+  config_serial_device_settings[CSM_2SIO1] |= (1l << 17); // map to 2SIO-1 to host interface
+#endif
+  config_serial_device_settings[CSM_ACR]   |= (1 << 7);  // enable CLOAD traps
 
   config_interrupt_vi_mask[0] = INT_DRIVE;
   config_interrupt_vi_mask[1] = INT_RTC;
   config_interrupt_vi_mask[2] = INT_2SIO1 | INT_2SIO2;
-  config_interrupt_vi_mask[3] = 0;
+  config_interrupt_vi_mask[3] = INT_2SIO3 | INT_2SIO4;
   config_interrupt_vi_mask[4] = 0;
   config_interrupt_vi_mask[5] = 0;
   config_interrupt_vi_mask[6] = 0;
-  config_interrupt_vi_mask[7] = INT_SIO | INT_ACR;
+  config_interrupt_vi_mask[7] = 0;
 
   config_interrupt_mask = INT_SIO | INT_2SIO1;
   
   config_aux1_prog = prog_find("16k ROM Basic");
 
-  drive_set_realtime(config_flags & CF_DRIVE_RT);
-  hdsk_set_realtime(config_flags & CF_DRIVE_RT);
-  for(byte i=0; i<NUM_DRIVES; i++)
-    drive_unmount(i);
+  drive_set_realtime((config_flags & CF_DRIVE_RT)!=0);
+  hdsk_set_realtime((config_flags & CF_DRIVE_RT)!=0);
+  for(i=0; i<NUM_DRIVES; i++) drive_unmount(i);
+  for(i=0; i<NUM_HDSK_UNITS; i++) 
+    for(j=0; j<4; j++)
+      hdsk_unmount(i, j);
 
-  if( apply ) apply_host_serial_settings(new_config_serial_settings);
+  // maximum amount of RAM supported by host
+  config_mem_size = MEMSIZE; 
+
+  if( apply ) 
+    {
+      apply_host_serial_settings(new_config_serial_settings, new_config_serial_settings2);
+      mem_set_ram_limit_usr(config_mem_size-1);
+    }
 }
 
 
@@ -1487,5 +1990,8 @@ void config_setup()
 {
   config_defaults(true);
   if( load_config(0) )
-    apply_host_serial_settings(new_config_serial_settings);
+    {
+      apply_host_serial_settings(new_config_serial_settings, new_config_serial_settings2);
+      mem_set_ram_limit_usr(config_mem_size-1);
+    }
 }

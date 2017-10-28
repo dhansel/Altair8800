@@ -17,8 +17,11 @@
 // Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 // -----------------------------------------------------------------------------
 
+#if !defined(__AVR_ATmega2560__)
+
 #include <Arduino.h>
 #include "host.h"
+#include "switch_serial.h"
 
 
 SwitchSerialClass SwitchSerial;
@@ -32,7 +35,7 @@ SwitchSerialClass::SwitchSerialClass() : Stream()
 
 void SwitchSerialClass::begin(unsigned long baud)
 {
-  host_serial_setup(m_selected, baud, false);
+  host_serial_setup(m_selected, baud, SERIAL_8N1, false);
 }
 
 
@@ -82,3 +85,5 @@ SwitchSerialClass::operator bool()
 {
   return host_serial_ok(m_selected);
 }
+
+#endif

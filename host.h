@@ -16,17 +16,28 @@
 #elif defined(_WIN32) || defined(__linux__)
 #include "host_pc.h"
 #else
-#error requires Arduino Mega2560, Arduino Due or Windows PC
+#error requires Arduino Mega2560, Arduino Due or Windows/Linux PC
 #endif
 
-
-void     host_serial_setup(byte iface, unsigned long baud, bool set_primary_interface = true);
 
 bool     host_read_function_switch(byte i);
 bool     host_read_function_switch_debounced(byte i);
 bool     host_read_function_switch_edge(byte i);
 uint16_t host_read_function_switches_edge();
 void     host_reset_function_switch_state();
+
+void        host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_primary_interface = true);
+void        host_serial_end(byte i);
+bool        host_serial_ok(byte i);
+int         host_serial_available(byte i);
+int         host_serial_available_for_write(byte i);
+int         host_serial_peek(byte i);
+int         host_serial_read(byte i);
+void        host_serial_flush(byte i);
+size_t      host_serial_write(byte i, uint8_t b);
+const char *host_serial_port_name(byte i);
+bool        host_serial_port_baud_limits(byte i, uint32_t *min, uint32_t *max);
+bool        host_serial_port_has_configs(byte i);
 
 void     host_copy_flash_to_ram(void *dst, const void *src, uint32_t len);
 
@@ -42,6 +53,8 @@ void host_read_data(void *data,  uint32_t addr, uint32_t len);
 void host_move_data(uint32_t to, uint32_t from, uint32_t len);
 
 uint32_t host_get_random();
+
+bool host_is_reset();
 
 void host_setup();
 

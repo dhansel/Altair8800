@@ -21,8 +21,6 @@
 #include "mem.h"
 #include "host.h"
 
-word mem_ram_limit = 0xFFFF;
-
 byte Mem[MEMSIZE];
 
 
@@ -78,18 +76,54 @@ void mem_unprotect(uint16_t a)
 
 #endif
 
-void mem_set_ram_limit(uint16_t a)
+word        mem_ram_limit      = 0xFFFF;
+static word mem_ram_limit_user = 0xFFFF;
+static word mem_ram_limit_sys  = 0xFFFF;
+
+void mem_set_ram_limit_sys(uint16_t a)
 {
   if( a < MEMSIZE )
-    mem_ram_limit = a;
+    mem_ram_limit_sys = a;
   else
-    mem_ram_limit = MEMSIZE-1;
+    mem_ram_limit_sys = MEMSIZE-1;
+
+  mem_ram_limit = min(mem_ram_limit_user, mem_ram_limit_sys);
+}
+
+
+void mem_set_ram_limit_usr(uint16_t a)
+{
+  if( a < mem_ram_limit_user )
+    {
+      // areas without RAM read 0xFF
+      for(uint16_t i=a; i<MEMSIZE-1 && i<mem_ram_limit_sys-1; i++)
+        Mem[i+1] = 0xFF;
+    }
+  else if( a > mem_ram_limit_user )
+    {
+      // initialize newly "installed" RAM with 0
+      for(uint16_t i=mem_ram_limit_user+1; i<MEMSIZE-1 && i<a && i<mem_ram_limit_sys; i++)
+        Mem[i+1] = 0x00;
+    }
+
+  if( a < MEMSIZE )
+    mem_ram_limit_user = a;
+  else
+    mem_ram_limit_user = MEMSIZE-1;
+
+  mem_ram_limit = min(mem_ram_limit_user, mem_ram_limit_sys);
+}
+
+
+uint16_t mem_get_ram_limit_usr()
+{
+  return mem_ram_limit_user;
 }
 
 
 void mem_clr_ram_limit()
 {
-  mem_ram_limit = MEMSIZE-1;
+  mem_ram_limit = mem_ram_limit_user;
 }
 
 
@@ -99,5 +133,8 @@ void mem_setup()
   for(int i=0; i<32; i++) protected_flags[i]=0x00;
   protected_flag = 0;
 #endif
+
+  mem_ram_limit_user = MEMSIZE-1;
+  mem_ram_limit_sys  = 0xFFFF;
   mem_clr_ram_limit();
 }

@@ -6,6 +6,21 @@
 #ifndef HOST_DUE_H
 #define HOST_DUE_H
 
+#include "config.h"
+#include "switch_serial.h"
+
+
+// If the PROTECT switch is not used (USE_PROTECT set to 0 in config.h) then those pins
+// can be used to provide an additional serial interface. Set USE_SERIAL_ON_A6A7 to 1
+// here. The A6 pin is RX and A7 is TX.
+// WARNING: It is highly recommended to physically disable the PROTECT switch by
+//          disconnecting the GND wire from the switch before enabling this. The serial
+//          lines idle HIGH and the PROTECT switch will connect them to GND when pressed,
+//          creating a direct short and likely killing the A7 pin on the Arduino and/or 
+//          your connected serial device.
+#define USE_SERIAL_ON_A6A7 1
+
+
 #define MEMSIZE 0x10000
 
 #define HOST_STORAGESIZE due_storagesize
@@ -13,37 +28,16 @@
 
 #define HOST_PERFORMANCE_FACTOR 1.0
 
+// if PROTECT switch is not used, the pins are used for an
+// additional serial port
+#if USE_SERIAL_ON_A6A7>0
+#define HOST_NUM_SERIAL_PORTS   4
+#else
+#define HOST_NUM_SERIAL_PORTS   3
+#endif
+
 extern uint32_t due_storagesize;
 
-// ------------------------------------------ serial interface
-
-class SwitchSerialClass : public Stream
-{
-  public:
-    SwitchSerialClass();
-    virtual void begin(unsigned long);
-    virtual void end();
-    virtual int available(void);
-    virtual int availableForWrite(void);
-    virtual int peek(void);
-    virtual int read(void);
-    virtual void flush(void);
-    virtual size_t write(uint8_t);
-    using Print::write; // pull in write(str) and write(buf, size) from Print
-    virtual operator bool();
-
-    void    select(uint8_t n) { m_selected = n; }
-    uint8_t getSelected() { return m_selected; }
-
- private:
-    uint8_t m_selected;
-};
-
-extern SwitchSerialClass SwitchSerial;
-#define Serial SwitchSerial
-
-bool host_serial_available_for_write(byte iface);
-void host_serial_write(byte iface, byte data);
 
 // ------------------------------------------ switches
 
