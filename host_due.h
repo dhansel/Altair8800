@@ -18,7 +18,7 @@
 //          lines idle HIGH and the PROTECT switch will connect them to GND when pressed,
 //          creating a direct short and likely killing the A7 pin on the Arduino and/or 
 //          your connected serial device.
-#define USE_SERIAL_ON_A6A7 1
+#define USE_SERIAL_ON_A6A7 0
 
 
 #define MEMSIZE 0x10000
