@@ -26,7 +26,7 @@
 
 // Enables function of the PROTECT/UNPROTECT switches.
 // Reduces performance and uses 33 bytes of RAM.
-#define USE_PROTECT 0
+#define USE_PROTECT 1
 
 
 // Enables support for disk drives. Each drive uses about 160 bytes
@@ -45,7 +45,7 @@
 
 
 // Enable two 88-2SIO devices (instead of one).
-#define USE_SECOND_2SIO 1
+#define USE_SECOND_2SIO 0
 
 
 // If enabled, Address switch state will be set by issuing the '/'
