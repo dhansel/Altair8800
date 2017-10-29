@@ -61,6 +61,7 @@ struct prog_info_struct get_prog_info(byte i)
 #if !defined(__AVR_ATmega2560__)
       {PSTR("Music system"),               prog_tools_copy_musicsys,      true},
       {PSTR("Hard disk boot ROM"),         prog_tools_copy_hdbl,          true},
+      {PSTR("Multi-boot loader ROM"),      prog_tools_copy_multiboot,     true},
       //{PSTR("ADEXER"),                     prog_tools_copy_adexer,        true},
 #endif
       //{PSTR("Status lights test"),         prog_tools_copy_statustest,    false},
@@ -85,6 +86,7 @@ uint16_t prog_print_dir(byte *mem)
       i++;
     }
 
+  Serial.println(F("01xxxxxx) [Read Intel HEX data from primary host interface]"));
   Serial.println(F("10nnnnnn) [load memory page, nnnnnn=file number]"));
   Serial.println(F("11nnnnnn) [save memory page, nnnnnn=file number]"));
   return 0;
@@ -124,8 +126,16 @@ bool prog_load(byte n, uint16_t *pc, byte *mem)
       return false;
   
   uint16_t addr = get_prog_info(n).load(mem);
-  if( addr<0xffff )
+  if( n>0 && addr<0xffff )
     {
+      if( get_prog_info(n).run )
+        Serial.print(F("[Running "));
+      else
+        Serial.print(F("[Loading "));
+
+      Serial.print(FP(get_prog_info(n).name));
+      Serial.println(']');
+
       *pc = addr;
       return get_prog_info(n).run;
     }
