@@ -21,6 +21,13 @@
 #define USE_SERIAL_ON_A6A7 0
 
 
+// The pins driving the RX and TX LEDs located next to the Native USB port on the
+// Arduino Due can be controlled as digital I/O pins 72 and 73. They do not serve
+// any other purpose on the Due so we can use them for an additional serial port.
+// See the documentation for where exactly to solder the wires onto the Due.
+#define USE_SERIAL_ON_RXLTXL 0
+
+
 #define MEMSIZE 0x10000
 
 #define HOST_STORAGESIZE due_storagesize
@@ -28,13 +35,7 @@
 
 #define HOST_PERFORMANCE_FACTOR 1.0
 
-// if PROTECT switch is not used, the pins are used for an
-// additional serial port
-#if USE_SERIAL_ON_A6A7>0
-#define HOST_NUM_SERIAL_PORTS   4
-#else
-#define HOST_NUM_SERIAL_PORTS   3
-#endif
+#define HOST_NUM_SERIAL_PORTS   (3+USE_SERIAL_ON_A6A7+USE_SERIAL_ON_RXLTXL)
 
 extern uint32_t due_storagesize;
 

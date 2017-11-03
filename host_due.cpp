@@ -325,9 +325,14 @@ void TC0_Handler() { TC_GetStatus(TC0, 0); host_timer_fn[0](); }
 void TC1_Handler() { TC_GetStatus(TC0, 1); host_timer_fn[1](); }
 void TC2_Handler() { TC_GetStatus(TC0, 2); host_timer_fn[2](); }
 void TC3_Handler() { TC_GetStatus(TC1, 0); host_timer_fn[3](); }
+#if USE_SERIAL_ON_RXLTXL==0
+// if the additional software serial interface on RXL/TXL is enabled then
+// TC5 is used by that interface so we can not define a TC5_Handler 
+// function here.  Timer 5 can not be used.
 void TC4_Handler() { TC_GetStatus(TC1, 1); host_timer_fn[4](); }
+#endif
 #if USE_SERIAL_ON_A6A7==0
-// if the additional software serial interface is enabled then
+// if the additional software serial interface on A6/A7 is enabled then
 // TC5 is used by that interface so we can not define a TC5_Handler 
 // function here.  Timer 5 can not be used.
 void TC5_Handler() { TC_GetStatus(TC1, 2); host_timer_fn[5](); }
@@ -686,6 +691,20 @@ static void host_serial_receive_finished_interrupt_if3()
 #endif
 
 
+#if USE_SERIAL_ON_RXLTXL>0
+// define a software UART on interrupt 4 with 16 byte
+// transmit and receive buffers
+#include "soft_uart.h"
+serial_tc4_declaration(16,16);
+
+static void host_serial_receive_finished_interrupt_if4()
+{
+  // a new character has been received
+  serial_receive_host_data(HOST_NUM_SERIAL_PORTS-1, serial_tc4.read());
+}
+#endif
+
+
 static byte num_bits(uint32_t config)
 {
   switch( config )
@@ -802,6 +821,17 @@ void host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_prim
       serial_tc5.set_rx_handler(host_serial_receive_finished_interrupt_if3);
     }
 #endif
+#if USE_SERIAL_ON_RXLTXL>0
+  else if( iface==(HOST_NUM_SERIAL_PORTS-1) )
+    { 
+      serial_tc4.begin(72, 73, baud, config);
+      serial_tc4.setTimeout(10000); 
+
+      // rx_handler will be called (from within serial_tc4's ISR) after 
+      // a complete byte has been received
+      serial_tc4.set_rx_handler(host_serial_receive_finished_interrupt_if4);
+    }
+#endif
 }
 
 
@@ -815,6 +845,9 @@ void host_serial_end(byte i)
 #if USE_SERIAL_ON_A6A7>0
     case 3: serial_tc5.end(); break;
 #endif
+#if USE_SERIAL_ON_RXLTXL>0
+    case (HOST_NUM_SERIAL_PORTS-1): serial_tc4.end(); break;
+#endif
     }
 }
 
@@ -827,6 +860,9 @@ int host_serial_available(byte i)
     case 2: return SerialUSB.available(); break;
 #if USE_SERIAL_ON_A6A7>0
     case 3: return serial_tc5.available(); break;
+#endif
+#if USE_SERIAL_ON_RXLTXL>0
+    case (HOST_NUM_SERIAL_PORTS-1): return serial_tc4.available(); break;
 #endif
     }
 
@@ -843,6 +879,9 @@ int host_serial_available_for_write(byte i)
 #if USE_SERIAL_ON_A6A7>0
     case 3: return serial_tc5.availableForWrite(); break;
 #endif
+#if USE_SERIAL_ON_RXLTXL>0
+    case (HOST_NUM_SERIAL_PORTS-1): return serial_tc4.availableForWrite(); break;
+#endif
     }
 
  return 0;
@@ -857,6 +896,9 @@ int host_serial_peek(byte i)
     case 2: return SerialUSB.peek(); break;
 #if USE_SERIAL_ON_A6A7>0
     case 3: return serial_tc5.peek(); break;
+#endif
+#if USE_SERIAL_ON_RXLTXL>0
+    case (HOST_NUM_SERIAL_PORTS-1): return serial_tc4.peek(); break;
 #endif
     }
 
@@ -873,6 +915,9 @@ int host_serial_read(byte i)
 #if USE_SERIAL_ON_A6A7>0
     case 3: return serial_tc5.read(); break;
 #endif
+#if USE_SERIAL_ON_RXLTXL>0
+    case (HOST_NUM_SERIAL_PORTS-1): return serial_tc4.read(); break;
+#endif
     }
 
   return -1;
@@ -888,6 +933,9 @@ void host_serial_flush(byte i)
 #if USE_SERIAL_ON_A6A7>0
     case 3: serial_tc5.flush(); break;
 #endif
+#if USE_SERIAL_ON_RXLTXL>0
+    case (HOST_NUM_SERIAL_PORTS-1): return serial_tc4.flush(); break;
+#endif
     }
 }
 
@@ -900,6 +948,9 @@ size_t host_serial_write(byte i, uint8_t b)
     case 2: return SerialUSB.write(b); break;
 #if USE_SERIAL_ON_A6A7>0
     case 3: return serial_tc5.write(b); break;
+#endif
+#if USE_SERIAL_ON_RXLTXL>0
+    case (HOST_NUM_SERIAL_PORTS-1): return serial_tc4.write(b); break;
 #endif
     }
 
@@ -917,6 +968,9 @@ bool host_serial_ok(byte i)
 #if USE_SERIAL_ON_A6A7>0
     case 3: return (bool) serial_tc5; break;
 #endif
+#if USE_SERIAL_ON_RXLTXL>0
+    case (HOST_NUM_SERIAL_PORTS-1): return (bool) serial_tc4; break;
+#endif
     }
 
   return false;
@@ -933,6 +987,9 @@ const char *host_serial_port_name(byte i)
 #if USE_SERIAL_ON_A6A7>0
     case 3: return "Serial (pin A6/A7)";
 #endif
+#if USE_SERIAL_ON_RXLTXL>0
+    case (HOST_NUM_SERIAL_PORTS-1): return "Serial (RXL/TXL)";
+#endif
     default: return "???";
     }
 }
@@ -948,6 +1005,9 @@ bool host_serial_port_baud_limits(byte i, uint32_t *min, uint32_t *max)
 #if USE_SERIAL_ON_A6A7>0
     case 3: *min = 110; *max =  38400; break;
 #endif
+#if USE_SERIAL_ON_RXLTXL>0
+    case (HOST_NUM_SERIAL_PORTS-1): *min = 110; *max =  38400; break;
+#endif
     default: return false;
     }
 
@@ -957,7 +1017,7 @@ bool host_serial_port_baud_limits(byte i, uint32_t *min, uint32_t *max)
 
 bool host_serial_port_has_configs(byte i)
 {
-  return i==1 || i==3;
+  return i==1 || i==3 || i==4;
 }
 
 
@@ -1162,6 +1222,8 @@ signed char isinput[] =
     1, // D69 (CANTX) => SW7
     1, // D70 (SCL1)  => SW13
     1, // D71 (SDA1)  => SW12
+   -1, // D72 (RXL)   => serial_tc4 RX (don't set)
+   -1, // D73 (TXL)   => serial_tc4 TX (don't set)
   };
 
 
@@ -1181,7 +1243,7 @@ bool host_is_reset()
 void host_setup()
 {
   // define digital input/output pin direction
-  for(int i=0; i<72; i++)
+  for(int i=0; i<74; i++)
     if( isinput[i]>=0 )
       pinMode(i, isinput[i] ? INPUT_PULLUP : OUTPUT);
 
