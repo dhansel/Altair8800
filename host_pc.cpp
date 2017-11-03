@@ -611,6 +611,8 @@ static void host_check_ctrlc(char c)
       else
         exit(0);
     }
+  else
+    prevCtrlC = 0;
 }
 
 
