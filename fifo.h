@@ -31,18 +31,10 @@
  * ROC-SIANI - Universidad de Las Palmas de Gran Canaria - Spain
  */
 
-/**
- ** Modifications by David Hansel on 10/18/17:
- ** - Made _items_ variable volatile such that it can be read
- **   from outside the interrupt routine in a continuous loop
- **   (for availableForWrite function in soft_uart.h)
- */
-
-
 #ifndef FIFO_H
 #define FIFO_H
 
-//#include <cstddef>
+#include <cstddef>
 
 namespace arduino_due
 {
@@ -64,26 +56,31 @@ namespace arduino_due
      
       bool pop(T& t)
       {
-	if(_first_<0) return false;
+        if(_first_<0) return false;
 
-	t=_buffer_p_[_first_];
+        t=_buffer_p_[_first_];
 
-	if(_first_==_last_) _init_();
-	else { _first_=(_first_+1)%LENGTH; _items_--; }
+        if(_first_==_last_) _init_();
+        else { _first_=(_first_+1)%LENGTH; _items_--; }
 
-	return true;
+        return true;
       }
 
       bool is_empty() { return (_first_<0); }
 
+      bool is_full() { return (_items_==LENGTH); }
+
       int items() { return _items_; }
+
+      int available() { return LENGTH-_items_; }
 
       void reset() { _init_(); }
 
     private:
 
-      volatile T _buffer_p_[LENGTH];
-      volatile int _first_,_last_;
+      T _buffer_p_[LENGTH];
+      int _first_,_last_;
+
       volatile int _items_;
 
       void _init_() { _first_=_last_=-1; _items_=0; }
@@ -92,44 +89,44 @@ namespace arduino_due
       // when is full, we can not push any further element 
       bool _push_(const T& t,bool_to_type<false>)
       {
-	int new_last=(_last_+1)%LENGTH;
+        int new_last=(_last_+1)%LENGTH;
 
-	if(new_last==_first_) // full?
-	  return false;
+        if(new_last==_first_) // full?
+          return false;
 
-	_last_=new_last;
-	_buffer_p_[_last_]=t;
+        _last_=new_last;
+        _buffer_p_[_last_]=t;
 
-	if(_first_<0) _first_=_last_;
+        if(_first_<0) _first_=_last_;
 
-	_items_++;
+        _items_++;
 
-	return true;
+        return true;
       }
 
       // push implementation for a circular fifo
       // when is full, we overwrite the first element 
       bool _push_(const T& t,bool_to_type<true>)
       {
-	int new_last=(_last_+1)%LENGTH;
+        int new_last=(_last_+1)%LENGTH;
 
-	if(new_last==_first_) // full?
-	{
-	  // NOTE: when the fifo is circular and the fifo is full
-	  // the new element overwrites the first one 
-	  _first_=(_first_+1)%LENGTH;
-	  _last_=new_last; _buffer_p_[_last_]=t;
-	  return false;
-	}
+        if(new_last==_first_) // full?
+        {
+          // NOTE: when the fifo is circular and the fifo is full
+          // the new element overwrites the first one 
+          _first_=(_first_+1)%LENGTH;
+          _last_=new_last; _buffer_p_[_last_]=t;
+          return false;
+        }
 
-	_last_=new_last;
-	_buffer_p_[_last_]=t;
+        _last_=new_last;
+        _buffer_p_[_last_]=t;
 
-	if(_first_<0) _first_=_last_;
+        if(_first_<0) _first_=_last_;
 
-	_items_++;
+        _items_++;
 
-	return true;
+        return true;
       }
   };
 
@@ -142,3 +139,4 @@ namespace arduino_due
 }
 
 #endif // FIFO_H
+
