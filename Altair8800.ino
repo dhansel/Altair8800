@@ -514,7 +514,7 @@ bool read_intel_hex()
             for(byte i=0; i<n; i++)
               {
                 d = numsys_read_hex_byte();
-                MWRITE(a, d);
+                Mem[a] = d;
                 cs -= d;
                 a++;
               }
