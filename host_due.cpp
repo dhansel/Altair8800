@@ -999,11 +999,11 @@ bool host_serial_port_baud_limits(byte i, uint32_t *min, uint32_t *max)
 {
   switch(i)
     {
-    case 0:
-    case 1:
-    case 2: *min = 600; *max = 115200; break;
+    case 0: *min = 600;    *max = 115200; break;
+    case 1: *min = 110;    *max = 115200; break;
+    case 2: *min = 115200; *max = 115200; break;
 #if USE_SERIAL_ON_A6A7>0
-    case 3: *min = 110; *max =  38400; break;
+    case 3: *min = 110;    *max =  38400; break;
 #endif
 #if USE_SERIAL_ON_RXLTXL>0
     case (HOST_NUM_SERIAL_PORTS-1): *min = 110; *max =  38400; break;
