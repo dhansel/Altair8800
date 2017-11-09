@@ -686,7 +686,8 @@ serial_tc5_declaration(16,16);
 static void host_serial_receive_finished_interrupt_if3()
 {
   // a new character has been received
-  serial_receive_host_data(3, serial_tc5.read());
+  int d = serial_tc5.read();
+  if( d>=0 ) serial_receive_host_data(3, d);
 }
 #endif
 
@@ -700,7 +701,8 @@ serial_tc4_declaration(16,16);
 static void host_serial_receive_finished_interrupt_if4()
 {
   // a new character has been received
-  serial_receive_host_data(HOST_NUM_SERIAL_PORTS-1, serial_tc4.read());
+  int d = serial_tc4.read();
+  if( d>=0 ) serial_receive_host_data(HOST_NUM_SERIAL_PORTS-1, d);
 }
 #endif
 
