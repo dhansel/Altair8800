@@ -2,9 +2,9 @@
  ** soft_uart library
  ** Copyright (C) 2015
  **
- **   Antonio C. DomÌnguez Brito <adominguez@iusiani.ulpgc.es>
- **     DivisiÛn de RobÛtica y OceanografÌa Computacional <www.roc.siani.es>
- **     and Departamento de Inform·tica y Sistemas <www.dis.ulpgc.es>
+ **   Antonio C. Dom√≠nguez Brito <adominguez@iusiani.ulpgc.es>
+ **     Divisi√≥n de Rob√≥tica y Oceanograf√≠a Computacional <www.roc.siani.es>
+ **     and Departamento de Inform√°tica y Sistemas <www.dis.ulpgc.es>
  **     Universidad de Las Palmas de Gran  Canaria (ULPGC) <www.ulpgc.es>
  **  
  ** This file is part of the soft_uart library.
@@ -24,8 +24,8 @@
  **/
 /*
  * File: soft_uart.h 
- * Description:  This  is  an  implementation  of  a  software	UART  (Universal
- * Asynchronous Receiver  Transmitter)	library  for  the  Arduino  Due's  Atmel
+ * Description:  This  is  an  implementation  of  a  software  UART  (Universal
+ * Asynchronous Receiver  Transmitter)  library  for  the  Arduino  Due's  Atmel
  * ATSAM3X8E micro-controller.
  * Date: June 22nd, 2015
  * Author: Antonio C. Dominguez-Brito <adominguez@iusiani.ulpgc.es>
@@ -278,7 +278,7 @@ namespace arduino_due
 
           return return_codes::EVERYTHING_OK;
         }
-	
+  
         return_codes half_duplex_config(
           uint32_t rx_tx_pin = default_pins::DEFAULT_RX_PIN,
           uint32_t bit_rate = bit_rates::DEFAULT_BIT_RATE,
@@ -385,8 +385,8 @@ namespace arduino_due
         size_t get_tx_buffer_length() { return TX_BUFFER_LENGTH; }
   
         uint32_t get_bit_rate() { return _ctx_.bit_rate; }
-        double get_bit_time() { return _ctx_.bit_time; }	
-        double get_frame_time() { return _ctx_.frame_time; }	
+        double get_bit_time() { return _ctx_.bit_time; }  
+        double get_frame_time() { return _ctx_.frame_time; }  
 
         uint32_t get_rx_data(uint32_t& data) 
         { 
@@ -692,6 +692,7 @@ namespace arduino_due
           volatile uint32_t rx_bit;
           volatile rx_status_codes rx_status;
           volatile uint32_t rx_data_status;
+          volatile bool rx_at_end_quarter;
 
           // tx data
           fifo<uint32_t,TX_BUFFER_LENGTH> tx_buffer;
@@ -737,7 +738,6 @@ namespace arduino_due
             stop_bit_codes::ONE_STOP_BIT
           );
         }
-
 	void begin(uint32_t rx_pin, uint32_t tx_pin, unsigned long baud_rate, unsigned long config)
 	{
 	  data_bit_codes bits = data_bit_codes::EIGHT_BITS;
@@ -774,6 +774,7 @@ namespace arduino_due
 
 	  _tc_uart_.config(rx_pin, tx_pin, static_cast<uint32_t>(baud_rate), bits, parity, stop);
 	}
+
 
         void begin(
           uint32_t rx_pin = default_pins::DEFAULT_RX_PIN,
@@ -857,8 +858,8 @@ namespace arduino_due
 
           return _last_data_; 
         }
-
         void set_rx_handler(void (*h)(void)) { _tc_uart_.set_rx_handler(h); }
+
 
         bool data_lost() { return _tc_uart_.data_lost(_last_data_status_); }
 
@@ -949,8 +950,8 @@ namespace arduino_due
         (the_bit_rate<bit_rates::MIN_BIT_RATE) || 
         (the_bit_rate>bit_rates::MAX_BIT_RATE)
       ) return return_codes::BAD_BIT_RATE_ERROR;
-
       rx_handler = NULL;
+
 
       timer_p=&(tc_timer_table[static_cast<uint32_t>(TIMER)]);
       bit_rate=the_bit_rate;
@@ -995,6 +996,7 @@ namespace arduino_due
       rx_status=rx_status_codes::LISTENING;
       rx_data_status=rx_data_status_codes::NO_DATA_AVAILABLE;
       rx_buffer.reset();
+      rx_at_end_quarter=false;
 
       rx_irq=(
         (rx_pio_p==PIOA)? 
@@ -1053,21 +1055,25 @@ namespace arduino_due
       {
         if(rx_status==rx_status_codes::RECEIVING)
         { 
-          get_incoming_bit();
-          if((rx_bit_counter++)==rx_frame_bits-1)  
+          if(!rx_at_end_quarter)
           {
-            if(stop_bits==stop_bit_codes::TWO_STOP_BITS)
-              get_incoming_bit();
+            get_incoming_bit();
+            if((rx_bit_counter++)==rx_frame_bits-1)  
+            {
+              if(stop_bits==stop_bit_codes::TWO_STOP_BITS)
+                get_incoming_bit();
 
-            disable_tc_ra_interrupt();
+              disable_tc_ra_interrupt();
 
-            if(tx_status==tx_status_codes::IDLE)
-              stop_tc_interrupts();
+              if(tx_status==tx_status_codes::IDLE)
+                stop_tc_interrupts();
 
-            update_rx_data_buffer();
+              update_rx_data_buffer();
 
-            rx_status=rx_status_codes::LISTENING;
+              rx_status=rx_status_codes::LISTENING;
+            }
           }
+          else rx_at_end_quarter=false;
         }
       }
      
@@ -1155,10 +1161,16 @@ namespace arduino_due
               register uint32_t timer_value=
                 TC_ReadCV(timer_p->tc_p,timer_p->channel);
 
-              if(
-                (timer_value<=(bit_1st_half>>1)) || 
-                (timer_value>bit_1st_half+(bit_1st_half>>1))
-              ) enable_tc_ra_interrupt();
+              if(timer_value<=(bit_1st_half>>1)) 
+                enable_tc_ra_interrupt();
+              else
+              {
+                if(timer_value>bit_1st_half+(bit_1st_half>>1))
+                {
+                  enable_tc_ra_interrupt();
+                  rx_at_end_quarter=true;
+                }
+              }
             }
           } 
           break;
@@ -1279,7 +1291,7 @@ namespace arduino_due
         data_to_send=data_to_send|(0x3<<first_stop_bit_pos);
 
       register bool not_full;
-	
+  
       disable_tc_interrupts();
       not_full=tx_buffer.push(data_to_send);
       enable_tc_interrupts();
@@ -1317,3 +1329,4 @@ namespace arduino_due
 }
 
 #endif // SOFT_UART_H
+
