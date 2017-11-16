@@ -728,7 +728,7 @@ static void toggle_throttle(byte row, byte col)
 }
 
 
-static byte toggle_interrupt_conn(uint32_t mask, byte c)
+static byte toggle_interrupt_conn(uint32_t mask, byte c, byte row, byte col)
 {
   if( config_flags&CF_HAVE_VI )
     {
@@ -742,6 +742,8 @@ static byte toggle_interrupt_conn(uint32_t mask, byte c)
   else
     config_interrupt_mask = (config_interrupt_mask & ~mask) | (~config_interrupt_mask & mask);
 
+  set_cursor(row, col);
+  print_interrupt_conn(mask, c); 
   return c;
 }
 
@@ -1109,19 +1111,28 @@ static bool load_config(byte fileno)
 
 void config_edit_printer()
 {
-  bool go = true;
+  byte row, col, r_type, r_iface, r_force, r_cmd;
+  bool go = true, redraw = true;
 
   while( go )
     {
-      Serial.print(F("\033[2J\033[0;0H\n"));
-      
-      Serial.println(F("Configure printer settings"));
-      Serial.print(F("\n(P)rinter type             : ")); print_printer_type(); Serial.println();
-      Serial.print(F("Map printer to (i)nterface : ")); print_printer_mapped_to(); Serial.println();
-      Serial.print(F("(F)orce real-time mode     : ")); print_flag(CF_PRINTER_RT); Serial.println();
-      
-      Serial.println(F("\nE(x)it to main menu"));
-      Serial.print(F("\n\nCommand: "));
+      if( redraw )
+        {
+          Serial.print(F("\033[2J\033[0;0H\n"));
+          
+          row = 4;
+          col = 30;
+          Serial.println(F("Configure printer settings"));
+          Serial.print(F("\n(P)rinter type             : ")); r_type = row++; print_printer_type(); Serial.println();
+          Serial.print(F("Map printer to (i)nterface : ")); r_iface = row++; print_printer_mapped_to(); Serial.println();
+          Serial.print(F("(F)orce real-time mode     : ")); r_force = row++; print_flag(CF_PRINTER_RT); Serial.println();
+          
+          Serial.println(F("\nE(x)it to main menu"));
+          Serial.print(F("\n\nCommand: ")); r_cmd = row + 4;
+          redraw = false;
+        }
+      else
+        set_cursor(r_cmd, 10);
       
       while( !serial_available() ) delay(50);
       char c = serial_read();
@@ -1131,13 +1142,17 @@ void config_edit_printer()
         {
         case 'P': 
           config_flags = toggle_bits(config_flags, 19, 2, 0, 2);
+          set_cursor(r_type, col);
+          print_printer_type(); 
           break;
 
         case 'i':
           config_flags = toggle_map_to_serial(config_flags, 21);
+          set_cursor(r_iface, col);
+          print_printer_mapped_to(); 
           break;
 
-        case 'F': toggle_flag(CF_PRINTER_RT, 0, 0); break;
+        case 'F': toggle_flag(CF_PRINTER_RT, r_force, col); break;
         case 27:
         case 'x': go = false; break;
         }
@@ -1186,7 +1201,7 @@ void config_edit_drives()
 
       switch( c )
         {
-        case 'F': toggle_flag(CF_DRIVE_RT, r_realtime, col); break;
+        case 'F': toggle_flag(CF_DRIVE_RT, r_realtime, 26); break;
         case 27:
         case 'x': go = false; break;
 
@@ -1342,6 +1357,7 @@ byte find_vi_conn(uint32_t interrupt)
 
 void config_edit_interrupts()
 {
+  byte row, col, r_rtcf, r_vint, r_sio, r_acr, r_2sio1, r_2sio2, r_2sio3, r_2sio4, r_rtc, r_lpc, r_drive, r_hdsk, r_cmd;
   byte conn_sio   = find_vi_conn(INT_SIO);
   byte conn_acr   = find_vi_conn(INT_ACR);
   byte conn_2sio1 = find_vi_conn(INT_2SIO1);
@@ -1353,35 +1369,44 @@ void config_edit_interrupts()
   byte conn_drive = find_vi_conn(INT_DRIVE);
   byte conn_hdsk  = find_vi_conn(INT_HDSK);
 
-  bool go = true;
+  bool go = true, redraw = true;
   while( go )
     {
-      Serial.print(F("\033[2J\033[0;0H\n"));
-      Serial.println(F("Configure interrupt settings"));
-      Serial.print(F("\n(R)eal-Time Clock              : ")); print_rtc_frequency(); Serial.println();
-      Serial.print(F("(V)ector Interrupt board       : ")); print_vi_flag(); Serial.println();
+      if( redraw )
+        {
+          row = 4;
+          col = 34;
+          Serial.print(F("\033[2J\033[0;0H\n"));
+          Serial.println(F("Configure interrupt settings"));
+          Serial.print(F("\n(R)eal-Time Clock              : ")); r_rtcf = row++; print_rtc_frequency(); Serial.println();
+          Serial.print(F("(V)ector Interrupt board       : ")); r_vint = row++; print_vi_flag(); Serial.println();
 
-      Serial.println();
-      Serial.print(F("(0) Real-Time Clock interrupt  : ")); print_interrupt_conn(INT_RTC, conn_rtc); Serial.println();
-      Serial.print(F("(1) 88-SIO interrupt           : ")); print_interrupt_conn(INT_SIO, conn_sio); Serial.println();
-      Serial.print(F("(2) 88-ACR interrupt           : ")); print_interrupt_conn(INT_ACR, conn_acr); Serial.println();
-      Serial.print(F("(3) 88-LPC interrupt           : ")); print_interrupt_conn(INT_LPC, conn_lpc); Serial.println();
-      Serial.print(F("(4) 88-2SIO port 1 interrupt   : ")); print_interrupt_conn(INT_2SIO1, conn_2sio1); Serial.println();
-      Serial.print(F("(5) 88-2SIO port 2 interrupt   : ")); print_interrupt_conn(INT_2SIO2, conn_2sio2); Serial.println();
+          Serial.println(); row++;
+          Serial.print(F("(0) Real-Time Clock interrupt  : ")); r_rtc = row++; print_interrupt_conn(INT_RTC, conn_rtc); Serial.println();
+          Serial.print(F("(1) 88-SIO interrupt           : ")); r_sio = row++; print_interrupt_conn(INT_SIO, conn_sio); Serial.println();
+          Serial.print(F("(2) 88-ACR interrupt           : ")); r_acr = row++; print_interrupt_conn(INT_ACR, conn_acr); Serial.println();
+          Serial.print(F("(3) 88-LPC interrupt           : ")); r_lpc = row++; print_interrupt_conn(INT_LPC, conn_lpc); Serial.println();
+          Serial.print(F("(4) 88-2SIO port 1 interrupt   : ")); r_2sio1 = row++; print_interrupt_conn(INT_2SIO1, conn_2sio1); Serial.println();
+          Serial.print(F("(5) 88-2SIO port 2 interrupt   : ")); r_2sio2 = row++; print_interrupt_conn(INT_2SIO2, conn_2sio2); Serial.println();
 #if USE_SECOND_2SIO>0
-      Serial.print(F("(6) 88-2SIO-2 port 1 interrupt : ")); print_interrupt_conn(INT_2SIO3, conn_2sio3); Serial.println();
-      Serial.print(F("(7) 88-2SIO-2 port 2 interrupt : ")); print_interrupt_conn(INT_2SIO4, conn_2sio4); Serial.println();
+          Serial.print(F("(6) 88-2SIO-2 port 1 interrupt : ")); r_2sio3 = row++; print_interrupt_conn(INT_2SIO3, conn_2sio3); Serial.println();
+          Serial.print(F("(7) 88-2SIO-2 port 2 interrupt : ")); r_2sio4 = row++; print_interrupt_conn(INT_2SIO4, conn_2sio4); Serial.println();
 #endif
 #if NUM_DRIVES>0
-      Serial.print(F("(8) Disk drive interrupt       : ")); print_interrupt_conn(INT_DRIVE, conn_drive); Serial.println();
+          Serial.print(F("(8) Disk drive interrupt       : ")); r_drive = row++; print_interrupt_conn(INT_DRIVE, conn_drive); Serial.println();
 #endif
 #if NUM_HDSK_UNITS>0
-      Serial.print(F("(9) 88-HDSK interrupt          : ")); print_interrupt_conn(INT_HDSK, conn_hdsk); Serial.println();
+          Serial.print(F("(9) 88-HDSK interrupt          : ")); r_hdsk = row++; print_interrupt_conn(INT_HDSK, conn_hdsk); Serial.println();
 #endif
+          
+          Serial.println(F("\nE(x)it to main menu"));
+          
+          Serial.print(F("\n\nCommand: ")); r_cmd = row+4;
+          redraw = false;
+        }
+      else
+        set_cursor(r_cmd, 10);
 
-      Serial.println(F("\nE(x)it to main menu"));
-
-      Serial.print(F("\n\nCommand: "));
       while( !serial_available() ) delay(50);
       char c = serial_read();
       if( c>31 && c<127 ) Serial.println(c);
@@ -1391,22 +1416,29 @@ void config_edit_interrupts()
         case 'R':
         case 'r':
         case 'C': 
-        case 'c': toggle_rtc_rate(); break;
-        case 'V':
-        case 'v': toggle_flag(CF_HAVE_VI, 0, 0); break;
+        case 'c': 
+          {
+            toggle_rtc_rate(); 
+            set_cursor(r_rtcf, col);
+            print_rtc_frequency(); 
+            break;
+          }
 
-        case '0': conn_rtc   = toggle_interrupt_conn(INT_RTC, conn_rtc);     break;
-        case '1': conn_sio   = toggle_interrupt_conn(INT_SIO, conn_sio);     break;
-        case '2': conn_acr   = toggle_interrupt_conn(INT_ACR, conn_acr);     break;
-        case '3': conn_lpc   = toggle_interrupt_conn(INT_LPC, conn_lpc);     break;
-        case '4': conn_2sio1 = toggle_interrupt_conn(INT_2SIO1, conn_2sio1); break;
-        case '5': conn_2sio2 = toggle_interrupt_conn(INT_2SIO2, conn_2sio2); break;
+        case 'V':
+        case 'v': toggle_flag(CF_HAVE_VI, 0, 0); redraw = true; break;
+
+        case '0': conn_rtc   = toggle_interrupt_conn(INT_RTC, conn_rtc, r_rtc, col);     break;
+        case '1': conn_sio   = toggle_interrupt_conn(INT_SIO, conn_sio, r_sio, col);     break;
+        case '2': conn_acr   = toggle_interrupt_conn(INT_ACR, conn_acr, r_acr, col);     break;
+        case '3': conn_lpc   = toggle_interrupt_conn(INT_LPC, conn_lpc, r_lpc, col);     break;
+        case '4': conn_2sio1 = toggle_interrupt_conn(INT_2SIO1, conn_2sio1, r_2sio1, col); break;
+        case '5': conn_2sio2 = toggle_interrupt_conn(INT_2SIO2, conn_2sio2, r_2sio2, col); break;
 #if USE_SECOND_2SIO>0
-        case '6': conn_2sio3 = toggle_interrupt_conn(INT_2SIO3, conn_2sio3); break;
-        case '7': conn_2sio4 = toggle_interrupt_conn(INT_2SIO4, conn_2sio4); break;
+        case '6': conn_2sio3 = toggle_interrupt_conn(INT_2SIO3, conn_2sio3, r_2sio3, col); break;
+        case '7': conn_2sio4 = toggle_interrupt_conn(INT_2SIO4, conn_2sio4, r_2sio4, col); break;
 #endif
-        case '8': conn_drive = toggle_interrupt_conn(INT_DRIVE, conn_drive); break;
-        case '9': conn_hdsk  = toggle_interrupt_conn(INT_HDSK, conn_hdsk);   break;
+        case '8': conn_drive = toggle_interrupt_conn(INT_DRIVE, conn_drive, r_drive, col); break;
+        case '9': conn_hdsk  = toggle_interrupt_conn(INT_HDSK, conn_hdsk, r_hdsk, col);   break;
 
         case 27:
         case 'x': go = false; break;
@@ -1433,24 +1465,35 @@ void config_edit_interrupts()
 void config_edit_serial_device(byte dev)
 {
   uint32_t settings = config_serial_device_settings[dev];
+  byte row, col, r_iface, r_baud, r_force, r_nuls, r_7bits, r_ucase, r_bspace, r_traps, r_cmd;
+  bool redraw = true;
 
   while( true )
     {
-      Serial.print(F("\033[2J\033[0;0H\n"));
-      Serial.print(F("Configure serial device ")); print_serial_device_sim(dev); Serial.println();
-      Serial.print(F("\nMap to host (i)nterface    : ")); print_serial_device_mapped_to(settings); Serial.println();
-      Serial.print(F("Simulated (b)aud rate      : ")); Serial.println(config_baud_rate(get_bits(settings, 0, 4)));
-      Serial.print(F("(F)orce baud rate          : ")); print_flag(settings, 1ul<<16, 0, 0); Serial.println();
-      Serial.print(F("Example playback (N)ULs    : ")); Serial.println(get_bits(settings, 4, 3));
-      Serial.print(F("Use (7) bits               : ")); print_serial_flag(settings, 12); Serial.println();
-      Serial.print(F("Serial input (u)ppercase   : ")); print_serial_flag(settings, 10); Serial.println();
-      Serial.print(F("Translate (B)ackspace to   : ")); print_serial_flag_backspace(settings); Serial.println();
-      if( dev==CSM_ACR )
-        { Serial.print(F("Enable CLOAD/CSAVE (t)raps : ")); print_serial_flag(settings, 7, 1); Serial.println(); }
+      if( redraw )
+        {
+          row = 4;
+          col = 30;
+          Serial.print(F("\033[2J\033[0;0H\n"));
+          Serial.print(F("Configure serial device ")); print_serial_device_sim(dev); Serial.println();
+          Serial.print(F("\nMap to host (i)nterface    : ")); r_iface = row++; print_serial_device_mapped_to(settings); Serial.println();
+          Serial.print(F("Simulated (b)aud rate      : ")); r_baud = row++; Serial.println(config_baud_rate(get_bits(settings, 0, 4)));
+          Serial.print(F("(F)orce baud rate          : ")); r_force = row++; print_flag(settings, 1ul<<16, 0, 0); Serial.println();
+          Serial.print(F("Example playback (N)ULs    : ")); r_nuls = row++; Serial.println(get_bits(settings, 4, 3));
+          Serial.print(F("Use (7) bits               : ")); r_7bits = row++; print_serial_flag(settings, 12); Serial.println();
+          Serial.print(F("Serial input (u)ppercase   : ")); r_ucase = row++; print_serial_flag(settings, 10); Serial.println();
+          Serial.print(F("Translate (B)ackspace to   : ")); r_bspace = row++; print_serial_flag_backspace(settings); Serial.println();
+          if( dev==CSM_ACR )
+            { Serial.print(F("Enable CLOAD/CSAVE (t)raps : ")); r_traps = row++; print_serial_flag(settings, 7, 1); Serial.println(); }
+          
+          Serial.println(F("\nE(x)it to main menu"));
+          
+          Serial.print(F("\n\nCommand: ")); r_cmd = row+4;
+          redraw = false;
+        }
+      else
+        set_cursor(r_cmd, 10);
 
-      Serial.println(F("\nE(x)it to main menu"));
-
-      Serial.print(F("\n\nCommand: "));
       while( !serial_available() ) delay(50);
       char c = serial_read();
       if( c>31 && c<127 ) Serial.println(c);
@@ -1471,23 +1514,75 @@ void config_edit_serial_device(byte dev)
                   {
                     Serial.println(F("\n\nCan not change mapping. At least one device must"));
                     Serial.println(F("be mapped to the host's (primary) serial interface."));
+                    redraw = true;
                     delay(4000);
                   }
               }
 
             if( ok )
-              settings = toggle_map_to_serial(settings, 17);
+              {
+                settings = toggle_map_to_serial(settings, 17);
+                set_cursor(r_iface, col); 
+                print_serial_device_mapped_to(settings);
+              }
 
             break;
           }
 
-        case 'b': settings = toggle_bits(settings, 0, 4, BAUD_110, BAUD_19200); break;
-        case 'u': settings = toggle_serial_flag(settings, 10); break;
-        case 't': settings = toggle_bits(settings, 7, 1); break;
-        case '7': settings = toggle_serial_flag(settings, 12); break;
-        case 'B': settings = toggle_serial_flag_backspace(settings); break;
-        case 'N': settings = toggle_bits(settings, 4, 3); break;
-        case 'F': settings = toggle_bits(settings, 16, 1); break;
+        case 'b': 
+          {
+            settings = toggle_bits(settings, 0, 4, BAUD_110, BAUD_19200); 
+            set_cursor(r_baud, col); 
+            Serial.print(config_baud_rate(get_bits(settings, 0, 4)));
+            break;
+          }
+
+        case 'F': 
+          {
+            settings = toggle_bits(settings, 16, 1); 
+            print_flag(settings, 1ul<<16, r_force, col); 
+            break;
+          }
+
+        case 'N': 
+          {
+            settings = toggle_bits(settings, 4, 3); 
+            set_cursor(r_nuls, col); 
+            Serial.println(get_bits(settings, 4, 3));
+            break;
+          }
+
+        case '7': 
+          {
+            settings = toggle_serial_flag(settings, 12); 
+            set_cursor(r_7bits, col); 
+            print_serial_flag(settings, 12); 
+            break;
+          }
+
+        case 'u': 
+          {
+            settings = toggle_serial_flag(settings, 10); 
+            set_cursor(r_ucase, col); 
+            print_serial_flag(settings, 10); 
+            break;
+          }
+
+        case 'B': 
+          {
+            settings = toggle_serial_flag_backspace(settings); 
+            set_cursor(r_bspace, col); 
+            print_serial_flag_backspace(settings); 
+            break;
+          }
+
+        case 't': 
+          {
+            settings = toggle_bits(settings, 7, 1); 
+            set_cursor(r_traps, col); 
+            print_serial_flag(settings, 7, 1); 
+            break;
+          }
 
         case 27:
         case 'x': 
@@ -1898,7 +1993,12 @@ void config_edit()
                 Serial.print(F("\033[2J"));
                 return;
               }
+            break;
           }
+
+        default:
+          redraw = false;
+          break;
         }
     }
 }
