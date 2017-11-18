@@ -1467,14 +1467,6 @@ void loop()
 
       while( true )
         {
-          /*static int i = 0;
-          {
-            Mem[i%MEMSIZE] = 0;
-            if( (++i % 100)==0 )
-              if( host_serial_available_for_write(3) )
-                host_serial_write(3, 0x55);
-                }*/
-
           // put PC on address bus LEDs
           host_set_addr_leds(regPC);
 
