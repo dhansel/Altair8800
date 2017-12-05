@@ -430,6 +430,12 @@ void serial_write(byte dev, byte data)
   if( host_interface!=0xff )
     {
       host_serial_write(host_interface, data);
+
+      // if backspace is translated then force destructive backspace
+      // by sending BACKSPACE-SPACE-BACKSPACE instead of just BACKSPACE
+      if( data==8 && config_serial_backspace(dev, regPC)!=CSFB_NONE )
+        { host_serial_write(host_interface, 32); host_serial_write(host_interface, 8); }
+
       if( host_interface==config_host_serial_primary() )
         last_active_primary_device = dev;
     }
@@ -533,35 +539,24 @@ void serial_timer_interrupt_setup(byte dev)
 
 static byte serial_map_characters_in(byte dev, byte data)
 {
-  // ALTAIR 4k BASIC I/O routine has "IN" instruction at 0x0389
-  // MITS Programming System II has "IN" instruction at 0x0725 and 0x07E4
-  // ALTAIR EXTENDED BASIC I/O routine has "IN" instruction at 0x009F
-
-  if( config_serial_ucase(dev)==CSF_ON ||
-      (config_serial_ucase(dev)==CSF_AUTO && (regPC == 0x038A || regPC == 0x0726 || regPC == 0x08e5)) )
+  if( config_serial_ucase(dev, regPC) )
     {
       // only use upper-case letters
       if( data>96 && data<123 ) data -= 32;
     }
 
-  byte b = config_serial_backspace(dev);
-  if( b==CSFB_AUTO )
+  if( data==8 )
     {
-      if( regPC == 0x038A || regPC == 0x00A0 )
-        b = CSFB_UNDERSCORE;
-      else if( regPC == 0x0726 || regPC == 0x08e5 )
-        b = CSFB_RUBOUT;
-    }
-
-  switch( b ) 
-    {
-    case CSFB_UNDERSCORE: 
-      if( data==8 || data==127 ) data = '_';
-      break;
-      
-    case CSFB_RUBOUT:
-      if( data==8 ) data = 127;
-      break;
+      switch( config_serial_backspace(dev, regPC) )
+        {
+        case CSFB_UNDERSCORE: 
+          if( data==8 ) data = '_';
+          break;
+          
+        case CSFB_DELETE:
+          if( data==8 ) data = 127;
+          break;
+        }
     }
 
   return data;
@@ -570,25 +565,15 @@ static byte serial_map_characters_in(byte dev, byte data)
 
 static byte serial_map_characters_out(byte dev, byte data)
 {
-  // ALTAIR 4k BASIC I/O routine has "OUT" instruction at 0x037F
-  // ALTAIR EXTENDED BASIC I/O routine has "OUT" instruction at 0x00AB
-
-  if( config_serial_7bit(dev)==CSF_ON ||
-      (config_serial_7bit(dev)==CSF_AUTO && (regPC == 0x0380 || regPC == 0x071C || regPC == 0x00AC)) )
+  if( config_serial_7bit(dev, regPC) )
     {
       // only use lower 7 bits
       data &= 0x7f;
     }
 
-  byte b = config_serial_backspace(dev);
-  if( b==CSFB_AUTO && (regPC == 0x0380 || regPC == 0x00AC) )
-    b = CSFB_UNDERSCORE;
-  
-  if( b==CSFB_UNDERSCORE )
-    {
-      // translate underscore to backspace
-      if( data=='_' ) data = 127;
-    }
+  byte b = config_serial_backspace(dev, regPC);
+  if( (data=='_' && b==CSFB_UNDERSCORE) || (data==127 && b==CSFB_DELETE) )
+    data = 8;
 
   return data;
 }

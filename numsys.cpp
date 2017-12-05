@@ -145,13 +145,14 @@ uint16_t numsys_read_hex_word()
 }
 
 
-uint16_t numsys_read_word()
+uint16_t numsys_read_word(bool *ESC)
 {
   byte b;
   uint16_t w = 0;
   int c = -1;
 
-  while( c!=13 && c!=10 && c!=32 && c!=9 && c!='-' && c!=':' )
+  if( ESC!=NULL ) *ESC = false;
+  while( c!=13 && c!=10 && c!=32 && c!=9 && c!='-' && c!=':')
     {
       c=-1;
       while(c<0) c = serial_read();
@@ -170,6 +171,11 @@ uint16_t numsys_read_word()
         {
           Serial.write(c);
           w = w * 10 + (c-48);
+        }
+      else if( c==27 && ESC!=NULL )
+        {
+          *ESC = true;
+          return 0;
         }
     }
 
