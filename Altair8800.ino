@@ -178,20 +178,20 @@ void process_inputs()
             {
               // SW6 is up => save memory page
               if( filesys_write_file('M', filenum, Mem+page, 256) )
-                DBG_FILEOPS2(3, "saved memory page ", int(page>>8));
+                DBG_FILEOPS4(3, "saved memory page ", int(page>>8), " to file #", int(filenum));
               else
-                DBG_FILEOPS2(2, "unable to save memory page ", int(page>>8));
+                DBG_FILEOPS4(2, "unable to save memory page ", int(page>>8), " to file #", int(filenum));
             }
           else
             {
               // SW6 is down => load memory page
               if( filesys_read_file('M', filenum, Mem+page, 256)==256 )
                 {
-                  DBG_FILEOPS2(3, "loaded memory page ", int(page>>8));
+                  DBG_FILEOPS4(3, "loaded memory page ", int(page>>8), " from file #", int(filenum));
                   regPC = page;
                 }
               else
-                DBG_FILEOPS2(2, "file not found for memory page ", int(page>>8));
+                DBG_FILEOPS4(2, "file not found for memory page ", int(page>>8), " from file #", int(filenum));
                 
               altair_set_outputs(regPC, MREAD(regPC));
             }
