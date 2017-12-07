@@ -26,11 +26,6 @@
 #include "host_mega.h"
 
 
-// setting this to 0 disables the bits/parity/stop-bits selection 
-// (always uses 8N1) but saves 30 bytes of RAM
-#define USE_SERIAL_CONFIGS 1
-
-
 #if NUM_DRIVES>0
 #error Arduino MEGA port does not support disk drives. Set NUM_DRIVES to 0 in config.h
 #endif
@@ -174,7 +169,7 @@ static void switch_check(byte i)
         {
           switches_debounced |= bitval;
           switches_pulse     |= bitval;
-          if( function_switch_irq[i] ) altair_interrupt(function_switch_irq[i]<<24);
+          if( function_switch_irq[i] ) altair_interrupt(((uint32_t) function_switch_irq[i])<<24);
           debounceTime[i] = millis() + 100;
         }
       else if( !d1 && d2 ) 
@@ -264,11 +259,7 @@ void host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_prim
   if( iface==0 )
     {
       Serial.end();
-#if USE_SERIAL_CONFIGS>0
       Serial.begin(baud, config);
-#else
-      Serial.begin(baud);
-#endif
       Serial.setTimeout(10000);
     }
 }
