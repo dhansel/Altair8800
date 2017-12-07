@@ -61,9 +61,8 @@ void numsys_print_byte(byte b)
 {
   if( numsys==NUMSYS_HEX )
     {
-      static char hexchars[17] = "0123456789ABCDEF";
-      Serial.write(hexchars[b>>4]);
-      Serial.write(hexchars[b&0x0f]);
+      if( b<16 ) Serial.print('0');
+      Serial.print(b, HEX);
     }
   else if( numsys==NUMSYS_OCT )
     {
