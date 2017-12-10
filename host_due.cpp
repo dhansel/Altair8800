@@ -837,6 +837,34 @@ void host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_prim
 }
 
 
+void host_serial_interrupts_pause()
+{
+  if( Serial )  detachInterrupt(0);
+  if( Serial1 ) detachInterrupt(19);
+  if( gpf_isr_orig ) gpf_isr = gpf_isr_orig;
+#if USE_SERIAL_ON_A6A7>0
+  if( serial_tc5 ) serial_tc5.set_rx_handler(NULL);
+#endif  
+#if USE_SERIAL_ON_RXLTXL>0
+  if( serial_tc4 ) serial_tc4.set_rx_handler(NULL);
+#endif  
+}
+
+
+void host_serial_interrupts_resume()
+{
+  if( Serial )  attachInterrupt(0, host_serial_receive_start_interrupt_if0, FALLING);
+  if( Serial1 ) attachInterrupt(19, host_serial_receive_start_interrupt_if1, FALLING);
+  if( gpf_isr_orig ) gpf_isr = host_serial_receive_start_interrupt_if2;
+#if USE_SERIAL_ON_A6A7>0
+  if( serial_tc5 ) serial_tc5.set_rx_handler(host_serial_receive_finished_interrupt_if3);
+#endif  
+#if USE_SERIAL_ON_RXLTXL>0
+  if( serial_tc4 ) serial_tc4.set_rx_handler(host_serial_receive_finished_interrupt_if4);
+#endif  
+}
+
+
 void host_serial_end(byte i)
 {
   switch( i )
@@ -1242,6 +1270,46 @@ bool host_is_reset()
 }
 
 
+bool host_have_sd_card()
+{
+  return use_sd;
+}
+
+
+#include <malloc.h>
+extern char _end;
+extern "C" char *sbrk(int i);
+char *ramstart=(char *)0x20070000;
+char *ramend=(char *)0x20088000;
+
+void host_system_info()
+{
+  SwitchSerial.println("Host is Arduino Due\n");
+
+  struct mallinfo mi=mallinfo();
+  char *heapend=sbrk(0);
+  register char * stack_ptr asm("sp");
+
+  /*
+  SwitchSerial.print("    arena="); SwitchSerial.println(mi.arena);
+  SwitchSerial.print("  ordblks="); SwitchSerial.println(mi.ordblks);
+  SwitchSerial.print(" uordblks="); SwitchSerial.println(mi.uordblks);
+  SwitchSerial.print(" fordblks="); SwitchSerial.println(mi.fordblks);
+  SwitchSerial.print(" keepcost="); SwitchSerial.println(mi.keepcost);
+  */
+
+  SwitchSerial.print("RAM Start        : 0x"); SwitchSerial.println((unsigned long)ramstart, HEX);
+  SwitchSerial.print("Data/Bss end     : 0x"); SwitchSerial.println((unsigned long)&_end, HEX);
+  SwitchSerial.print("Heap End         : 0x"); SwitchSerial.println((unsigned long)heapend, HEX);
+  SwitchSerial.print("Stack Pointer    : 0x"); SwitchSerial.println((unsigned long)stack_ptr, HEX);
+  SwitchSerial.print("RAM End          : 0x"); SwitchSerial.println((unsigned long)ramend, HEX);
+  SwitchSerial.print("Heap RAM Used    : "); SwitchSerial.println(mi.uordblks);
+  SwitchSerial.print("Program RAM Used : "); SwitchSerial.println(&_end - ramstart);
+  SwitchSerial.print("Stack RAM Used   : "); SwitchSerial.println(ramend - stack_ptr);
+  SwitchSerial.print("Free RAM         : "); SwitchSerial.println(stack_ptr - heapend + mi.fordblks);
+}
+
+
 void host_setup()
 {
   // define digital input/output pin direction
@@ -1253,6 +1321,7 @@ void host_setup()
   // (e.g. serial-to-bluetooth) won't work
   pinMode(19, INPUT_PULLUP);
   
+
   // attach interrupts
   switches_setup();
 
@@ -1272,6 +1341,7 @@ void host_setup()
   trng_enable(TRNG);
   trng_read_output_data(TRNG);
 
+#if NUM_DRIVES>0 || NUM_HDSK_UNITS>0
   // check if SD card available (send "chip select" signal to HLDA status light)
   bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
   if( SD.begin(22) && host_init_data_sd("STORAGE.DAT") )
@@ -1282,6 +1352,7 @@ void host_setup()
 
   // restore HLDA status light to what it was before
   if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
+#endif
 }
 
 

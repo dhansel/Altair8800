@@ -1411,6 +1411,10 @@ void setup()
                           config_host_serial_primary()==i);
     }
 
+  // if EXAMINE switch is held up during powerup then show host system info
+  if( host_read_function_switch(SW_EXAMINE) )
+    host_system_info();
+
   host_set_status_led_WAIT();
 
   // emulator extra: holding down CLR at powerup will keep all registers

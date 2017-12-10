@@ -776,6 +776,21 @@ bool host_serial_port_has_configs(byte i)
 
 // ----------------------------------------------------------------------------------------------------
 
+bool host_have_sd_card()
+{
+  return false;
+}
+
+
+void host_system_info()
+{
+#if defined(_WIN32)
+  SwitchSerial.println("Host is Windows PC");
+#else
+  SwitchSerial.println("Host is Linux/Unix PC");
+#endif
+}
+
 
 // these are defined and initialized in the main() function in Arduino/Arduino.cpp
 extern int    g_argc;

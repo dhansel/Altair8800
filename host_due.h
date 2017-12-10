@@ -131,4 +131,7 @@ byte host_read_data_leds();
 // On the Due we are using real interrupts so nothing needs o be done here
 #define host_check_interrupts() while(0)
 
+void host_serial_interrupts_pause();
+void host_serial_interrupts_resume();
+
 #endif

@@ -312,6 +312,34 @@ bool host_is_reset()
 }
 
 
+bool host_have_sd_card()
+{
+  return false;
+}
+
+
+static void printHex(int i) { if( i<0x1000 ) Serial.print('0'); Serial.println(i, HEX); }
+void host_system_info()
+{
+  extern int __bss_end, __heap_start, *__brkval; 
+  int ramstart = 0x0200;
+  int bssend   = (int) &__bss_end;
+  int heapend  = __brkval == 0 ? (int) &__heap_start : (int) __brkval;
+  int ramend   = 0x2200;
+
+  Serial.println(F("Host is Arduino Mega 2560\n"));
+  Serial.print(F("RAM Start        : 0x")); printHex(ramstart);
+  Serial.print(F("Data/Bss end     : 0x")); printHex(bssend);
+  Serial.print(F("Heap End         : 0x")); printHex(heapend);
+  Serial.print(F("Stack Pointer    : 0x")); printHex(SP);
+  Serial.print(F("RAM End          : 0x")); printHex(ramend);
+  Serial.print(F("Program RAM Used : ")); Serial.println(bssend - ramstart);
+  Serial.print(F("Heap RAM Used    : ")); Serial.println(heapend - bssend);
+  Serial.print(F("Stack RAM Used   : ")); Serial.println(ramend - SP);
+  Serial.print(F("Free RAM         : ")); Serial.println(SP - heapend);
+}
+
+
 void host_setup()
 {
   int i;

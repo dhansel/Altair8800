@@ -107,6 +107,7 @@
     <ClCompile Include="prog_games.cpp" />
     <ClCompile Include="prog_ps2.cpp" />
     <ClCompile Include="prog_tools.cpp" />
+    <ClCompile Include="sdmanager.cpp" />
     <ClCompile Include="serial.cpp" />
     <ClCompile Include="switch_serial.cpp" />
     <ClCompile Include="timer.cpp" />
@@ -144,6 +145,7 @@
     <ClInclude Include="prog_games.h" />
     <ClInclude Include="prog_ps2.h" />
     <ClInclude Include="prog_tools.h" />
+    <ClInclude Include="sdmanager.h" />
     <ClInclude Include="serial.h" />
     <ClInclude Include="switch_serial.h" />
     <ClInclude Include="timer.h" />

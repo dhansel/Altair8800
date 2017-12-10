@@ -56,6 +56,9 @@ uint32_t host_get_random();
 
 bool host_is_reset();
 
+bool host_have_sd_card();
+void host_system_info();
+
 void host_setup();
 
 

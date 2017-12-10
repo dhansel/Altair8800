@@ -26,6 +26,7 @@
 #include "drive.h"
 #include "hdsk.h"
 #include "prog.h"
+#include "sdmanager.h"
 
 #define CONFIG_FILE_VERSION 3
 
@@ -1640,7 +1641,6 @@ void config_edit_serial_device(byte dev)
 
 void config_host_serial_details(byte iface)
 {
-  int i;
   bool go = true, redraw = true;
   byte row, col, r_baud, r_bits, r_parity, r_stop, r_cmd;
 
@@ -1658,7 +1658,7 @@ void config_host_serial_details(byte iface)
           Serial.print(F("\033[2J\033[0;0H\n"));
 #if HOST_NUM_SERIAL_PORTS>1
           Serial.print(F("Configure host serial settings for interface: "));
-          Serial.print(host_serial_port_name(i)); 
+          Serial.print(host_serial_port_name(iface)); 
           Serial.println();
 #else
           Serial.println(F("Configure host serial settings"));
@@ -1901,6 +1901,10 @@ void config_edit()
 
           Serial.println();
           Serial.println(F("(M)anage Filesystem"));
+#if NUM_DRIVES>0 || NUM_HDSK_UNITS>0
+          if( host_have_sd_card() )
+            { Serial.println(F("(F)ile manager for SD card")); row++; }
+#endif
           Serial.println(F("(C)lear memory"));
           Serial.println(F("(S)ave configuration"));
           Serial.println(F("(L)oad configuration"));
@@ -1952,6 +1956,15 @@ void config_edit()
 #if NUM_HDSK_UNITS>0
         case 'H': config_edit_hdsk(); break;
 #endif
+        case 'h': 
+          {
+            Serial.println(F("\n\n"));
+            host_system_info();
+            Serial.print(F("\n\nPress any key to continue..."));
+            while( !serial_available() ); 
+            while( serial_available() ) serial_read();
+            break;
+          }
           
         case '-': 
           {
@@ -1982,6 +1995,10 @@ void config_edit()
           }
 
         case 'M': filesys_manage(); break;
+
+#if NUM_DRIVES>0 || NUM_HDSK_UNITS>0
+        case 'F': if( host_have_sd_card() ) sd_manager(); break;
+#endif
 
         case 'C': 
           {
@@ -2036,7 +2053,7 @@ void config_edit()
             if( exit )
               {
                 mem_set_ram_limit_usr(config_mem_size-1);
-                Serial.print(F("\033[2J"));
+                Serial.print(F("\033[2J\033[0;0H"));
                 return;
               }
             break;
