@@ -77,6 +77,7 @@ void prof_print_details()
 
 static uint32_t prof_time;
 static uint32_t prof_cycles;
+extern uint16_t throttle_delay;
 
 void prof_print()
 {
@@ -95,7 +96,13 @@ void prof_print()
       Serial.print(mhz);
       Serial.print(F(" MHz = "));
       Serial.print(int(mhz/0.02+.5));
-      Serial.print(F("%\033[K\033[37m\033[u"));
+      Serial.print('%');
+#if USE_THROTTLE>0
+      Serial.print(F(" (d="));
+      Serial.print(throttle_delay);
+      Serial.print(')');
+#endif
+      Serial.print(F("\033[K\033[37m\033[u"));
       
 #if USE_PROFILING_DETAIL>0
       if( ++prof_detail_counter == 10 )
