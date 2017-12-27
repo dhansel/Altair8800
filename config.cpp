@@ -2149,10 +2149,10 @@ void config_defaults(bool apply)
 }
 
 
-void config_setup()
+void config_setup(byte n)
 {
   config_defaults(true);
-  if( load_config(0) )
+  if( load_config(n) )
     {
       apply_host_serial_settings(new_config_serial_settings, new_config_serial_settings2);
       mem_set_ram_limit_usr(config_mem_size-1);

@@ -94,7 +94,7 @@ extern uint32_t config_serial_settings;
 extern uint32_t config_interrupt_mask;
 extern uint32_t config_interrupt_vi_mask[8];
 
-void config_setup();
+void config_setup(byte n = 0);
 void config_edit();
 void config_defaults(bool apply);
 

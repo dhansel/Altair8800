@@ -1386,7 +1386,7 @@ void setup()
   filesys_setup();
   drive_setup();
   hdsk_setup();
-  config_setup();
+  config_setup(host_read_function_switch(SW_DEPOSIT) ? host_read_addr_switches() : 0);
   serial_setup();
   profile_setup();
   rtc_setup();
