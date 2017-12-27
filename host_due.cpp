@@ -33,6 +33,17 @@
 #include <SD.h>
 
 
+// The SerialUSB implementation (serial via native USB port) sends the data for
+// each "write" call in its own frame. Since all data in the simulator is sent
+// byte-by-byte, each byte is sent in a separate USB frame. That is not so much
+// a problem for hosts supporting High Speed (USB 2.0) but for hosts that only
+// support Full Speed mode, waiting for a new frame for each byte of data to send
+// can get slow (similar to a 2400 baud connection). Enabling USE_NATIVE_USB_TX_OPTIMIZATION
+// will buffer characters sent while waiting for the next USB frame and then send 
+// them all together.
+#define USE_NATIVE_USB_TX_OPTIMIZATION
+
+
 #if USE_PROTECT>0 && USE_SERIAL_ON_A6A7>0
 #error Only one of USE_PROTECT (in config.h) and USE_SERIAL_ON_A6A7 (in host_due.h) can be set to 1.
 #endif
@@ -606,6 +617,121 @@ void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
 //------------------------------------------------------------------------------------------------------
 
 
+// pointer to Arduino (native) USB ISR
+extern void (*gpf_isr)(void);
+
+// our local copy of the original USB ISR pointer
+void (*gpf_isr_orig)(void) = NULL;
+
+// do we want to handle received data in interrupts (i.e. call serial_receive_host_data whenever
+// data arrives)?
+static bool usb_receive_interrupt_enabled = false;
+
+// receive interrupt handler routine (defined below)
+void host_serial_receive_start_interrupt_if2();
+
+#ifdef USE_NATIVE_USB_TX_OPTIMIZATION
+// USB transmit buffering enabled (see comment at #define on top of file)
+
+// Maximum USB frame size for bulk transfers is 64 bytes of data in full-speed mode, 
+// 512 bytes  in high-speed mode. We don't know which mode we are in, additionally 
+// the frame rate in high-speed mode is much higher so it's unlikely we would fill be 
+// able to buffer more than 64 characters anyway.
+#define USB_BUFFER_SIZE 64
+volatile uint8_t usb_buffer_len = 0, usb_buffer[USB_BUFFER_SIZE];
+
+static void usb_isr()
+{
+  if( Is_udd_in_send(CDC_TX) ) 
+    { 
+      // received an IN token
+      if( usb_buffer_len==0 ) 
+        { 
+          // acknowledge receipt of IN token (no data to send)
+          udd_ack_in_send(CDC_TX);
+          udd_ack_fifocon(CDC_TX);
+          
+          // don't need any more IN token interrupts for now
+          udd_disable_in_send_interrupt(CDC_TX);
+        }
+      else
+        { 
+          // send buffered data and clear buffer
+          UDD_Send(CDC_TX, (void *) usb_buffer, usb_buffer_len);
+          usb_buffer_len = 0; 
+        }
+    }
+  else  
+    {
+      bool isReceive = Is_udd_out_received(CDC_RX);
+
+      // call original USB interrupt handler
+      gpf_isr_orig();
+      
+      // if interrupt was due to an OUT (receive data) packet then 
+      // call our receive interrupt handler
+      if( usb_receive_interrupt_enabled && isReceive )
+        host_serial_receive_start_interrupt_if2();
+    }
+}
+
+inline size_t usb_write(uint8_t b)
+{
+  // if buffer is full, wait until it gets cleared (in usb_isr)
+  while( usb_buffer_len>=USB_BUFFER_SIZE ); 
+
+  noInterrupts();
+  
+  // buffer data
+  usb_buffer[usb_buffer_len++] = b;
+      
+  // if interrupts for received IN tokens are not enabled then enable them now
+  // (buffered data will be sent when the next IN token is received)
+  if( !Is_udd_in_send_interrupt_enabled(CDC_TX) && Is_udd_endpoint_configured(CDC_TX) )
+    { udd_enable_endpoint_interrupt(CDC_TX); udd_enable_in_send_interrupt(CDC_TX); }
+  
+  interrupts();
+  
+  return 1;
+}
+
+inline int usb_available_for_write()
+{
+  return USB_BUFFER_SIZE-usb_buffer_len;
+}
+
+
+#else
+// USB transmit buffering disabled (see comment at #define on top of file)
+
+void usb_isr()
+{
+  bool isReceive = Is_udd_out_received(CDC_RX);
+
+  // call original USB interrupt handler
+  gpf_isr_orig();
+
+  // if interrupt was due to an OUT (receive data) packet then call the simulator receive interrupt
+  if( usb_receive_interrupt_enabled && isReceive )
+    host_serial_receive_start_interrupt_if2();
+}
+
+inline size_t usb_write(byte b)
+{
+  return SerialUSB.write(&b, 1);
+}
+
+inline int usb_available_for_write()
+{
+  return SerialUSB.availableForWrite(); 
+}
+
+#endif
+
+
+//------------------------------------------------------------------------------------------------------
+
+
 static void host_serial_receive_finished_interrupt_if0()
 {
   // a complete character should have been received
@@ -654,17 +780,9 @@ static void host_serial_receive_finished_interrupt_if2()
 }
 
 
-extern void (*gpf_isr)(void);
-void (*gpf_isr_orig)(void) = NULL;
 void host_serial_receive_start_interrupt_if2()
 {
-  // check whether this is an interrupt due to communication with an endpoint
-  bool isEndpointInterrupt = Is_udd_endpoint_interrupt(CDC_RX);
-
-  // call original ISR to handle USB communication
-  gpf_isr_orig();
-  
-  if( isEndpointInterrupt && !host_interrupt_timer_running(6) )
+  if( !host_interrupt_timer_running(6) )
     {
       // receive data
       if( SerialUSB.available() )
@@ -764,7 +882,8 @@ void host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_prim
     {
       // hook into the SerialUSB interrupt service routine
       if( gpf_isr_orig==NULL ) gpf_isr_orig = gpf_isr;
-      gpf_isr = host_serial_receive_start_interrupt_if2;
+      gpf_isr = usb_isr;
+      usb_receive_interrupt_enabled = true;
 
       timer = 6;
       fnFinished = host_serial_receive_finished_interrupt_if2;
@@ -841,7 +960,7 @@ void host_serial_interrupts_pause()
 {
   if( Serial )  detachInterrupt(0);
   if( Serial1 ) detachInterrupt(19);
-  if( gpf_isr_orig ) gpf_isr = gpf_isr_orig;
+  usb_receive_interrupt_enabled = false;
 #if USE_SERIAL_ON_A6A7>0
   if( serial_tc5 ) serial_tc5.set_rx_handler(NULL);
 #endif  
@@ -855,7 +974,7 @@ void host_serial_interrupts_resume()
 {
   if( Serial )  attachInterrupt(0, host_serial_receive_start_interrupt_if0, FALLING);
   if( Serial1 ) attachInterrupt(19, host_serial_receive_start_interrupt_if1, FALLING);
-  if( gpf_isr_orig ) gpf_isr = host_serial_receive_start_interrupt_if2;
+  usb_receive_interrupt_enabled = true;
 #if USE_SERIAL_ON_A6A7>0
   if( serial_tc5 ) serial_tc5.set_rx_handler(host_serial_receive_finished_interrupt_if3);
 #endif  
@@ -905,7 +1024,7 @@ int host_serial_available_for_write(byte i)
     {
     case 0: return Serial.availableForWrite(); break;
     case 1: return Serial1.availableForWrite(); break;
-    case 2: return SerialUSB.availableForWrite(); break;
+    case 2: return usb_available_for_write(); break;
 #if USE_SERIAL_ON_A6A7>0
     case 3: return serial_tc5.availableForWrite(); break;
 #endif
@@ -975,7 +1094,7 @@ size_t host_serial_write(byte i, uint8_t b)
     {
     case 0: return Serial.write(b); break;
     case 1: return Serial1.write(b); break;
-    case 2: return SerialUSB.write(b); break;
+    case 2: return usb_write(b); break;
 #if USE_SERIAL_ON_A6A7>0
     case 3: return serial_tc5.write(b); break;
 #endif
