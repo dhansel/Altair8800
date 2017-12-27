@@ -60,7 +60,7 @@ bool dataHandlerSend(unsigned long no, char* data, int size)
           // if there was nothing more to read then signal end-of-file
           if( n==0 ) return false;
 
-          // XMODEM sends blocks of 128 bytes so if we have less then that
+          // XMODEM sends blocks of 128 bytes so if we have less than that
           // fill the rest of the buffer with EOF (ASCII 26) characters
           while( n<size ) data[n++]=26;
 
@@ -150,7 +150,7 @@ static char *getFilename(const char *prompt)
 
           if( first )
             {
-              // nothing found => send BELL
+              // no match found => send BELL
               Serial.write(7);
             }
           else if( buf[l]==0 )
@@ -179,7 +179,7 @@ static char *getFilename(const char *prompt)
             }
           else
             {
-              // print added characters, set dot position and length
+              // print added characters, set new length and dot position
               while( buf[l] ) { Serial.write(buf[l]); if( buf[l]=='.' ) dot_pos = l; l++; }
             }
         }
@@ -211,7 +211,7 @@ static bool checkOverwrite(char *fname)
     {
       char c=0;
       Serial.print(F("File ")); Serial.print(fname); Serial.print(F(" exists. Overwrite (y/n)? "));
-      while(c!='y' && c!='n') c = Serial.read();
+      while(c!='y' && c!='n' && c!=27) c = Serial.read();
       Serial.println(c);
       return c=='y';
     }
