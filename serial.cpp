@@ -34,6 +34,8 @@
 #define SST_OVRN2    0x40 // used in the simulator to signal that OVRN is upcoming
 #define SST_INT      0x80 // interrupt signaled
 
+#define SSC_SIOTP0   0x01 // revision of SIO board, bit 0
+#define SSC_SIOTP1   0x02 // revision of SIO board, bit 1
 #define SSC_INTTX    0x20 // transmit interrupt enabled
 #define SSC_REALTIME 0x40 // force real-(simulation-)time operation (always use baud rate)
 #define SSC_INTRX    0x80 // receive  interrupt enabled
@@ -87,12 +89,30 @@ void set_serial_status(byte dev, byte status)
   // set the device status register
   if( dev>=CSM_2SIO1 && dev<=CSM_2SIO4 )
     serial_status_dev[dev] = status & ~SST_OVRN2;
-  else
+  else if( (serial_ctrl[dev]&(SSC_SIOTP0|SSC_SIOTP1))==1 || dev==CSM_ACR )
     {
+      // 88-SIO rev 1
       byte data = 0x00;
-      if( status & SST_OVRN ) data |= 0x10;
+      if( status & SST_OVRN )    data |= 0x10;
       if( !(status & SST_RDRF) ) data |= 0x01;
       if( !(status & SST_TDRE) ) data |= 0x80;
+      serial_status_dev[dev] = data;
+    }
+  else if( (serial_ctrl[dev]&(SSC_SIOTP0|SSC_SIOTP1))==0 )
+    {
+      // 88-SIO rev 0
+      byte data = 0x00;
+      if( (status & SST_RDRF) ) data |= 0x20;
+      if( (status & SST_TDRE) ) data |= 0x01;
+      serial_status_dev[dev] = data;
+    }
+  else
+    {
+      // console attached to Cromeco FDC
+      byte data = 0x00;
+      if( status & SST_OVRN )   data |= 0x02;
+      if( (status & SST_RDRF) ) data |= 0x40;
+      if( (status & SST_TDRE) ) data |= 0x80;
       serial_status_dev[dev] = data;
     }
 
@@ -223,6 +243,8 @@ void serial_stop(byte dev)
       filesys_close(serial_fid[dev]);
       serial_fid[dev] = 0;
      }
+
+  serial_update_hlda_led();
 }
 
 
@@ -242,6 +264,20 @@ void serial_close_files()
 // -----------------------------------------------------------------------------------------------------------------------
 
 
+void serial_set_config(byte dev)
+{
+  if( dev==0xff )
+    {
+      for(dev=0; dev<NUM_SERIAL_DEVICES; dev++) serial_set_config(dev);
+    }
+  else
+    {
+      serial_ctrl[dev] = config_serial_realtime(dev) ? SSC_REALTIME : 0;
+      if( dev==CSM_SIO ) serial_ctrl[dev] |= config_serial_siorev() & 3;
+    }
+}
+
+
 void serial_reset(byte dev)
 {
   if( dev==0xff )
@@ -250,7 +286,7 @@ void serial_reset(byte dev)
     }
   else
     {
-      serial_ctrl[dev] = config_serial_realtime(dev) ? SSC_REALTIME : 0;
+      serial_set_config(dev);
       set_serial_status(dev, SST_TDRE);
     }
 }
@@ -716,12 +752,16 @@ byte serial_sio_in_ctrl()
   if( !(serial_ctrl[CSM_SIO] & (SSC_INTTX|SSC_REALTIME)) )
     {
       byte fid = serial_fid[CSM_SIO];
-      
+
       data &= ~0x80;
       if( fid>0 && fid<0xff && filesys_is_write(fid) )
         { if( filesys_eof(fid) ) data |= 0x80; }
       else
         { if( !host_serial_available_for_write(config_serial_map_sim_to_host(CSM_SIO)) ) data |= 0x80; }
+
+      // flip TDRE flag when using rev 0 or Cromeco
+      if( (serial_ctrl[CSM_SIO] & (SSC_SIOTP0|SSC_SIOTP1))!=1 ) 
+        data = (data & ~0x80) | ((data & 0x80) ^ 0x80);
     }
 
   return data;

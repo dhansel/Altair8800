@@ -28,6 +28,7 @@
 #include "cpucore.h"
 #include "serial.h"
 #include "timer.h"
+#include "dazzler.h"
 
 #include <SPI.h>
 #include <SD.h>
@@ -695,6 +696,29 @@ inline size_t usb_write(uint8_t b)
   return 1;
 }
 
+inline size_t usb_write(const char *buf, size_t len)
+{
+  // if buffer is full, wait until it gets cleared (in usb_isr)
+  while( usb_buffer_len>=USB_BUFFER_SIZE ); 
+
+  noInterrupts();
+  
+  // buffer data
+  size_t n = 0;
+  while( usb_buffer_len<USB_BUFFER_SIZE && len-- > 0 )
+    usb_buffer[usb_buffer_len++] = buf[n++];
+      
+  // if interrupts for received IN tokens are not enabled then enable them now
+  // (buffered data will be sent when the next IN token is received)
+  if( !Is_udd_in_send_interrupt_enabled(CDC_TX) && Is_udd_endpoint_configured(CDC_TX) )
+    { udd_enable_endpoint_interrupt(CDC_TX); udd_enable_in_send_interrupt(CDC_TX); }
+  
+  interrupts();
+  
+  return n;
+}
+
+
 inline int usb_available_for_write()
 {
   return USB_BUFFER_SIZE-usb_buffer_len;
@@ -732,11 +756,27 @@ inline int usb_available_for_write()
 //------------------------------------------------------------------------------------------------------
 
 
+host_serial_receive_callback_tp serial_receive_callback[HOST_NUM_SERIAL_PORTS];
+
+host_serial_receive_callback_tp host_serial_set_receive_callback(byte iface, host_serial_receive_callback_tp f)
+{
+  host_serial_receive_callback_tp old_f = NULL;
+
+  if( iface>=0 && iface<HOST_NUM_SERIAL_PORTS )
+    {
+      old_f = serial_receive_callback[iface];
+      serial_receive_callback[iface] = f;
+    }
+
+  return old_f;
+}
+
+
 static void host_serial_receive_finished_interrupt_if0()
 {
   // a complete character should have been received
   if( Serial.available() )
-    serial_receive_host_data(0, Serial.read());
+    serial_receive_callback[0](0, Serial.read());
   else 
     host_interrupt_timer_stop(8);
 }
@@ -755,7 +795,7 @@ static void host_serial_receive_finished_interrupt_if1()
 {
   // a complete character should have been received
   if( Serial1.available() )
-    serial_receive_host_data(1, Serial1.read());
+    serial_receive_callback[1](1, Serial1.read());
   else 
     host_interrupt_timer_stop(7);
 }
@@ -774,7 +814,7 @@ static void host_serial_receive_finished_interrupt_if2()
 {
   // a complete character should have been received
   if( SerialUSB.available() )
-    serial_receive_host_data(2, SerialUSB.read());
+    serial_receive_callback[2](2, SerialUSB.read());
   else 
     host_interrupt_timer_stop(6);
 }
@@ -782,12 +822,12 @@ static void host_serial_receive_finished_interrupt_if2()
 
 void host_serial_receive_start_interrupt_if2()
 {
+  // receive data
   if( !host_interrupt_timer_running(6) )
     {
-      // receive data
       if( SerialUSB.available() )
-        serial_receive_host_data(2, SerialUSB.read());
-
+        serial_receive_callback[2](2, SerialUSB.read());
+      
       // if more to receive then schedule timer
       if( SerialUSB.available() )
         host_interrupt_timer_start(6);
@@ -805,7 +845,7 @@ static void host_serial_receive_finished_interrupt_if3()
 {
   // a new character has been received
   int d = serial_tc5.read();
-  if( d>=0 ) serial_receive_host_data(3, d);
+  if( d>=0 ) serial_receive_callback[3](3, d);
 }
 #endif
 
@@ -820,7 +860,7 @@ static void host_serial_receive_finished_interrupt_if4()
 {
   // a new character has been received
   int d = serial_tc4.read();
-  if( d>=0 ) serial_receive_host_data(HOST_NUM_SERIAL_PORTS-1, d);
+  if( d>=0 ) serial_receive_callback[HOST_NUM_SERIAL_PORTS-1](HOST_NUM_SERIAL_PORTS-1, d);
 }
 #endif
 
@@ -1106,6 +1146,48 @@ size_t host_serial_write(byte i, uint8_t b)
   return 0;
 }
 
+size_t host_serial_write(byte i, const char *buf, size_t n)
+{
+  switch( i )
+    {
+    case 0: 
+      {
+        size_t i;
+        // do not allow serial interrupts while writing the data, otherwise
+        // the serial transmit buffer can get out of sync and skip data bytes
+        // (bug in Arduino UART serial implementation)
+        noInterrupts();
+        if( Serial.availableForWrite()<n ) n = Serial.availableForWrite();
+        for(i=0; i<n; i++) Serial.write(buf[i]); 
+        interrupts();
+        return i;
+      }
+
+    case 1: 
+      {
+        size_t i;
+        // do not allow serial interrupts while writing the data, otherwise
+        // the serial transmit buffer can get out of sync and skip data bytes
+        // (bug in Arduino UART serial implementation)
+        noInterrupts();
+        if( Serial1.availableForWrite()<n ) n = Serial1.availableForWrite();
+        for(i=0; i<n; i++) Serial1.write(buf[i]); 
+        interrupts();
+        return i;
+      }
+
+    case 2: return usb_write(buf, n); break;
+#if USE_SERIAL_ON_A6A7>0
+    case 3: return serial_tc5.write(buf, n); break;
+#endif
+#if USE_SERIAL_ON_RXLTXL>0
+    case (HOST_NUM_SERIAL_PORTS-1): return serial_tc4.write(buf, n); break;
+#endif
+    }
+
+  return 0;
+}
+
 
 bool host_serial_ok(byte i)
 { 
@@ -1148,11 +1230,11 @@ bool host_serial_port_baud_limits(byte i, uint32_t *min, uint32_t *max)
 {
   switch(i)
     {
-    case 0: *min = 600;    *max = 115200; break;
-    case 1: *min = 110;    *max = 115200; break;
-    case 2: *min = 115200; *max = 115200; break;
+    case 0: *min = 600;    *max = 1050000; break;
+    case 1: *min = 110;    *max = 1050000; break;
+    case 2: *min = 115200; *max =  115200; break;
 #if USE_SERIAL_ON_A6A7>0
-    case 3: *min = 110;    *max =  38400; break;
+    case 3: *min = 110;    *max =   38400; break;
 #endif
 #if USE_SERIAL_ON_RXLTXL>0
     case (HOST_NUM_SERIAL_PORTS-1): *min = 110; *max =  38400; break;
@@ -1472,6 +1554,10 @@ void host_setup()
   // restore HLDA status light to what it was before
   if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
 #endif
+
+  // set serial receive callbacks to default
+  for(byte i=0; i<HOST_NUM_SERIAL_PORTS; i++)
+    host_serial_set_receive_callback(i, serial_receive_host_data);
 }
 
 
@@ -1600,6 +1686,5 @@ uint32_t host_set_file(const char *filename, uint32_t offset, uint32_t len, byte
 
   return res;
 }
-
 
 #endif

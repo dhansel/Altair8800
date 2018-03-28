@@ -33,6 +33,7 @@
 #include "hdsk.h"
 #include "timer.h"
 #include "prog.h"
+#include "dazzler.h"
 
 #define BIT(n) (1<<(n))
 
@@ -385,6 +386,10 @@ void process_inputs()
   if( cswitch & BIT(SW_CLR) )
     {
       serial_close_files();
+#if USE_DAZZLER>0
+      // disable Dazzler
+      dazzler_out_ctrl(0);
+#endif
     }
 
   if( cswitch & BIT(SW_RUN) )
@@ -1286,6 +1291,10 @@ void altair_out(byte addr, byte data)
     case 0010:
     case 0011:
     case 0012: drive_out(addr, data); break;
+#ifdef USE_DAZZLER
+    case 0016: dazzler_out_ctrl(data); break;
+    case 0017: dazzler_out_pict(data); break;
+#endif
     case 0240:
     case 0241:
     case 0242:
@@ -1353,6 +1362,12 @@ byte altair_in(byte addr)
     case 0007: data = serial_acr_in_data(); break;
     case 0021: data = serial_2sio1_in_data(); break;
     case 0023: data = serial_2sio2_in_data(); break;
+    case 0016:
+    case 0030:
+    case 0031:
+    case 0032:
+    case 0033:
+    case 0034: data = dazzler_in(addr); break;
 #if USE_SECOND_2SIO>0
     case 0025: data = serial_2sio3_in_data(); break;
     case 0027: data = serial_2sio4_in_data(); break;
@@ -1391,6 +1406,7 @@ void setup()
   profile_setup();
   rtc_setup();
   printer_setup();
+  dazzler_setup();
 
   // if RESET switch is held up during powerup then use default configuration settings
   if( host_is_reset() )

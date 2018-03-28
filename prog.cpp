@@ -24,6 +24,7 @@
 #include "prog_tools.h"
 #include "prog_games.h"
 #include "prog_ps2.h"
+#include "prog_dazzler.h"
 #include "numsys.h"
 #include "host.h"
 #include "mem.h"
@@ -62,8 +63,19 @@ struct prog_info_struct get_prog_info(byte i)
       {PSTR("Music system"),               prog_tools_copy_musicsys,      true},
       {PSTR("Hard disk boot ROM"),         prog_tools_copy_hdbl,          true},
       {PSTR("Multi-boot loader ROM"),      prog_tools_copy_multiboot,     true},
-      //{PSTR("ADEXER"),                     prog_tools_copy_adexer,        true},
 #endif
+#if USE_DAZZLER>0
+      {PSTR("Kaleidoscope"),               prog_dazzler_copy_kaleidoscope,true},
+      {PSTR("DazzleDoodle"),               prog_dazzler_copy_doodle,      true},
+      {PSTR("DazzleMation"),               prog_dazzler_copy_animation,   true},
+      {PSTR("DazzleWriter"),               prog_dazzler_copy_writer,      true},
+      {PSTR("Dazzler Life"),               prog_dazzler_copy_life,        true},
+      {PSTR("Dazzler Track"),              prog_dazzler_copy_track,       true},
+      {PSTR("Dazzler Chase"),              prog_dazzler_copy_chase,       true},
+      {PSTR("Dazzler Spacewar"),           prog_dazzler_copy_spacewar,    true},
+      {PSTR("Dazzler Gotcha"),             prog_dazzler_copy_gotcha,      true},
+#endif
+      //{PSTR("ADEXER"),                     prog_tools_copy_adexer,        true},
       //{PSTR("Status lights test"),         prog_tools_copy_statustest,    false},
       //{PSTR("Serial echo using IRQ"),      prog_tools_copy_serialirqtest, false},
       {NULL, NULL, false}

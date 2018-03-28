@@ -274,7 +274,9 @@ uint32_t host_set_file(const char *filename, uint32_t offset, uint32_t len, byte
 }
 
 
-// ----------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------------------------
+
+static host_serial_receive_callback_tp serial_receive_callbacks[HOSTPC_NUM_SOCKET_CONN+1];
 
 static int ctrlC = 0;
 
@@ -642,7 +644,7 @@ void host_check_interrupts()
         host_check_ctrlc(c);
 	
 	if( c>=0 )
-          serial_receive_host_data(0, (byte) c);
+          (serial_receive_callbacks[0])(0, (byte) c);
 	
 	prev_char_cycles[0] = timer_get_cycles();
       }
@@ -655,7 +657,7 @@ void host_check_interrupts()
           // double ctrl-c on primary interface quits emulator
           if( i==SwitchSerial.getSelected() ) host_check_ctrlc(inp_serial[i]);
 
-          serial_receive_host_data(i, (byte) inp_serial[i]);
+          (serial_receive_callbacks[i])(i, (byte) inp_serial[i]);
           
           // we have consumed the input => signal input thread to receive more
           inp_serial[i] = -1;
@@ -676,6 +678,14 @@ void host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_prim
 
   // switch the primary serial interface (if requested)
   if( set_primary_interface ) SwitchSerial.select(iface); 
+}
+
+
+host_serial_receive_callback_tp host_serial_set_receive_callback(byte iface, host_serial_receive_callback_tp f)
+{
+  host_serial_receive_callback_tp old_f = serial_receive_callbacks[iface];
+  serial_receive_callbacks[iface] = f;
+  return old_f;
 }
 
 
@@ -737,6 +747,18 @@ size_t host_serial_write(byte i, uint8_t data)
     { send(iface_socket[i-1], (char *) &data, 1, 0 /*MSG_NOSIGNAL*/); return 1; }
 
   return 0;
+}
+
+
+size_t host_serial_write(byte i, const char *buf, size_t n)
+{
+  if( i==0 )
+    { return Serial.write(buf, n); }
+  else if( i<HOSTPC_NUM_SOCKET_CONN+1 && iface_socket[i-1] != INVALID_SOCKET )
+    { return send(iface_socket[i-1], (const char *) buf, n, 0 /*MSG_NOSIGNAL*/); }
+
+  // not connected => just swallow data so we don't block
+  return n;
 }
 
 
@@ -874,6 +896,10 @@ void host_setup()
   
   // initialize random number generator
   srand((unsigned int) time(NULL));
+
+  // set serial receive callbacks to default
+  for(byte i=0; i<HOSTPC_NUM_SOCKET_CONN+1; i++)
+    host_serial_set_receive_callback(i, serial_receive_host_data);
 }
 
 #endif

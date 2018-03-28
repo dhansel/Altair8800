@@ -38,7 +38,14 @@ void mem_unprotect(uint16_t a);
 // that area.  Faster to check the address on writing than reading since there are far more
 // reads than writes. Also we can skip memory bounds checking because addresses are 16 bit.
 #define MREAD(a)    (Mem[a])
-#define MWRITE(a,v) {if( (a)<=mem_ram_limit && !MEM_IS_PROTECTED(a) ) Mem[a]=v;}
+
+#if USE_DAZZLER>0
+#include "dazzler.h"
+#define MWRITE(a,v) {if( (a)<=mem_ram_limit && !MEM_IS_PROTECTED(a) ) Mem[a]=v; dazzler_write_mem(a, v); }
+#else
+#define MWRITE(a,v) {if( (a)<=mem_ram_limit && !MEM_IS_PROTECTED(a) ) Mem[a]=v; }
+#endif
+
 #endif
 
 // WARNING: arguments to MEM_READ and MEM_WRITE macros should not have side effects

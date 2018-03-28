@@ -41,6 +41,7 @@ void serial_receive_host_data(byte host_interface, byte b);
 bool serial_available();
 int  serial_read();
 void serial_reset(byte dev = 0xff);
+void serial_set_config(byte dev = 0xff);
 byte serial_last_active_primary_device();
 
 byte serial_2sio1_in_ctrl();

@@ -26,22 +26,27 @@
 #include "drive.h"
 #include "hdsk.h"
 #include "prog.h"
+#include "dazzler.h"
 #include "sdmanager.h"
 
-#define CONFIG_FILE_VERSION 3
+#define CONFIG_FILE_VERSION 5
 
-#define  BAUD_110    0
-#define  BAUD_150    1
-#define  BAUD_300    2
-#define  BAUD_600    3
-#define  BAUD_1200   4
-#define  BAUD_2400   5
-#define  BAUD_4800   6
-#define  BAUD_9600   7
-#define  BAUD_19200  8
-#define  BAUD_38400  9
-#define  BAUD_57600  10
-#define  BAUD_115200 11
+#define BAUD_110     0
+#define BAUD_150     1
+#define BAUD_300     2
+#define BAUD_600     3
+#define BAUD_1200    4
+#define BAUD_2400    5
+#define BAUD_4800    6
+#define BAUD_9600    7
+#define BAUD_19200   8
+#define BAUD_38400   9
+#define BAUD_57600   10
+#define BAUD_115200  11
+#define BAUD_250000  12
+#define BAUD_525000  13
+#define BAUD_750000  14
+#define BAUD_1050000 15
 
 #if HOST_NUM_SERIAL_PORTS>5
 #error "Maximum number of host serial interfaces supported is 5"
@@ -73,9 +78,15 @@
 uint32_t config_flags;
 
 
-// cofig_serial_settings:
+// config_flags2:
+// xxxxxxxx xxxxxxxx xxxxxxxx xxxxxZZZ
+// ZZZ  = map dazzler to host interface (000=NONE, 001=1st, 010=2nd, 011=3rd, 100=4th, 101=5th)
+uint32_t config_flags2;
+
+
+// config_serial_settings:
 // xxxxxxxx 44443333 2222xPPP 11110000
-// 0000 = baud rate for fist   host interface (see baud rates above)
+// 0000 = baud rate for first  host interface (see baud rates above)
 // 1111 = baud rate for second host interface (see baud rates above)
 // 2222 = baud rate for third  host interface (see baud rates above)
 // 3333 = baud rate for fourth host interface (see baud rates above)
@@ -94,8 +105,8 @@ uint32_t config_serial_settings, new_config_serial_settings;
 uint32_t config_serial_settings2, new_config_serial_settings2;
 
 
-// config_serial_device_settings[0-3]
-// xxxxxxxx xxxxMMMR TT77UUxx CNNNBBBB
+// config_serial_device_settings[0-5]
+// xxxxxxxx xxxxMMMR TT77UUVV CNNNBBBB
 // BBBB = baud rate for serial playback (see baud rates above)
 // NNN  = NULs to send after a carriage return when playing back examples
 // C    = trap CLOAD/CSAVE in extended BASIC (for CSM_ACR device only)
@@ -104,6 +115,7 @@ uint32_t config_serial_settings2, new_config_serial_settings2;
 // 77   = use 7 bit for serial outputs (00=off [use 8 bit], 01=on, 10=autodetect)
 // TT   = translate backspace to (00=off, 01=underscore, 10=autodetect, 11=delete)
 // R    = force realtime operation (use baud rate even if not using interrupts)
+// VV   = 88-SIO board version (0=rev0, 1=rev1, 2=Cromemco)
 uint32_t config_serial_device_settings[NUM_SERIAL_DEVICES];
 
 
@@ -165,19 +177,23 @@ static uint32_t config_baud_rate(byte b)
   uint32_t res;
   switch(b)
     {
-    case BAUD_110   : res = 110;    break;
-    case BAUD_150   : res = 150;    break;
-    case BAUD_300   : res = 300;    break;
-    case BAUD_600   : res = 600;    break;
-    case BAUD_1200  : res = 1200;   break;
-    case BAUD_2400  : res = 2400;   break;
-    case BAUD_4800  : res = 4800;   break;
-    case BAUD_9600  : res = 9600;   break;
-    case BAUD_19200 : res = 19200;  break;
-    case BAUD_38400 : res = 38400;  break;
-    case BAUD_57600 : res = 57600;  break;
-    case BAUD_115200: 
-    default         : res = 115200; break;
+    case BAUD_110    : res = 110;     break;
+    case BAUD_150    : res = 150;     break;
+    case BAUD_300    : res = 300;     break;
+    case BAUD_600    : res = 600;     break;
+    case BAUD_1200   : res = 1200;    break;
+    case BAUD_2400   : res = 2400;    break;
+    case BAUD_4800   : res = 4800;    break;
+    case BAUD_9600   : res = 9600;    break;
+    case BAUD_19200  : res = 19200;   break;
+    case BAUD_38400  : res = 38400;   break;
+    case BAUD_57600  : res = 57600;   break;
+    case BAUD_115200 : res = 115200;  break;
+    case BAUD_250000 : res = 250000;  break;
+    case BAUD_525000 : res = 525000;  break;
+    case BAUD_750000 : res = 750000;  break;
+    case BAUD_1050000: res = 1050000; break;
+    default          : res = 115200;  break;
     }
 
   return res;
@@ -283,6 +299,11 @@ bool config_serial_7bit(byte dev, uint16_t PC)
     return b==CSF_ON;
 }
 
+
+byte config_serial_siorev()
+{
+  return get_bits(config_serial_device_settings[CSM_SIO], 8, 2);
+}
 
 bool config_serial_trap_CLOAD()
 {
@@ -391,6 +412,12 @@ byte config_printer_map_to_host_serial()
 byte config_printer_type()
 {
   return get_bits(config_flags, 19, 2);
+}
+
+
+byte config_dazzler_interface()
+{
+  return config_map_device_to_host_interface(get_bits(config_flags2, 0, 3));
 }
 
 
@@ -551,6 +578,17 @@ static void print_serial_flag_backspace(uint32_t settings)
 }
 
 
+static void print_serial_flag_siorev(uint32_t settings)
+{
+  switch( get_bits(settings, 8, 2) )
+    {
+    case 0: Serial.print(F("rev0"));    break;
+    case 1: Serial.print(F("rev1"));    break;
+    case 2: Serial.print(F("Cromemco")); break;
+    }
+}
+
+
 static void print_device_mapped_to(byte s)
 {
   if( s==0 )
@@ -569,6 +607,20 @@ static void print_device_mapped_to(byte s)
 static void print_serial_device_mapped_to(uint32_t settings)
 {
   print_device_mapped_to(get_bits(settings, 17, 3));
+}
+
+
+static void print_dazzler_mapped_to()
+{
+  byte s = get_bits(config_flags2, 0, 3);
+
+  if( s==0 )
+    Serial.print(F("Disabled")); 
+  else
+    {
+      Serial.print(F("On "));
+      Serial.print(host_serial_port_name(s-1));
+    }
 }
 
 
@@ -719,7 +771,7 @@ static byte toggle_host_serial_baud_rate(byte iface, byte n)
   if( host_serial_port_baud_limits(iface, &min, &max) )
     {
       do 
-        { n = (n + 1) % 12; }
+        { n = (n + 1) % 16; }
       while( config_baud_rate(n) < min || config_baud_rate(n) > max );
       
 #if defined(__SAM3X8E__)
@@ -975,13 +1027,14 @@ static bool save_config(byte fileno)
   // better to write all data at once (will overwrite instead
   // of deleting/creating the file)
   byte s = sizeof(uint32_t);
-  byte data[(12+NUM_SERIAL_DEVICES)*sizeof(uint32_t)+1+1+NUM_DRIVES+1+NUM_HDSK_UNITS*4+1+1];
+  byte data[(13+NUM_SERIAL_DEVICES)*sizeof(uint32_t)+1+1+NUM_DRIVES+1+NUM_HDSK_UNITS*4+1+1];
 
   // merge version number into config_flags
   config_flags = (config_flags & 0x00ffffff) | (((uint32_t) CONFIG_FILE_VERSION) << 24);
 
   word n = 0;
   memcpy(data+n, &config_flags, s); n+=s;
+  memcpy(data+n, &config_flags2, s); n+=s;
   memcpy(data+n, &new_config_serial_settings, s); n+=s;
   memcpy(data+n, &new_config_serial_settings2, s); n+=s;
   data[n] = NUM_SERIAL_DEVICES; n++;
@@ -1017,10 +1070,16 @@ static bool load_config(byte fileno)
 
       byte s = sizeof(uint32_t);
       filesys_read_data(fid, &config_flags, s);
-      
+
       // highest 8 bits are file version
       byte v = config_flags >> 24;
 
+      if( v>=5 )
+        {
+          // config file before version 5 does not have config_flags2
+          filesys_read_data(fid, &config_flags2, s);
+        }
+      
       filesys_read_data(fid, &new_config_serial_settings, s);
 
       if( v<3 )
@@ -1044,6 +1103,13 @@ static bool load_config(byte fileno)
       if( NUM_SERIAL_DEVICES<n )
         for(i=NUM_SERIAL_DEVICES*s; i<n*s; i++)
           filesys_read_data(fid, &d, 1);
+
+      if( v<4 )
+        {
+          // version 4 introduces SIO revision, rev1 should be the default
+          for(i=0; i<NUM_SERIAL_DEVICES; i++)
+            config_serial_device_settings[i] = (config_serial_device_settings[i] & ~0x300) | 0x100;
+        }
 
       if( v==0 )
         {
@@ -1507,7 +1573,7 @@ void config_edit_interrupts()
 void config_edit_serial_device(byte dev)
 {
   uint32_t settings = config_serial_device_settings[dev];
-  byte row, col, r_iface, r_baud, r_force, r_nuls, r_7bits, r_ucase, r_bspace, r_traps, r_cmd;
+  byte row, col, r_iface, r_baud, r_force, r_nuls, r_7bits, r_ucase, r_bspace, r_traps, r_cmd, r_rev;
   bool redraw = true;
 
   while( true )
@@ -1527,6 +1593,8 @@ void config_edit_serial_device(byte dev)
           Serial.print(F("Translate (B)ackspace to   : ")); r_bspace = row++; print_serial_flag_backspace(settings); Serial.println();
           if( dev==CSM_ACR )
             { Serial.print(F("Enable CLOAD/CSAVE (t)raps : ")); r_traps = row++; print_serial_flag(settings, 7, 1); Serial.println(); }
+          else if( dev==CSM_SIO )
+            { Serial.print(F("SIO board re(v)ision       : ")); r_rev = row++; print_serial_flag_siorev(settings); Serial.println(); }
           
           Serial.println(F("\nE(x)it to main menu"));
           
@@ -1623,6 +1691,14 @@ void config_edit_serial_device(byte dev)
             settings = toggle_bits(settings, 7, 1); 
             set_cursor(r_traps, col); 
             print_serial_flag(settings, 7, 1); 
+            break;
+          }
+
+        case 'v': 
+          {
+            settings = toggle_bits(settings, 8, 2, 0, 2); 
+            set_cursor(r_rev, col); 
+            print_serial_flag_siorev(settings); 
             break;
           }
 
@@ -1844,7 +1920,7 @@ void config_edit()
   bool redraw = true;
 
   config_mem_size = ((uint32_t) mem_get_ram_limit_usr())+1;
-  byte row, col, r_profile, r_throttle, r_panel, r_debug, r_clearmem, r_aux1, r_cmd, r_memsize, r_input;
+  byte row, col, r_profile, r_throttle, r_panel, r_debug, r_clearmem, r_aux1, r_cmd, r_memsize, r_input, r_dazzler;
   while( true )
     {
       char c;
@@ -1895,6 +1971,9 @@ void config_edit()
 #endif
 #if NUM_HDSK_UNITS>0
           Serial.print(F("(H) Configure hard disks    : ")); print_hdsk_mounted(); Serial.println(); row++;
+#endif
+#if USE_DAZZLER>0
+          Serial.print(F("(Z) Configure Dazzler       : ")); print_dazzler_mapped_to(); Serial.println(); r_dazzler = row++;
 #endif
           Serial.print(F("(I) Configure interrupts    : ")); print_vi_flag(); Serial.println(); row++;
           row += 1;
@@ -1956,6 +2035,15 @@ void config_edit()
 #if NUM_HDSK_UNITS>0
         case 'H': config_edit_hdsk(); break;
 #endif
+#if USE_DAZZLER>0
+        case 'Z':
+          config_flags2 = toggle_bits(config_flags2, 0, 3, 0, HOST_NUM_SERIAL_PORTS);
+          set_cursor(r_dazzler, col);
+          print_dazzler_mapped_to(); 
+          redraw = false;
+          break;
+#endif
+
         case 'h': 
           {
             Serial.println(F("\n\n"));
@@ -2038,6 +2126,28 @@ void config_edit()
         case 'x':
           {
             bool exit = false;
+
+#if USE_DAZZLER>0            
+            byte di = config_dazzler_interface();
+            if( di<255 )
+              {
+                bool ok = config_printer_map_to_host_serial()!=di;
+
+                for(byte i=0; ok && i<NUM_SERIAL_DEVICES; i++) 
+                  ok = config_serial_map_sim_to_host(i)!=di;
+
+                if( !ok )
+                  {
+                    Serial.print("\nDazzler can not use the same host interface as any other serial device.\nDisable Dazzler and continue (y/n/ESC)? ");
+                    do { delay(50); c = serial_read(); } while( c!='y' && c!='n' && c!=27 );
+                    if( c=='y' )
+                      config_flags2 = set_bits(config_flags2, 0, 3, 0);
+                    else
+                      break;
+                  }
+              }
+#endif
+                
             if( (config_serial_settings&0xFFF7FF) != (new_config_serial_settings&0xFFF7FF) ||
                 (config_serial_settings2) != (new_config_serial_settings2) )
               {
@@ -2053,6 +2163,10 @@ void config_edit()
             if( exit )
               {
                 mem_set_ram_limit_usr(config_mem_size-1);
+                serial_set_config();
+#if USE_DAZZLER>0
+                dazzler_set_iface(config_dazzler_interface());
+#endif
                 Serial.print(F("\033[2J\033[0;0H"));
                 return;
               }
@@ -2083,6 +2197,8 @@ void config_defaults(bool apply)
 #endif
   config_flags |= CF_THROTTLE;
 
+  config_flags2 = 0;
+
   new_config_serial_settings  = 0;
   new_config_serial_settings |= (0 << 8); // USB Programming port is primary interface
 
@@ -2101,6 +2217,7 @@ void config_defaults(bool apply)
   uint32_t s = 0;
   s |= (BAUD_1200 <<  0); // serial playback baud rate: 1200
   s |= (4         <<  4); // 4 NUL characters after newline
+  s |= (1         <<  8); // rev1 SIO board
   s |= (CSF_AUTO  << 10); // autodetect uppercase inputs
   s |= (CSF_AUTO  << 12); // autodetect 7 bit 
   s |= (CSFB_NONE << 14); // no backspace translation

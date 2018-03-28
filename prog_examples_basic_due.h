@@ -10116,27 +10116,23 @@ const char basic_dir[] =
   "28 \"00011100) lander\"\r"
   "29 \"00011101) life\"\r"
   "30 \"00011110) mastermind\"\r"
-  "31 \"00011111) monoply\"\r"
-  "32 \"00100000) orbit\"\r"
-  "33 \"00100001) pizza\"\r"
-  "34 \"00100010) poker\"\r"
-  "35 \"00100011) power\"\r"
-  "36 \"00100100) powers\"\r"
-  "37 \"00100101) qubic\"\r"
-  "38 \"00100110) rock-paper-scissors\"\r"
-  "39 \"00100111) rose\"\r"
-  "40 \"00101000) seawar\"\r"
-  "41 \"00101001) sieve\"\r"
-  "42 \"00101010) sin\"\r"
-  "43 \"00101011) square\"\r"
-  "44 \"00101100) startrek\"\r"
-  "45 \"00101101) swarms\"\r"
-  "46 \"00101110) tic-tac-toe\"\r"
-  "47 \"00101111) towers\"\r"
-  "48 \"00110000) weather\"\r"
-  "49 \"00110001) word-puzzle\"\r"
-  "50 \"00110010) wumpus\"\r";
-
+  "31 \"00011111) orbit\"\r"
+  "32 \"00100000) pizza\"\r"
+  "33 \"00100001) poker\"\r"
+  "34 \"00100010) power\"\r"
+  "35 \"00100011) powers\"\r"
+  "36 \"00100100) qubic\"\r"
+  "37 \"00100101) rock-paper-scissors\"\r"
+  "38 \"00100110) rose\"\r"
+  "39 \"00100111) seawar\"\r"
+  "40 \"00101000) sieve\"\r"
+  "41 \"00101001) sin\"\r"
+  "42 \"00101010) square\"\r"
+  "43 \"00101011) swarms\"\r"
+  "44 \"00101100) tic-tac-toe\"\r"
+  "45 \"00101101) towers\"\r"
+  "46 \"00101110) word-puzzle\"\r"
+  "47 \"00101111) wumpus\"\r";
 
 const char * const basic_programs[]  = {
   basic_dir,
@@ -10170,7 +10166,6 @@ const char * const basic_programs[]  = {
   basic_lander,
   basic_life,
   basic_mastermind,
-  basic_monoply,
   basic_orbit,
   basic_pizza,
   basic_poker,
@@ -10183,12 +10178,11 @@ const char * const basic_programs[]  = {
   basic_sieve,
   basic_sin,
   basic_square,
-  basic_startrek,
   basic_swarms,
   basic_tic_tac_toe,
   basic_towers,
-  basic_weather,
   basic_word_puzzle,
-  basic_wumpus };
+  basic_wumpus
+  };
 
 #endif

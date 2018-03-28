@@ -85,6 +85,7 @@
     <ClCompile Include="breakpoint.cpp" />
     <ClCompile Include="config.cpp" />
     <ClCompile Include="cpucore.cpp" />
+    <ClCompile Include="dazzler.cpp" />
     <ClCompile Include="disassembler.cpp" />
     <ClCompile Include="drive.cpp" />
     <ClCompile Include="filesys.cpp" />
@@ -103,6 +104,7 @@
     <ClCompile Include="profile.cpp" />
     <ClCompile Include="prog.cpp" />
     <ClCompile Include="prog_basic.cpp" />
+    <ClCompile Include="prog_dazzler.cpp" />
     <ClCompile Include="prog_examples.cpp" />
     <ClCompile Include="prog_games.cpp" />
     <ClCompile Include="prog_ps2.cpp" />
@@ -123,6 +125,7 @@
     <ClInclude Include="breakpoint.h" />
     <ClInclude Include="config.h" />
     <ClInclude Include="cpucore.h" />
+    <ClInclude Include="dazzler.h" />
     <ClInclude Include="disassembler.h" />
     <ClInclude Include="drive.h" />
     <ClInclude Include="filesys.h" />
@@ -138,6 +141,7 @@
     <ClInclude Include="profile.h" />
     <ClInclude Include="prog.h" />
     <ClInclude Include="prog_basic.h" />
+    <ClInclude Include="prog_dazzler.h" />
     <ClInclude Include="prog_examples.h" />
     <ClInclude Include="prog_examples_asm.h" />
     <ClInclude Include="prog_examples_basic_due.h" />

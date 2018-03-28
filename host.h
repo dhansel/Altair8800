@@ -19,6 +19,7 @@
 #error requires Arduino Mega2560, Arduino Due or Windows/Linux PC
 #endif
 
+typedef void (*host_serial_receive_callback_tp)(byte iface, byte b);
 
 bool     host_read_function_switch(byte i);
 bool     host_read_function_switch_debounced(byte i);
@@ -35,6 +36,9 @@ int         host_serial_peek(byte i);
 int         host_serial_read(byte i);
 void        host_serial_flush(byte i);
 size_t      host_serial_write(byte i, uint8_t b);
+size_t      host_serial_write(byte i, const char *buf, size_t n);
+host_serial_receive_callback_tp host_serial_set_receive_callback(byte iface, host_serial_receive_callback_tp f);
+
 const char *host_serial_port_name(byte i);
 bool        host_serial_port_baud_limits(byte i, uint32_t *min, uint32_t *max);
 bool        host_serial_port_has_configs(byte i);

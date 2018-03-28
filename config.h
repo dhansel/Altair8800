@@ -48,10 +48,17 @@
 #define USE_SECOND_2SIO 0
 
 
+// Enables support for Cromemco Dazzler. Note that to actually see the
+// Dazzler picture you need to connect a client. See:
+// https://www.hackster.io/david-hansel/dazzler-display-for-altair-simulator-3febc6
+#define USE_DAZZLER 0
+
+
 // If enabled, Address switch state will be set by issuing the '/'
 // serial command.  Actual switches will be ignored.
 // Useful when operating while not connected to the front panel hardware.
 #define STANDALONE 0
+
 
 
 // ------------------------------------------------------------------------------
@@ -126,6 +133,9 @@ byte     config_serial_backspace(byte dev, uint16_t PC);
 bool     config_serial_7bit(byte dev, uint16_t PC);
 bool     config_serial_ucase(byte dev, uint16_t PC);
 bool     config_serial_trap_CLOAD();
+byte     config_serial_siorev();
+
+byte     config_dazzler_interface();
 
 byte        config_printer_type();
 byte        config_printer_map_to_host_serial();

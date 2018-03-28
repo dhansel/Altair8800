@@ -42,6 +42,10 @@
 #error Either set USE_PRINTER to 0 in config.h or reduce MEMSIZE in host_mega.h to 4096+1024, otherwise stability problems may occur
 #endif
 
+#if USE_DAZZLER>0
+#error Arduino MEGA does not support DAZZLER
+#endif
+
 
 /*
   Runs emulation at about 0.5 Mhz clock speed (about 1/4 speed of original Altair8800)
