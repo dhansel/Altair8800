@@ -74,6 +74,7 @@ struct prog_info_struct get_prog_info(byte i)
       {PSTR("Dazzler Chase"),              prog_dazzler_copy_chase,       true},
       {PSTR("Dazzler Spacewar"),           prog_dazzler_copy_spacewar,    true},
       {PSTR("Dazzler Gotcha"),             prog_dazzler_copy_gotcha,      true},
+      {PSTR("Dazzler 4d Tic Tac Toe"),     prog_dazzler_copy_tic_tac_toe, true},
 #endif
       //{PSTR("ADEXER"),                     prog_tools_copy_adexer,        true},
       //{PSTR("Status lights test"),         prog_tools_copy_statustest,    false},

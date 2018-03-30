@@ -15,5 +15,6 @@ uint16_t prog_dazzler_copy_track(byte *dst);
 uint16_t prog_dazzler_copy_chase(byte *dst);
 uint16_t prog_dazzler_copy_spacewar(byte *dst);
 uint16_t prog_dazzler_copy_gotcha(byte *dst);
+uint16_t prog_dazzler_copy_tic_tac_toe(byte *dst);
 
 #endif
