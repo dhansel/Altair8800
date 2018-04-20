@@ -103,7 +103,7 @@ void set_serial_status(byte dev, byte status)
       // 88-SIO rev 0
       byte data = 0x00;
       if( (status & SST_RDRF) ) data |= 0x20;
-      if( (status & SST_TDRE) ) data |= 0x01;
+      if( (status & SST_TDRE) ) data |= 0x02;
       serial_status_dev[dev] = data;
     }
   else
@@ -753,15 +753,29 @@ byte serial_sio_in_ctrl()
     {
       byte fid = serial_fid[CSM_SIO];
 
-      data &= ~0x80;
+      bool can_send = true;
       if( fid>0 && fid<0xff && filesys_is_write(fid) )
-        { if( filesys_eof(fid) ) data |= 0x80; }
+        { if( filesys_eof(fid) ) can_send = false; }
       else
-        { if( !host_serial_available_for_write(config_serial_map_sim_to_host(CSM_SIO)) ) data |= 0x80; }
+        { if( !host_serial_available_for_write(config_serial_map_sim_to_host(CSM_SIO)) ) can_send = false; }
 
-      // flip TDRE flag when using rev 0 or Cromeco
-      if( (serial_ctrl[CSM_SIO] & (SSC_SIOTP0|SSC_SIOTP1))!=1 ) 
-        data = (data & ~0x80) | ((data & 0x80) ^ 0x80);
+      switch( serial_ctrl[CSM_SIO] & (SSC_SIOTP0|SSC_SIOTP1) )
+        {
+        case 0: // 88SIO rev0
+          data = data & ~0x02;
+          if( can_send ) data |= 0x02;
+          break;
+
+        case 1: // 88SIO rev1
+          data = data & ~0x80;
+          if( !can_send ) data |= 0x80;
+          break;
+
+        case 2: // Cromemco
+          data = data & ~0x80;
+          if( can_send ) data |= 0x80;
+          break;
+        }
     }
 
   return data;
