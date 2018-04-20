@@ -107,7 +107,7 @@ void dazzler_out_ctrl(byte v)
   // D7: 1=enabled, 0=disabled
   // D6-D0: bits 15-9 of dazzler memory address
 
-  bool on = v & 0x80;
+  bool on = (v & 0x80)!=0;
   uint16_t a = (v & 0x7f) << 9;
   if( !on )
     {
@@ -269,17 +269,20 @@ byte dazzler_in(byte port)
 void dazzler_set_iface(byte iface)
 {
   static host_serial_receive_callback_tp fprev = NULL;
- 
-  // if we had an interface set, restore that interface's previous receive callback
-  if( dazzler_iface<0xff ) host_serial_set_receive_callback(dazzler_iface, fprev);
 
-  // set receive callback
-  dazzler_iface = iface;
-  fprev = host_serial_set_receive_callback(dazzler_iface, dazzler_receive);
-
+  if( iface != dazzler_iface )
+    {
+      // if we had an interface set, restore that interface's previous receive callback
+      if( dazzler_iface<0xff ) host_serial_set_receive_callback(dazzler_iface, fprev);
+      
+      // set receive callback
+      dazzler_iface = iface;
+      fprev = host_serial_set_receive_callback(dazzler_iface, dazzler_receive);
+      
 #if DEBUGLVL>0
-  if( iface==0xff ) Serial.println("Dazzler disabled"); else {Serial.print("Dazzler on interface:"); Serial.println(iface);}
+      if( iface==0xff ) Serial.println("Dazzler disabled"); else {Serial.print("Dazzler on interface:"); Serial.println(iface);}
 #endif
+    }
 }
 
 
