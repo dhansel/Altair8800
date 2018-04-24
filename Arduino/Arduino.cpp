@@ -9,7 +9,59 @@ using namespace std;
 #ifdef _WIN32
 #include <conio.h>
 #include <Windows.h>
+#include <Wincon.h>
 #define FixNewline(s) s
+
+int EnableANSI()
+{
+  HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+  if (hOut == INVALID_HANDLE_VALUE)
+    {
+      return false;
+    }
+  HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
+  if (hIn == INVALID_HANDLE_VALUE)
+    {
+      return false;
+    }
+
+  DWORD dwOriginalOutMode = 0;
+  DWORD dwOriginalInMode = 0;
+  if (!GetConsoleMode(hOut, &dwOriginalOutMode))
+    {
+      return false;
+    }
+  if (!GetConsoleMode(hIn, &dwOriginalInMode))
+    {
+      return false;
+    }
+
+  DWORD dwRequestedOutModes = 0x000C; // ENABLE_VIRTUAL_TERMINAL_PROCESSING | DISABLE_NEWLINE_AUTO_RETURN;
+  DWORD dwRequestedInModes  = 0x0200; // ENABLE_VIRTUAL_TERMINAL_INPUT;
+
+  DWORD dwOutMode = dwOriginalOutMode | dwRequestedOutModes;
+  if (!SetConsoleMode(hOut, dwOutMode))
+    {
+      // we failed to set both modes, try to step down mode gracefully.
+      dwRequestedOutModes = 0x0004; // ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+      dwOutMode = dwOriginalOutMode | dwRequestedOutModes;
+      if (!SetConsoleMode(hOut, dwOutMode))
+        {
+          // Failed to set any VT mode, can't do anything here.
+          return -1;
+        }
+    }
+
+  DWORD dwInMode = dwOriginalInMode | 0x0200; // ENABLE_VIRTUAL_TERMINAL_INPUT;
+  if (!SetConsoleMode(hIn, dwInMode))
+    {
+      // Failed to set VT input mode, can't do anything here.
+      return -1;
+    }
+
+  return 0;
+}
+
 #else
 
 #include <ncurses.h>
@@ -107,6 +159,7 @@ char SerialClass::read()
     return 0;
 }
 
+
 int    g_argc;
 char **g_argv;
 
@@ -117,7 +170,10 @@ int main(int argc, char **argv)
   g_argc = argc;
   g_argv = argv;
 
-#ifndef _WIN32
+#ifdef _WIN32
+  // enable ANSI model in Windows
+  EnableANSI();
+#else
   // initialize ncurses library
   initscr();
   scrollok(stdscr, TRUE);
