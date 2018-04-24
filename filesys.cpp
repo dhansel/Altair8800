@@ -454,9 +454,9 @@ void filesys_print_dir()
   // 03 BASIC program   a            800
   // 04 <80>            <81>         
 
-  Serial.print(F("\033[2J\n"));
-  Serial.print(F("ID Type            Name        Size\n"));
-  Serial.print(F("-----------------------------------\n"));
+  Serial.println(F("\033[2J\033[0;0H"));
+  Serial.println(F("ID Type            Name        Size"));
+  Serial.println(F("-----------------------------------"));
   byte numEntries = dir_get_num_entries();
   struct DirEntryStruct entry;
   uint16_t totalUsed = 4+numEntries*sizeof(struct DirEntryStruct);
@@ -534,7 +534,8 @@ void filesys_print_dir()
       totalUsed += entry.len;
     }
   
-  Serial.print(F("\nFilesystem size: ")); Serial.print(HOST_STORAGESIZE); Serial.println(F(" bytes"));
+  Serial.println();
+  Serial.print(F("Filesystem size: ")); Serial.print(HOST_STORAGESIZE); Serial.println(F(" bytes"));
   Serial.print(F("         in use: ")); Serial.print(totalUsed); Serial.println(F(" bytes"));
   Serial.print(F("      available: ")); Serial.print(HOST_STORAGESIZE-totalUsed); Serial.println(F(" bytes"));
 }
@@ -542,11 +543,13 @@ void filesys_print_dir()
 
 void filesys_manage()
 {
+  bool redraw = true;
   if( num_open_files>0 )
     {
-      Serial.print(F("\n\n"));
+      Serial.println(F("\n"));
       filesys_print_dir();
-      Serial.println(F("\n\n[File system is locked]\n"));
+      Serial.println(F("\n\nFile system is locked."));
+      Serial.println(F("Press any key to return to main menu..."));
       while( !serial_available() ) delay(50);
       serial_read();
       return;
@@ -554,13 +557,16 @@ void filesys_manage()
 
   while( true )
     {
-      Serial.print(F("\n\n"));
-      filesys_print_dir();
-      Serial.print(F("\n\nCommand (dFrx): "));
+      if( redraw )
+        {
+          Serial.print(F("\n\n"));
+          filesys_print_dir();
+          Serial.print(F("\n\nCommand (dFrx): "));
+        }
       
       while( !serial_available() ) delay(50);
-      Serial.println();
-
+      
+      redraw = true;
       switch( serial_read() )
         {
         case 27:
@@ -569,9 +575,11 @@ void filesys_manage()
 
         case 'd':
           {
+            Serial.println();
             Serial.print(F("\nDelete file with id: "));
             byte i = (byte) numsys_read_word();
-            Serial.print(F("\nReally delete file with id "));
+            Serial.println();
+            Serial.print(F("Really delete file with id "));
             numsys_print_byte(i);
             Serial.print(F(" (y/n)? "));
             while( !serial_available() );
@@ -582,6 +590,7 @@ void filesys_manage()
 
         case 'r':
           {
+            Serial.println();
             Serial.print(F("\nRead file with id: "));
             byte i = (byte) numsys_read_word();
             Serial.println();
@@ -630,12 +639,17 @@ void filesys_manage()
               
         case 'F': 
           {
+            Serial.println();
             Serial.print(F("\nReally re-format and lose all data (y/n)? "));
             while( !serial_available() );
             if( serial_read()=='y' )
               dir_set_num_entries(0);
             break;
           }
+
+        default:
+          redraw = false;
+          break;
         }
     }
 }

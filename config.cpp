@@ -531,6 +531,8 @@ static void print_serial_device_sim(byte dev)
     case CSM_ACR:   Serial.print(F("ACR")); break;
     case CSM_2SIO1: Serial.print(F("2-SIO port 1")); break;
     case CSM_2SIO2: Serial.print(F("2-SIO port 2")); break;
+    case CSM_2SIO3: Serial.print(F("2-SIO2 port 1")); break;
+    case CSM_2SIO4: Serial.print(F("2-SIO2 port 2")); break;
     }
 }
 
@@ -595,7 +597,7 @@ static void print_device_mapped_to(byte s)
     Serial.print(F("Not mapped")); 
   else if( s==7 )
     {
-      Serial.print(F("Primary interface ("));
+      Serial.print(F("Primary ("));
       print_host_primary_interface();
       Serial.print(')');
     }
@@ -751,6 +753,20 @@ static void print_parity(byte p)
 }
 
 
+
+static void print_mapped_serial_cards()
+{
+  bool mapped = false;
+  if( config_serial_map_sim_to_host(CSM_SIO)<0xff   ) { Serial.print(F("SIO")); mapped = true; }
+  if( config_serial_map_sim_to_host(CSM_ACR)<0xff   ) { if(mapped) Serial.print(','); Serial.print(F("ACR")); mapped = true; }
+  if( config_serial_map_sim_to_host(CSM_2SIO1)<0xff ) { if(mapped) Serial.print(','); Serial.print(F("2SIO-P1")); mapped = true; }
+  if( config_serial_map_sim_to_host(CSM_2SIO2)<0xff ) { if(mapped) Serial.print(','); Serial.print(F("2SIO-P2")); mapped = true; }
+  if( config_serial_map_sim_to_host(CSM_2SIO3)<0xff ) { if(mapped) Serial.print(','); Serial.print(F("2SIO2-P1")); mapped = true; }
+  if( config_serial_map_sim_to_host(CSM_2SIO4)<0xff ) { if(mapped) Serial.print(','); Serial.print(F("2SIO2-P2")); mapped = true; }
+  if( !mapped ) Serial.print(F("None"));
+}
+
+
 // --------------------------------------------------------------------------------
 
 
@@ -806,13 +822,14 @@ static void toggle_rtc_rate()
 }
 
 
-static void toggle_throttle(byte row, byte col)
+static void toggle_throttle(byte row, byte col, bool up)
 {
   int i = config_throttle();
-  if     ( i<0  ) i =  1;
-  else if( i==0 ) i = -1;
-  else if( i>30 ) i = 0;
-  else            i = i + 1;
+
+  if( up )
+    { if( ++i>31 ) i = -1; }
+  else
+    { if( --i<-1 ) i = 31; }
 
   config_flags = set_bits(config_flags,  0, 1, i!=0);
   config_flags = set_bits(config_flags, 12, 5, i<0 ? 0 : i);
@@ -890,35 +907,35 @@ static uint32_t toggle_serial_flag_backspace(uint32_t settings)
 }
 
 
-static byte find_floppy_image(byte n)
+static byte find_floppy_image(byte n, bool up)
 {
   byte i=n;
   do
     {
       if( drive_get_image_filename(i)!=NULL ) return i;
-      i++;
+      if( up ) i++; else i--;
     }
-  while( i>0 );
+  while( up && i>0 || !up && i<0xff );
 
   return 0;
 }
 
 
-static byte find_hdsk_image(byte n)
+static byte find_hdsk_image(byte n, bool up)
 {
   byte i=n;
   do
     {
       if( hdsk_get_image_filename(i)!=NULL ) return i;
-      i++;
+      if( up ) i++; else i--;
     }
-  while( i>0 );
+  while( up && i>0 || !up && i<0xff );
 
   return 0;
 }
 
 
-static void toggle_aux1_program(byte row, byte col)
+static void toggle_aux1_program_up(byte row, byte col)
 {
   byte b = config_aux1_prog;
   bool found = false;
@@ -938,7 +955,7 @@ static void toggle_aux1_program(byte row, byte col)
       if( !found && (b & 0xC0)==0x80 )
         {
           // look for next floppy disk image
-          b = find_floppy_image((b & 0x3f)+1) | 0x80;
+          b = find_floppy_image((b & 0x3f)+1, true) | 0x80;
           if( b>0x80 ) 
             found = true;
           else
@@ -948,11 +965,52 @@ static void toggle_aux1_program(byte row, byte col)
       if( !found && (b & 0xC0)==0xC0 )
         {
           // look for next hard disk image
-          b = find_hdsk_image((b & 0x3f)+1) | 0xC0;
+          b = find_hdsk_image((b & 0x3f)+1, true) | 0xC0;
           if( b>0xC0 ) 
             found = true;
           else
             b = 0;
+        }
+    }
+
+  config_aux1_prog = b;
+  print_aux1_program(row, col);
+}
+
+
+static void toggle_aux1_program_down(byte row, byte col)
+{
+  byte b = config_aux1_prog;
+  bool found = false;
+
+  while( !found )
+    {
+      if( !found && (b & 0xC0)==0xC0 )
+        {
+          // look for previous hard disk image
+          b = find_hdsk_image((b & 0x3f)-1, false) | 0xC0;
+          if( b>0xC0 ) 
+            found = true;
+          else
+            b = 0xBF;
+        }
+
+      if( !found && (b & 0xC0)==0x80 )
+        {
+          // look for previous floppy disk image
+          b = find_floppy_image((b & 0x3f)-1, false) | 0x80;
+          if( b>0x80 ) 
+            found = true;
+          else
+            b = 0x3F;
+        }
+
+      if( !found && (b & 0xC0)==0x00 )
+        {
+          // look for previous integrated program
+          b = b - 1;
+          if( prog_get_name(b) )
+            found = true;
         }
     }
 
@@ -987,6 +1045,10 @@ static bool apply_host_serial_settings()
 
   uint32_t timeout = millis() + 30000, timeout2 = 0;
   c = 0;
+
+#if USE_DAZZLER>0
+  dazzler_set_iface(config_dazzler_interface());
+#endif
   do
     {
       if( millis()>timeout2 )
@@ -1323,7 +1385,7 @@ void config_edit_drives()
 
             if( d>=0 && d<=NUM_DRIVES )
               {
-                byte next = find_floppy_image(mounted[d]+1);
+                byte next = find_floppy_image(mounted[d]+1, true);
                 if( drive_get_mounted_image(d)>0 && 
                     drive_get_image_filename(drive_get_mounted_image(d))==NULL &&
                     mounted[d] < drive_get_mounted_image(d) &&
@@ -1426,7 +1488,7 @@ void config_edit_hdsk()
             if( d>=0 && d<4*NUM_HDSK_UNITS )
               {
                 byte u = d/4, p = d % 4;
-                byte next = find_hdsk_image(mounted[d]+1);
+                byte next = find_hdsk_image(mounted[d]+1, true);
                 if( hdsk_get_mounted_image(u, p)>0 && 
                     hdsk_get_image_filename(hdsk_get_mounted_image(u, p))==NULL &&
                     mounted[d] < hdsk_get_mounted_image(u, p) &&
@@ -1596,7 +1658,7 @@ void config_edit_serial_device(byte dev)
           else if( dev==CSM_SIO )
             { Serial.print(F("SIO board re(v)ision       : ")); r_rev = row++; print_serial_flag_siorev(settings); Serial.println(); }
           
-          Serial.println(F("\nE(x)it to main menu"));
+          Serial.println(F("\nE(x)it to previous menu"));
           
           Serial.print(F("\n\nCommand: ")); r_cmd = row+4;
           redraw = false;
@@ -1712,6 +1774,63 @@ void config_edit_serial_device(byte dev)
 }
 
 
+void config_serial_devices()
+{
+  bool redraw = true;
+
+  while( true )
+    {
+      char c;
+      if( redraw )
+        {
+          Serial.print(F("\033[2J\033[0;0H"));
+          Serial.println(F("\nConfigure serial cards\n"));
+
+          Serial.print(F("(1) Configure SIO             : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_SIO]); Serial.println();
+          Serial.print(F("(2) Configure ACR             : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_ACR]); Serial.println(); 
+          Serial.print(F("(3) Configure 2SIO port 1     : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_2SIO1]); Serial.println();
+          Serial.print(F("(4) Configure 2SIO port 2     : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_2SIO2]); Serial.println();
+#if USE_SECOND_2SIO>0
+          Serial.print(F("(5) Configure 2nd 2SIO port 1 : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_2SIO3]); Serial.println();
+          Serial.print(F("(6) Configure 2nd 2SIO port 2 : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_2SIO4]); Serial.println();
+#endif
+          Serial.println(F("\nE(x)it to main menu"));
+          Serial.print(F("\n\nCommand: "));
+        }
+      else
+        set_cursor(14, 10);
+
+      while( !serial_available() ) delay(50);
+      c = serial_read();
+      if( c>31 && c<127 ) Serial.println(c);
+
+      redraw = true;
+      switch( c )
+        {
+        case '1': config_edit_serial_device(CSM_SIO); break;
+        case '2': config_edit_serial_device(CSM_ACR); break;
+        case '3': config_edit_serial_device(CSM_2SIO1); break;
+        case '4': config_edit_serial_device(CSM_2SIO2); break;
+#if USE_SECOND_2SIO>0
+        case '5': config_edit_serial_device(CSM_2SIO3); break;
+        case '6': config_edit_serial_device(CSM_2SIO4); break;
+#endif
+#if USE_PRINTER>0
+        case 'P': config_edit_printer(); break;
+#endif
+
+        case 27:
+        case 'x':
+          return;
+
+        default:
+          redraw = false;
+          break;
+        }
+    }
+}
+
+
 // --------------------------------------------------------------------------------
 
 
@@ -1818,12 +1937,9 @@ void config_host_serial()
   byte row, col, r_baud[HOST_NUM_SERIAL_PORTS], r_primary, r_cmd;
 
   col = 0;
-#if HOST_NUM_SERIAL_PORTS>1
   for(i=0; i<HOST_NUM_SERIAL_PORTS; i++)
     col = max(col, strlen(host_serial_port_name(i)));
-  col += 4;
-#endif
-  col += 28;
+  col += 8;
 
   while( go )
     {
@@ -1836,13 +1952,10 @@ void config_host_serial()
           for(i=0; i<HOST_NUM_SERIAL_PORTS; i++)
             {
               r_baud[i] = row++;
-              Serial.print('('); Serial.print(i); Serial.print(F(") Host Serial")); 
-#if HOST_NUM_SERIAL_PORTS>1
-              Serial.print(i);
-              Serial.print(F(" (")); Serial.print(host_serial_port_name(i)); Serial.print(')');
-#endif
-              set_cursor(r_baud[i], col-12);
-              Serial.print(F(" settings : "));
+              Serial.print('('); Serial.print(i); Serial.print(F(") ")); 
+              Serial.print(host_serial_port_name(i)); 
+              set_cursor(r_baud[i], col-3);
+              Serial.print(F(" : "));
               print_host_serial_config(i, 0, 0);
               Serial.println();
             }
@@ -1927,14 +2040,13 @@ void config_edit()
 
       if( redraw )
         {
-          row = 2;
+          row = 1;
           col = 31;
           Serial.print(F("\033[2J\033[0;0H"));
-          Serial.println();
 
           Serial.print(F("Enable pro(f)iling          : ")); print_flag(CF_PROFILE); Serial.println(); r_profile = row++;
 #if USE_THROTTLE>0
-          Serial.print(F("Set (t)hrottle delay        : ")); print_throttle(); Serial.println(); r_throttle = row++;
+          Serial.print(F("Set throttle delay (t/T)    : ")); print_throttle(); Serial.println(); r_throttle = row++;
 #endif
           Serial.print(F("Enable serial (p)anel       : ")); print_flag(CF_SERIAL_PANEL); Serial.println(); r_panel = row++;
 #if STANDALONE==0
@@ -1943,23 +2055,25 @@ void config_edit()
           Serial.print(F("Enable serial (d)ebug       : ")); print_flag(CF_SERIAL_DEBUG); Serial.println(); r_debug = row++;
           Serial.print(F("Clear (m)emory on powerup   : ")); print_flag(CF_CLEARMEM); Serial.println(); r_clearmem = row++;
           Serial.print(F("RAM size (+/-)              : ")); print_mem_size(config_mem_size, row, col); r_memsize = row++;
-          Serial.print(F("A(u)x1 shortcut program     : ")); print_aux1_program(); Serial.println(); r_aux1 = row++;
+          Serial.print(F("Aux1 shortcut program (u/U) : ")); print_aux1_program(); Serial.println(); r_aux1 = row++;
           Serial.print(F("Configure host (s)erial     : ")); 
 #if HOST_NUM_SERIAL_PORTS>1
-          Serial.print(F("Primary interface is ")); print_host_primary_interface(); Serial.println(); row++;
+          Serial.print(F("Primary: ")); 
+          print_host_primary_interface_aux(get_bits(new_config_serial_settings, 8, 3));
+          Serial.println();
+          if( get_bits(new_config_serial_settings, 8, 3) != config_host_serial_primary() )
+            {
+              set_cursor(row+1, col);
+              Serial.print(F("Current: ")); 
+              print_host_primary_interface_aux(config_host_serial_primary());
+            }
 #else
-          print_host_serial_config(0, 0, 0); Serial.println(); row++;
+          print_host_serial_config(0, 0, 0); Serial.println(); 
 #endif
-
-          Serial.println(); row++;
-          Serial.print(F("(1) Configure SIO           : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_SIO]); Serial.println(); row++;
-          Serial.print(F("(2) Configure ACR           : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_ACR]); Serial.println(); row++;
-          Serial.print(F("(3) Configure 2SIO port 1   : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_2SIO1]); Serial.println(); row++;
-          Serial.print(F("(4) Configure 2SIO port 2   : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_2SIO2]); Serial.println(); row++;
-#if USE_SECOND_2SIO>0
-          Serial.print(F("(5) Configure 2SIO-2 port 1 : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_2SIO3]); Serial.println(); row++;
-          Serial.print(F("(6) Configure 2SIO-2 port 2 : ")); print_serial_device_mapped_to(config_serial_device_settings[CSM_2SIO4]); Serial.println(); row++;
-#endif
+          row+=2;
+          Serial.println(); 
+          Serial.print(F("(E) Configure serial cards  : ")); print_mapped_serial_cards(); Serial.println(F(" mapped")); row++;
+          
 #if USE_PRINTER>0
           Serial.print(F("(P) Configure printer       : ")); 
           print_printer_type();
@@ -1979,19 +2093,17 @@ void config_edit()
           row += 1;
 
           Serial.println();
-          Serial.println(F("(M)anage Filesystem"));
+          Serial.print(F("(M)anage Filesystem     "));
 #if NUM_DRIVES>0 || NUM_HDSK_UNITS>0
-          if( host_have_sd_card() )
-            { Serial.println(F("(F)ile manager for SD card")); row++; }
+          if( host_have_sd_card() ) Serial.print(F("(F)ile manager for SD card")); 
 #endif
-          Serial.println(F("(C)lear memory"));
-          Serial.println(F("(S)ave configuration"));
-          Serial.println(F("(L)oad configuration"));
-          Serial.println(F("(R)eset to defaults"));
-          Serial.println(F("\nE(x)it"));
-          row += 7;
+          Serial.println(); row++;
+          Serial.println(F("(S)ave configuration    (C)lear memory"));
+          Serial.println(F("(L)oad configuration    (R)eset to defaults"));
+          Serial.println(F("E(x)it"));
+          row += 3;
 
-          Serial.print(F("\n\nCommand: ")); r_cmd = row+2;
+          Serial.print(F("\nCommand: ")); r_cmd = row+1;
         }
       else
         set_cursor(r_cmd, 10);
@@ -2005,7 +2117,8 @@ void config_edit()
         {
         case 'f': toggle_flag(CF_PROFILE, r_profile, col); redraw = false; break;
 #if USE_THROTTLE>0
-        case 't': toggle_throttle(r_throttle, col); redraw = false; break;
+        case 't': toggle_throttle(r_throttle, col, true); redraw = false; break;
+        case 'T': toggle_throttle(r_throttle, col, false); redraw = false; break;
 #endif
         case 'p': toggle_flag(CF_SERIAL_PANEL, r_panel, col); redraw = false; break;
 #if STANDALONE==0
@@ -2013,17 +2126,11 @@ void config_edit()
 #endif
         case 'd': toggle_flag(CF_SERIAL_DEBUG, r_debug, col); redraw = false; break;
         case 'm': toggle_flag(CF_CLEARMEM, r_clearmem, col); redraw = false; break;
-        case 'u': toggle_aux1_program(r_aux1, col); redraw = false; break;
+        case 'u': toggle_aux1_program_up(r_aux1, col); redraw = false; break;
+        case 'U': toggle_aux1_program_down(r_aux1, col); redraw = false; break;
         case 's': config_host_serial(); break;
+        case 'E': config_serial_devices(); break;
           
-        case '1': config_edit_serial_device(CSM_SIO); break;
-        case '2': config_edit_serial_device(CSM_ACR); break;
-        case '3': config_edit_serial_device(CSM_2SIO1); break;
-        case '4': config_edit_serial_device(CSM_2SIO2); break;
-#if USE_SECOND_2SIO>0
-        case '5': config_edit_serial_device(CSM_2SIO3); break;
-        case '6': config_edit_serial_device(CSM_2SIO4); break;
-#endif
 #if USE_PRINTER>0
         case 'P': config_edit_printer(); break;
 #endif
@@ -2091,12 +2198,16 @@ void config_edit()
         case 'C': 
           {
             for(uint16_t i=0; i<mem_ram_limit; i++) Mem[i] = 0; 
+            Serial.print(F("Memory cleared."));
+            delay(1500);
+            set_cursor(r_cmd+1, 0);
+            redraw = false;
             break;
           }
 
         case 'S': 
           {
-            Serial.print(F("\n\nSave as config # (0=default): "));
+            Serial.print(F("\nSave as config # (0=default): "));
             bool esc = false;
             byte i = (byte) numsys_read_word(&esc);
             Serial.println();
@@ -2108,7 +2219,7 @@ void config_edit()
           }
         case 'L':
           {
-            Serial.print(F("\n\nLoad config #: "));
+            Serial.print(F("\nLoad config #: "));
             bool esc = false;
             byte i = (byte) numsys_read_word(&esc);
             Serial.println();

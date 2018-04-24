@@ -767,10 +767,10 @@ const char *host_serial_port_name(byte i)
   switch(i)
     {
     case 0: return "Console";
-    case 1: return "1st client on socket 8800";
-    case 2: return "2nd client on socket 8800";
-    case 3: return "3rd client on socket 8800";
-    case 4: return "4th client on socket 8800";
+    case 1: return "1st client port 8800";
+    case 2: return "2nd client port 8800";
+    case 3: return "3rd client port 8800";
+    case 4: return "4th client port 8800";
     }
 
  return "???";
