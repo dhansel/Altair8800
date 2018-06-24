@@ -34,6 +34,7 @@
 #include "timer.h"
 #include "prog.h"
 #include "dazzler.h"
+#include "vdm1.h"
 
 #define BIT(n) (1<<(n))
 
@@ -1197,6 +1198,14 @@ void altair_hlt()
 {
   host_set_status_led_HLTA();
 
+#if STANDALONE>0
+  Serial.print(F("HLT instruction encountered at "));
+  numsys_print_word(regPC-1);
+  Serial.println(F(" => stopping CPU"));
+  host_set_status_led_WAIT();
+  return;
+#endif
+
   if( !host_read_status_led_WAIT() )
     {
       host_set_addr_leds(0xffff);
@@ -1303,6 +1312,9 @@ void altair_out(byte addr, byte data)
     case 0245:
     case 0246:
     case 0247: hdsk_4pio_out(addr, data); break;
+#ifdef USE_VDM1
+    case 0310: vdm1_out(data); break;
+#endif
     case 0020: serial_2sio1_out_ctrl(data); break;
     case 0021: serial_2sio1_out_data(data); break;
     case 0022: serial_2sio2_out_ctrl(data); break;
@@ -1407,6 +1419,7 @@ void setup()
   rtc_setup();
   printer_setup();
   dazzler_setup();
+  vdm1_setup();
 
   // if RESET switch is held up during powerup then use default configuration settings
   if( host_is_reset() )

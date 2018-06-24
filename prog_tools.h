@@ -19,5 +19,6 @@ uint16_t prog_tools_copy_statustest(byte *dst);
 uint16_t prog_tools_copy_serialirqtest(byte *dst);
 uint16_t prog_tools_copy_musicsys(byte *dst);
 uint16_t prog_tools_copy_adexer(byte *dst);
+uint16_t prog_tools_copy_vdmcuter(byte *dst);
 
 #endif

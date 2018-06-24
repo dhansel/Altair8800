@@ -38,6 +38,7 @@ void serial_close_files();
 
 void serial_timer_interrupt_setup(byte dev = 0xff);
 void serial_receive_host_data(byte host_interface, byte b);
+void serial_receive_data(byte dev, byte b);
 bool serial_available();
 int  serial_read();
 void serial_reset(byte dev = 0xff);

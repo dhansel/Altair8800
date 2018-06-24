@@ -54,6 +54,12 @@
 #define USE_DAZZLER 0
 
 
+// Enables support for Processor Technology VDM-1. Note that to actually see the
+// VDM-1 picture you need to connect to a client. See:
+// https://github.com/dhansel/VDM1
+#define USE_VDM1 0
+
+
 // If enabled, Address switch state will be set by issuing the '/'
 // serial command.  Actual switches will be ignored.
 // Useful when operating while not connected to the front panel hardware.
@@ -136,6 +142,11 @@ bool     config_serial_trap_CLOAD();
 byte     config_serial_siorev();
 
 byte     config_dazzler_interface();
+
+byte     config_vdm1_interface();
+uint16_t config_vdm1_address();
+byte     config_vdm1_dip();
+byte     config_vdm1_keyboard_device();
 
 byte        config_printer_type();
 byte        config_printer_map_to_host_serial();

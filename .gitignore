@@ -4,10 +4,14 @@ Altair8800.sln
 Altair8800.sdf
 Altair8800.suo
 Altair8800.vcxproj.user
+Altair8800.vcxproj.filters
 Altair8800.opensdf
+Altair8800.VC.db
+ipch
 AltairStorage.dat
 obj-linux
 obj-msys
 obj-visualc
 *~
 Schematics.pdf
+bak*

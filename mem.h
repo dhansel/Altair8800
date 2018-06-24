@@ -41,7 +41,15 @@ void mem_unprotect(uint16_t a);
 
 #if USE_DAZZLER>0
 #include "dazzler.h"
+#if USE_VDM1>0
+#include "vdm1.h"
+#define MWRITE(a,v) {if( (a)<=mem_ram_limit && !MEM_IS_PROTECTED(a) ) Mem[a]=v; dazzler_write_mem(a, v); vdm1_write_mem(a, v); }
+#else
 #define MWRITE(a,v) {if( (a)<=mem_ram_limit && !MEM_IS_PROTECTED(a) ) Mem[a]=v; dazzler_write_mem(a, v); }
+#endif
+#elif USE_VDM1>0
+#include "vdm1.h"
+#define MWRITE(a,v) {if( (a)<=mem_ram_limit && !MEM_IS_PROTECTED(a) ) Mem[a]=v; vdm1_write_mem(a, v); }
 #else
 #define MWRITE(a,v) {if( (a)<=mem_ram_limit && !MEM_IS_PROTECTED(a) ) Mem[a]=v; }
 #endif

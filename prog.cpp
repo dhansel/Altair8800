@@ -76,6 +76,9 @@ struct prog_info_struct get_prog_info(byte i)
       {PSTR("Dazzler Gotcha"),             prog_dazzler_copy_gotcha,      true},
       {PSTR("Dazzler 4d Tic Tac Toe"),     prog_dazzler_copy_tic_tac_toe, true},
 #endif
+#if USE_VDM1>0
+      {PSTR("Cuter for VDM-1"),            prog_tools_copy_vdmcuter,      true},
+#endif
       //{PSTR("ADEXER"),                     prog_tools_copy_adexer,        true},
       //{PSTR("Status lights test"),         prog_tools_copy_statustest,    false},
       //{PSTR("Serial echo using IRQ"),      prog_tools_copy_serialirqtest, false},

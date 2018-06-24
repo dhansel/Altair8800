@@ -28,8 +28,9 @@
 #include "prog.h"
 #include "dazzler.h"
 #include "sdmanager.h"
+#include "vdm1.h"
 
-#define CONFIG_FILE_VERSION 5
+#define CONFIG_FILE_VERSION 6
 
 #define BAUD_110     0
 #define BAUD_150     1
@@ -79,8 +80,12 @@ uint32_t config_flags;
 
 
 // config_flags2:
-// xxxxxxxx xxxxxxxx xxxxxxxx xxxxxZZZ
+// xxxxxxxx xxxKKKMM MMMMDDDD DDVVVZZZ
 // ZZZ  = map dazzler to host interface (000=NONE, 001=1st, 010=2nd, 011=3rd, 100=4th, 101=5th)
+// VVV  = map VDM-1   to host interface (see above)
+// D    = VDM-1 dip switch settings
+// M    = VDM-1 memory address (6 highest bits)
+// KKK  = map VDM-1 keyboard to serial device (000=NONE, 1=SIO, 2=ACR, 3=2SIO1, 4=2SIO2, 5=2SIO3, 6=2SIO4)
 uint32_t config_flags2;
 
 
@@ -156,6 +161,19 @@ static uint32_t toggle_bits(uint32_t v, byte i, byte n, byte min = 0x00, byte ma
   byte b = get_bits(v, i, n) + 1;
   return set_bits(v, i, n, b>max ? min : (b<min ? min : b));
 }
+
+
+static uint32_t toggle_vdm1_dip(uint32_t v, byte i, bool allowBoth)
+{
+  switch( get_bits(v, i, 2) )
+    {
+    case 0: return set_bits(v, i, 2, 2);
+    case 2: return set_bits(v, i, 2, 1);
+    case 1: return set_bits(v, i, 2, allowBoth ? 3 : 0);
+    case 3: return set_bits(v, i, 2, 0);
+    }
+}
+
 
 static byte config_baud_rate_bits(byte iface)
 {
@@ -421,6 +439,30 @@ byte config_dazzler_interface()
 }
 
 
+byte config_vdm1_interface()
+{
+  return config_map_device_to_host_interface(get_bits(config_flags2, 3, 3));
+}
+
+
+byte config_vdm1_dip()
+{
+  return get_bits(config_flags2, 6, 6);
+}
+
+
+byte config_vdm1_keyboard_device()
+{
+  return ((byte) get_bits(config_flags2, 18, 3))-1;
+}
+
+
+uint16_t config_vdm1_address()
+{
+  return get_bits(config_flags2, 12, 6) * 1024;
+}
+
+
 // --------------------------------------------------------------------------------
 
 
@@ -533,6 +575,7 @@ static void print_serial_device_sim(byte dev)
     case CSM_2SIO2: Serial.print(F("2-SIO port 2")); break;
     case CSM_2SIO3: Serial.print(F("2-SIO2 port 1")); break;
     case CSM_2SIO4: Serial.print(F("2-SIO2 port 2")); break;
+    case 0xff     : Serial.print(F("none")); break;
     }
 }
 
@@ -622,6 +665,63 @@ static void print_dazzler_mapped_to()
     {
       Serial.print(F("On "));
       Serial.print(host_serial_port_name(s-1));
+    }
+}
+
+
+static void print_vdm1_mapped_to()
+{
+  byte s = get_bits(config_flags2, 3, 3);
+
+  if( s==0 )
+    Serial.print(F("Disabled")); 
+  else
+    {
+      Serial.print(F("On "));
+      Serial.print(host_serial_port_name(s-1));
+    }
+}
+
+
+static void print_vdm1_addr()
+{
+  uint16_t a = config_vdm1_address();
+  numsys_print_word(a);
+}
+
+
+static void print_vdm1_dip12()
+{
+  switch( config_vdm1_dip() & 3 )
+    {
+    case 0: Serial.print(F("off/off (no display)")); break;
+    case 2: Serial.print(F("off/on  (normal video)")); break;
+    case 1: Serial.print(F("on /off (inverse video)")); break;
+    case 3: Serial.print(F("on /on  [ILLEGAL]")); break;
+    }
+}
+
+
+static void print_vdm1_dip34()
+{
+  switch( (config_vdm1_dip()>>2) & 3 )
+    {
+    case 0: Serial.print(F("off/off (all cursors suppressed)")); break;
+    case 2: Serial.print(F("off/on  (blinking cursor)")); break;
+    case 1: Serial.print(F("on /off (non-blinking cursor)")); break;
+    case 3: Serial.print(F("on /on  [ILLEGAL]")); break;
+    }
+}
+
+
+static void print_vdm1_dip56()
+{
+  switch( (config_vdm1_dip()>>4) & 3 )
+    {
+    case 0: Serial.print(F("off/off (all characters suppressed)")); break;
+    case 2: Serial.print(F("off/on  (control characters blanked, VT-CR blanking on)")); break;
+    case 1: Serial.print(F("on /off (control characters shown, VT-CR blanking on)")); break;
+    case 3: Serial.print(F("on /on  (control characters shown, VT-CR blanking off)")); break;
     }
 }
 
@@ -1138,8 +1238,16 @@ static bool load_config(byte fileno)
 
       if( v>=5 )
         {
+          unsigned long vv;
+
           // config file before version 5 does not have config_flags2
-          filesys_read_data(fid, &config_flags2, s);
+          filesys_read_data(fid, &vv, s);
+
+          // config file version 5 does not have VDM-1 settings
+          if( v==5 ) 
+            config_flags2 = (vv & 7) | (config_flags2 & ~7);
+          else
+            config_flags2 = vv;
         }
       
       filesys_read_data(fid, &new_config_serial_settings, s);
@@ -1631,6 +1739,103 @@ void config_edit_interrupts()
 
 // --------------------------------------------------------------------------------
 
+#if USE_VDM1>0
+void config_edit_vdm1()
+{
+  byte row, col, r_iface, r_dip12, r_dip34, r_dip56, r_addr, r_cmd, r_kbd;
+  bool go = true;
+  byte i, j;
+
+  // if a VDM-1 client is connected then this will initialize it
+  // in case it is not already initialized
+  vdm1_set_dip(config_vdm1_dip());
+
+  row = 4;
+  col = 22;
+  Serial.print(F("\033[2J\033[0;0H\n"));
+  
+  Serial.println(F("Configure VDM-1 settings"));
+  Serial.print(F("\nMap to (i)nterface : ")); r_iface = row++; print_vdm1_mapped_to(); Serial.println();
+  Serial.print(F("Memory (a)ddress   : ")); r_addr = row++; print_vdm1_addr(); Serial.println();
+  Serial.print(F("DIP switch (1)+2   : ")); r_dip12 = row++; print_vdm1_dip12(); Serial.println();
+  Serial.print(F("DIP switch (3)+4   : ")); r_dip34 = row++; print_vdm1_dip34(); Serial.println();
+  Serial.print(F("DIP switch (5)+6   : ")); r_dip56 = row++; print_vdm1_dip56(); Serial.println();
+  Serial.print(F("Map (k)eyboard to  : ")); r_kbd = row++; print_serial_device_sim(config_vdm1_keyboard_device()); Serial.println();
+  Serial.println(F("\nE(x)it to main menu")); row+=2;
+  Serial.print(F("\n\nCommand: ")); r_cmd = row+2;
+
+  while( go )
+    {
+      set_cursor(r_cmd, 10);
+      while( !serial_available() ) delay(50);
+      char c = serial_read();
+      if( c>31 && c<127 ) Serial.println(c);
+
+      switch( c )
+        {
+        case 'i':
+          config_flags2 = toggle_bits(config_flags2, 3, 3, 0, HOST_NUM_SERIAL_PORTS);
+          set_cursor(r_iface, col);
+          print_vdm1_mapped_to(); 
+          break;
+
+        case '1':
+        case '2':
+          config_flags2 = toggle_vdm1_dip(config_flags2, 6, false);
+          set_cursor(r_dip12, col);
+          print_vdm1_dip12(); 
+          vdm1_set_dip(config_vdm1_dip());
+          break;
+
+        case '3':
+        case '4':
+          config_flags2 = toggle_vdm1_dip(config_flags2, 8, false);
+          set_cursor(r_dip34, col);
+          print_vdm1_dip34(); 
+          vdm1_set_dip(config_vdm1_dip());
+          break;
+
+        case '5':
+        case '6':
+          config_flags2 = toggle_vdm1_dip(config_flags2, 10, true);
+          set_cursor(r_dip56, col);
+          print_vdm1_dip56(); 
+          vdm1_set_dip(config_vdm1_dip());
+          break;
+
+        case 'a':
+          config_flags2 = toggle_bits(config_flags2, 12, 6);
+          set_cursor(r_addr, col);
+          print_vdm1_addr(); 
+          vdm1_set_address(config_vdm1_address());
+          break;
+
+        case 'k':
+          {
+            byte dev = config_vdm1_keyboard_device();
+            if( dev==0xff )
+              dev = 0;
+            else if( dev+1 < NUM_SERIAL_DEVICES )
+              dev++;
+            else
+              dev = 0xff;
+
+            config_flags2 = set_bits(config_flags2, 18, 3, dev+1);
+            set_cursor(r_kbd, col);
+            print_serial_device_sim(config_vdm1_keyboard_device());
+            break;
+          }
+          
+        case 27:
+        case 'x': go = false; break;
+        }
+    }
+}
+#endif
+
+
+// --------------------------------------------------------------------------------
+
 
 void config_edit_serial_device(byte dev)
 {
@@ -2089,6 +2294,9 @@ void config_edit()
 #if USE_DAZZLER>0
           Serial.print(F("(Z) Configure Dazzler       : ")); print_dazzler_mapped_to(); Serial.println(); r_dazzler = row++;
 #endif
+#if USE_VDM1>0
+          Serial.print(F("(V) Configure VDM-1         : ")); print_vdm1_mapped_to(); Serial.println(); row++;
+#endif
           Serial.print(F("(I) Configure interrupts    : ")); print_vi_flag(); Serial.println(); row++;
           row += 1;
 
@@ -2110,7 +2318,7 @@ void config_edit()
 
       while( !serial_available() ) delay(50);
       c = serial_read();
-      if( c>31 && c<127 ) Serial.println(c);
+      if( c>31 && c<127 ) Serial.print(c);
 
       redraw = true;
       switch( c )
@@ -2149,6 +2357,10 @@ void config_edit()
           print_dazzler_mapped_to(); 
           redraw = false;
           break;
+#endif
+#if USE_VDM1>0
+        case 'V':
+          config_edit_vdm1(); break;
 #endif
 
         case 'h': 
@@ -2198,7 +2410,7 @@ void config_edit()
         case 'C': 
           {
             for(uint16_t i=0; i<mem_ram_limit; i++) Mem[i] = 0; 
-            Serial.print(F("Memory cleared."));
+            Serial.print(F("\nMemory cleared."));
             delay(1500);
             set_cursor(r_cmd+1, 0);
             redraw = false;
@@ -2233,6 +2445,10 @@ void config_edit()
           }
         case 'R': config_defaults(false); break;
 
+        case '?':
+          redraw = true;
+          break;
+
         case 27:
         case 'x':
           {
@@ -2258,6 +2474,28 @@ void config_edit()
                   }
               }
 #endif
+#if USE_VDM1>0            
+            byte vi = config_vdm1_interface();
+            if( vi<255 )
+              {
+                bool ok = config_printer_map_to_host_serial()!=vi;
+#if USE_DAZZLER>0
+                ok = config_dazzler_interface()!=vi;
+#endif
+                for(byte i=0; ok && i<NUM_SERIAL_DEVICES; i++) 
+                  ok = config_serial_map_sim_to_host(i)!=vi;
+
+                if( !ok )
+                  {
+                    Serial.print("\nVDM-1 can not use the same host interface as any other serial device.\nVisable VDM-1 and continue (y/n/ESC)? ");
+                    do { delay(50); c = serial_read(); } while( c!='y' && c!='n' && c!=27 );
+                    if( c=='y' )
+                      config_flags2 = set_bits(config_flags2, 3, 3, 0);
+                    else
+                      break;
+                  }
+              }
+#endif
                 
             if( (config_serial_settings&0xFFF7FF) != (new_config_serial_settings&0xFFF7FF) ||
                 (config_serial_settings2) != (new_config_serial_settings2) )
@@ -2275,9 +2513,8 @@ void config_edit()
               {
                 mem_set_ram_limit_usr(config_mem_size-1);
                 serial_set_config();
-#if USE_DAZZLER>0
                 dazzler_set_iface(config_dazzler_interface());
-#endif
+                vdm1_set_iface(config_vdm1_interface());
                 Serial.print(F("\033[2J\033[0;0H"));
                 return;
               }
@@ -2308,7 +2545,10 @@ void config_defaults(bool apply)
 #endif
   config_flags |= CF_THROTTLE;
 
-  config_flags2 = 0;
+  config_flags2  = 0;              // Dazzler not enabled
+  config_flags2 |= 0 << 3;         // VDM-1 not enabled
+  config_flags2 |= B00110110 << 6; // VDM-1 DIP: 1=off, 2=on, 3=on, 4=off, 5=on, 6=on
+  config_flags2 |= (0xCC00 >> 10) << 12; // VDM-1 base address : CC00
 
   new_config_serial_settings  = 0;
   new_config_serial_settings |= (0 << 8); // USB Programming port is primary interface

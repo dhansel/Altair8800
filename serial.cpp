@@ -293,7 +293,7 @@ void serial_reset(byte dev)
 
 
 // called when serial data for a device is received
-static void serial_receive_data(byte dev, byte b)
+void serial_receive_data(byte dev, byte b)
 {
   byte status = serial_status[dev];
 
