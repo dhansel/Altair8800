@@ -7,6 +7,13 @@
 #define CONFIG_H
 
 
+// Set CPU to be used:
+// 0 = use Intel 8080
+// 1 = use Zilog Z80  (uses 20 bytes more RAM than i8080)
+// 2 = allow switching between i8080 and z80 via configuration (uses more RAM and flash memory)
+#define USE_Z80 0
+
+
 // Allowing breakpoints significantly reduces performance but is helpful
 // for debugging.  Also uses 2*MAX_BREAKPOINTS+1 bytes of RAM
 #define MAX_BREAKPOINTS 0
@@ -123,6 +130,8 @@ inline bool config_serial_panel_enabled()     { return (config_flags & CF_SERIAL
 inline bool config_serial_input_enabled()     { return (config_flags & CF_SERIAL_INPUT)!=0; }
 inline bool config_serial_debug_enabled()     { return (config_flags & CF_SERIAL_DEBUG)!=0; }
 inline bool config_have_vi()                  { return (config_flags & CF_HAVE_VI)!=0; }
+
+bool     config_use_z80();
 
 float    config_rtc_rate();
 byte     config_aux1_program();

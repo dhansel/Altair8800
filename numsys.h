@@ -11,6 +11,8 @@
 #define NUMSYS_HEX 2
 
 void     numsys_set(byte sys);
+byte     numsys_get();
+byte     numsys_get_byte_length();
 void     numsys_toggle();
 void     numsys_print_word(uint16_t w);
 void     numsys_print_byte(byte b);

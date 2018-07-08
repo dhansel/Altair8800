@@ -70,11 +70,12 @@ uint16_t  throttle_delay  = 0;
 void update_throttle()
 {
   uint32_t now   = micros();
-  uint32_t ratio = now==throttle_micros ? 0xffffffff : (200*THROTTLE_TIMER_PERIOD) / (now-throttle_micros);
+  uint32_t ratio = now==throttle_micros ? 0xffffffff : (2000*THROTTLE_TIMER_PERIOD) / (now-throttle_micros);
+  uint32_t t     = cpu_clock_KHz();
 
-  if( ratio>201 )
+  if( ratio>t+10 )
     throttle_delay += (uint16_t) HOST_PERFORMANCE_FACTOR;
-  else if( ratio<200 && throttle_delay>0 )
+  else if( ratio<t && throttle_delay>0 )
     throttle_delay -= (uint16_t) HOST_PERFORMANCE_FACTOR;
 
   throttle_micros = now;
@@ -742,7 +743,7 @@ void read_inputs_serial()
         {
           numsys_print_word(addr); 
           Serial.print(F(": "));
-          addr += disassemble(Mem, addr);
+          addr += disassemble(Mem, addr, true);
           Serial.println();
           while( !serial_available() ) delay(100);
           go = (serial_read() == 0x20);
@@ -916,36 +917,8 @@ void print_panel_serial(bool force)
 
 void print_dbg_info()
 {
-  if( !config_serial_debug_enabled() || !host_read_status_led_WAIT() )
-    return;
-
-  if( regPC != p_regPC )
-    {
-      Serial.print(F("\r\n PC   = "));   numsys_print_word(regPC);
-      Serial.print(F(" = ")); numsys_print_mem(regPC, 3, true); 
-      Serial.print(F(" = ")); disassemble(Mem, regPC);
-      Serial.print(F("\r\n SP   = ")); numsys_print_word(regSP);
-      Serial.print(F(" = ")); numsys_print_mem(regSP, 8, true); 
-      Serial.print(F("\r\n regA = ")); numsys_print_byte(regA);
-      Serial.print(F(" regS = "));   numsys_print_byte(regS);
-      Serial.print(F(" = "));
-      if( regS & PS_SIGN )     Serial.print('S'); else Serial.print('.');
-      if( regS & PS_ZERO )     Serial.print('Z'); else Serial.print('.');
-      Serial.print('.');
-      if( regS & PS_HALFCARRY ) Serial.print('A'); else Serial.print('.');
-      Serial.print('.');
-      if( regS & PS_PARITY )   Serial.print('P'); else Serial.print('.');
-      Serial.print('.');
-      if( regS & PS_CARRY )    Serial.print('C'); else Serial.print('.');
-
-      Serial.print(F("\r\n regB = ")); numsys_print_byte(regB);
-      Serial.print(F(" regC = "));   numsys_print_byte(regC);
-      Serial.print(F(" regD = "));   numsys_print_byte(regD);
-      Serial.print(F(" regE = "));   numsys_print_byte(regE);
-      Serial.print(F(" regH = "));   numsys_print_byte(regH);
-      Serial.print(F(" regL = "));   numsys_print_byte(regL);
-      Serial.println();
-    }
+  if( config_serial_debug_enabled() && host_read_status_led_WAIT() && regPC != p_regPC )
+    cpu_print_registers();
 }
 
 
@@ -1414,6 +1387,7 @@ void setup()
   drive_setup();
   hdsk_setup();
   config_setup(host_read_function_switch(SW_DEPOSIT) ? host_read_addr_switches() : 0);
+  cpu_setup();
   serial_setup();
   profile_setup();
   rtc_setup();

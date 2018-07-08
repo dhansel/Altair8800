@@ -29,6 +29,7 @@
 void vdm1_out(byte v) {}
 void vdm1_set_iface(byte iface) {}
 void vdm1_setup() {}
+byte vdm1_get_iface() { return 0xff; }
 
 #else
 
@@ -220,6 +221,12 @@ void vdm1_set_iface(byte iface)
       delay(500);
 #endif
     }
+}
+
+
+byte vdm1_get_iface()
+{
+  return vdm_iface;
 }
 
 

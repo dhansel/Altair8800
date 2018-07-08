@@ -23,6 +23,7 @@
 #include "timer.h"
 #include "config.h"
 #include "host.h"
+#include "cpucore.h"
 
 #if USE_PROFILING_DETAIL>0
 unsigned long prof_detail_counter, prof_opcode_count[256];
@@ -95,7 +96,7 @@ void prof_print()
       Serial.print(F(" msec = "));
       Serial.print(mhz);
       Serial.print(F(" MHz = "));
-      Serial.print(int(mhz/0.02+.5));
+      Serial.print(int(mhz/(float(cpu_clock_KHz())/100000.0)+.5));
       Serial.print('%');
 #if USE_THROTTLE>0
       Serial.print(F(" (d="));

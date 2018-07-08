@@ -10,7 +10,10 @@
 
 // [this gets included from prog_examples.cpp]
 
-const char PROGMEM craps_bas[] = 
+#define PROGMEM_LATE __attribute__ (( __section__(".fini1") ))
+
+
+const char PROGMEM_LATE craps_bas[] = 
   "100 REM  NAME--CRAPS\r"
   "110 REM\r"
   "120 REM  DESCRIPTIONS--A SESSION AT THE CRAPS TABLE.\r"
@@ -108,7 +111,7 @@ const char PROGMEM craps_bas[] =
   "1040 PRINT \" YOU WON \" W; \"DOLLARS...WILL SEND CHECK IMMEDIATELY\"\r"
   "1050 END\r";
 
-const char PROGMEM primes_bas[] = 
+const char PROGMEM_LATE primes_bas[] = 
   "100 PRINT \"Interface Age Prime-Number Benchmark Program\"\r"
   "110 FOR N=1 TO 200\r"
   "120 FOR K=2 TO 100\r"
@@ -126,7 +129,7 @@ const char PROGMEM primes_bas[] =
   "240 PRINT \"Done\"\r"
   "250 END\r";
 
-const char PROGMEM primes_sieve_bas[] = 
+const char PROGMEM_LATE primes_sieve_bas[] = 
   "100 REM  NAME--SIEVE\r"
   "110 REM\r"
   "120 REM  DISCRIPTION--DEMONSTRATES SIEVE METHOD OF FINDING PRIMES.\r"
@@ -162,7 +165,7 @@ const char PROGMEM primes_sieve_bas[] =
   "420 DATA 2,3,5,7\r"
   "430 END\r";
 
-const char PROGMEM nim_bas[] = 
+const char PROGMEM_LATE nim_bas[] = 
   "100 REM  NAME--NIM\r"
   "110 REM\r"
   "120 REM  DESCRIPTION--PLAYS THE ANCIENT GAME OF NIM.\r"
@@ -262,7 +265,7 @@ const char PROGMEM nim_bas[] =
   "1050 PRINT \"THANKS FOR THE GAME *****\"\r"
   "1060 END\r";
 
-const char PROGMEM rock_paper_scissors_bas[] = 
+const char PROGMEM_LATE rock_paper_scissors_bas[] = 
   "1 PRINT \"THIS PROGRAM ALLOWS YOU TO PLAY THE OLD GAME OF\"\r"
   "2 PRINT \"ROCKS, PAPER, AND SISSORS AGAINST THE COMPUTER.\"\r"
   "6 PRINT \"HOW MANY GAMES DO YOU WANT \";:INPUT Q\r"
@@ -300,7 +303,7 @@ const char PROGMEM rock_paper_scissors_bas[] =
   "190 PRINT:PRINT \"THANKS FOR PLAYING!!\"\r"
   "200 END\r";
 
-const char PROGMEM tic_tac_toe_bas[] = 
+const char PROGMEM_LATE tic_tac_toe_bas[] = 
   "1 DATA 2,3,4,9,1,5,8,7,6 \r"
   "2 DATA 2,3,4,9,1,5,8,7,6,2,9,8,3,1,7 \r"
   "3 DATA 4,5,6,2,1,6,4,1,8 \r"
@@ -439,7 +442,7 @@ const char PROGMEM tic_tac_toe_bas[] =
   "940 GOTO 27\r"
   "999 END\r";
 
-const char PROGMEM hamurabi_bas[] = 
+const char PROGMEM_LATE hamurabi_bas[] = 
   "10 REM ORIGINAL HAMURABI IN IMSAI 4K BASIC\r"
   "20 REM FROM REVISION REWRITTEN 12/11/77\r"
   "310 PRINT \"HAMURABI - \";\r"
@@ -546,7 +549,7 @@ const char PROGMEM hamurabi_bas[] =
   "9030 PRINT B1;\"BUSHELS IN STOREHOUSES.\"\r"
   "9040 RETURN\r";
 
-const char PROGMEM histogram_bas[] = 
+const char PROGMEM_LATE histogram_bas[] = 
   "100 REM  NAME--HISTGRAM\r"
   "110 REM\r"
   "120 REM  DESCRIPTION--PLOTS A HISTOGRAM OF SCORES ON A TEST.\r"
@@ -591,7 +594,7 @@ const char PROGMEM histogram_bas[] =
   "1000 DATA 2,10,  88,94,96,98,86,88,84,96,88,84\r"
   "2000 END\r";
 
-const char PROGMEM power_bas[] = 
+const char PROGMEM_LATE power_bas[] = 
   "10 REM RECURSIVE INTEGERAL POWER\r"
   "20 PRINT \"ENTER A NUMBER TO RAISE TO A POWER:\";\r"
   "30 INPUT X\r"
@@ -607,7 +610,7 @@ const char PROGMEM power_bas[] =
   "130 IF Y > 0 THEN GOSUB 100\r"
   "140 RETURN\r";
 
-const char PROGMEM sin_bas[] = 
+const char PROGMEM_LATE sin_bas[] = 
   "10 PRINT \"Y = SIN X\"\r"
   "20 PRINT\r"
   "30 LET L=20\r"
@@ -644,8 +647,7 @@ const char PROGMEM sin_bas[] =
   "260 END\r";
 
 
-/*
-const char PROGMEM snoopy_bas[] = 
+const char PROGMEM_LATE snoopy_bas[] = 
   "100 REM PORT FROM BP-80 SYSTEM (NO CHANGES)\r"
   "110 DIM L(80)\r"
   "120 FOR T=1 TO 63\r"
@@ -760,9 +762,9 @@ const char PROGMEM snoopy_bas[] =
   "1210 PRINT \r"
   "1220 GOTO 160\r"
   "1230 END\r";
-*/
 
-const char PROGMEM birthday_bas[] = 
+
+const char PROGMEM_LATE birthday_bas[] = 
   "100 REM BIRTHDAY UPDATED 5-5-77 TO \"MITS\" BY D. NIXON \r"
   "110   DIM Z$(12),L(12),N(60),Y$(7)   \r"
   "120   DIM G$(12),H$(32)  \r"
@@ -915,7 +917,7 @@ const char PROGMEM birthday_bas[] =
   "1590 RETURN \r"
   "1600 END\r";
 
-const char PROGMEM mastermind_bas[] = 
+const char PROGMEM_LATE mastermind_bas[] = 
   "2 PRINT TAB(30);\"MASTERMIND\"\r"
   "4 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "6 PRINT: PRINT: PRINT\r"
@@ -1149,7 +1151,7 @@ const char PROGMEM mastermind_bas[] =
   "9998 REM   ...WE'RE SORRY BUT IT'S TIME TO GO...\r"
   "9999 END\r";
 
-const char PROGMEM golf_bas[] = 
+const char PROGMEM_LATE golf_bas[] = 
   "1 PRINT TAB(34);\"GOLF\"\r"
   "2 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
   "3 PRINT:PRINT:PRINT\r"
@@ -1395,7 +1397,7 @@ const char PROGMEM golf_bas[] =
   "1765 GOTO 292\r"
   "1770 END\r";
 
-const char PROGMEM dir[] = 
+const char PROGMEM_LATE dir[] = 
   "0  \"0000) [this directory]\"\r"
   "1  \"0001) CRAPS GAME\"\r"
   "2  \"0010) NIM GAME\"\r"
@@ -1410,28 +1412,43 @@ const char PROGMEM dir[] =
   "11 \"1011) POWER\"\r"
   "12 \"1100) SIN\"\r"
   "13 \"1101) BIRTHDAY\"\r"
-  //"14 \"1110) SNOOPY\"\r"
-  ;
+  "14 \"1110) SNOOPY\"\r";
 
 
 
-/* there seems to be a limit of how much data can be stored 
-   in PROGMEM (64k?) - Adding more examples on the MEGA
-   leads to corruption in program strings and other places */
-const char PROGMEM * const basic_programs[]  = { 
-  dir, 
-  craps_bas, 
-  nim_bas, 
-  rock_paper_scissors_bas, 
-  tic_tac_toe_bas, 
-  hamurabi_bas,
-  mastermind_bas,
-  golf_bas,
-  primes_bas, 
-  primes_sieve_bas,
-  histogram_bas,
-  power_bas,
-  sin_bas,
-  birthday_bas
-  //,snoopy_bas
-};
+// Would love to put the pointers to examples into this array here
+// (just like on the Due) but we need to use FAR addresses AND place
+// the examples in LATE memory. The (default) NEAR progmem memory is
+// limited to 64k which we exceed with our examples, causing all kinds
+// of mayhem with other PROGMEM strings in the rest of the code.
+// using PROGMEM_LATE here places the examples at the end which is fine
+// since we use FAR addresses to access them. Problem is that
+// pgm_get_far_address must be applied directly to a variable (lvalue)
+// and can't be used in a static initializer. So I don't see any other
+// way to do this than using a switch statement.
+const char * const basic_programs[] = {};
+#define NUM_BASIC_PROGRAMS 15
+
+
+char read_basic_example(int n, int i)
+{
+  switch( n )
+    {
+    case  0: return pgm_read_byte_far(pgm_get_far_address(dir)+i);
+    case  1: return pgm_read_byte_far(pgm_get_far_address(craps_bas)+i);
+    case  2: return pgm_read_byte_far(pgm_get_far_address(nim_bas)+i);
+    case  3: return pgm_read_byte_far(pgm_get_far_address(rock_paper_scissors_bas)+i);
+    case  4: return pgm_read_byte_far(pgm_get_far_address(tic_tac_toe_bas)+i);
+    case  5: return pgm_read_byte_far(pgm_get_far_address(hamurabi_bas)+i);
+    case  6: return pgm_read_byte_far(pgm_get_far_address(mastermind_bas)+i);
+    case  7: return pgm_read_byte_far(pgm_get_far_address(golf_bas)+i);
+    case  8: return pgm_read_byte_far(pgm_get_far_address(primes_bas)+i);
+    case  9: return pgm_read_byte_far(pgm_get_far_address(primes_sieve_bas)+i);
+    case 10: return pgm_read_byte_far(pgm_get_far_address(histogram_bas)+i);
+    case 11: return pgm_read_byte_far(pgm_get_far_address(power_bas)+i);
+    case 12: return pgm_read_byte_far(pgm_get_far_address(sin_bas)+i);
+    case 13: return pgm_read_byte_far(pgm_get_far_address(birthday_bas)+i);
+    case 14: return pgm_read_byte_far(pgm_get_far_address(snoopy_bas)+i);
+    default: return 0;
+  }
+}

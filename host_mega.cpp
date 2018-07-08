@@ -43,9 +43,16 @@
 #endif
 
 #if USE_DAZZLER>0
-#error Arduino MEGA does not support DAZZLER
+#error Arduino MEGA does not support DAZZLER emulation
 #endif
 
+#if USE_VDM1>0
+#error Arduino MEGA does not support VDM-1 emulation
+#endif
+
+#if USE_Z80==2
+#error Arduino MEGA does not support dynamic processor switching
+#endif
 
 /*
   Runs emulation at about 0.5 Mhz clock speed (about 1/4 speed of original Altair8800)

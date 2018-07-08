@@ -11,6 +11,10 @@
 
 // [this gets included from prog_examples.cpp]
 
+#include "config.h"
+
+#if USE_Z80==0
+
 const char asm_dump[] =
   "\tORG\t20000Q\t;SET LOCATION COUNTER\r"
   "DUMP:\tLHLD\tFIRST\t;GET ADDRESS OF FIRST BYTE TO BE DUMPED\r"
@@ -428,3 +432,15 @@ const char * const asm_programs[]  = {
   asm_dir,
   asm_pong,
   asm_dump};
+
+#else
+
+const char asm_dir[] =
+  "10000000) [this directory]\r";
+
+const char * const asm_programs[]  = {asm_dir};
+
+#endif
+
+byte read_asm_example(int n, int i) { return ((byte) asm_programs[n][i]); }
+#define NUM_ASM_PROGRAMS (sizeof(asm_programs)/sizeof(char *))

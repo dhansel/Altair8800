@@ -85,8 +85,12 @@
     <ClCompile Include="breakpoint.cpp" />
     <ClCompile Include="config.cpp" />
     <ClCompile Include="cpucore.cpp" />
+    <ClCompile Include="cpucore_i8080.cpp" />
+    <ClCompile Include="cpucore_z80.cpp" />
     <ClCompile Include="dazzler.cpp" />
     <ClCompile Include="disassembler.cpp" />
+    <ClCompile Include="disassembler_i8080.cpp" />
+    <ClCompile Include="disassembler_z80.cpp" />
     <ClCompile Include="drive.cpp" />
     <ClCompile Include="filesys.cpp" />
     <ClCompile Include="hdsk.cpp" />
@@ -113,6 +117,7 @@
     <ClCompile Include="serial.cpp" />
     <ClCompile Include="switch_serial.cpp" />
     <ClCompile Include="timer.cpp" />
+    <ClCompile Include="vdm1.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Altair8800.ino">
@@ -125,8 +130,12 @@
     <ClInclude Include="breakpoint.h" />
     <ClInclude Include="config.h" />
     <ClInclude Include="cpucore.h" />
+    <ClInclude Include="cpucore_i8080.h" />
+    <ClInclude Include="cpucore_z80.h" />
     <ClInclude Include="dazzler.h" />
     <ClInclude Include="disassembler.h" />
+    <ClInclude Include="disassembler_i8080.h" />
+    <ClInclude Include="disassembler_z80.h" />
     <ClInclude Include="drive.h" />
     <ClInclude Include="filesys.h" />
     <ClInclude Include="hdsk.h" />
@@ -153,6 +162,7 @@
     <ClInclude Include="serial.h" />
     <ClInclude Include="switch_serial.h" />
     <ClInclude Include="timer.h" />
+    <ClInclude Include="vdm1.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

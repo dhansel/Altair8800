@@ -30,6 +30,7 @@ void dazzler_out_ctrl(byte v) {}
 void dazzler_out_pict(byte v) {}
 byte dazzler_in(byte port) { return 0xff; }
 void dazzler_set_iface(byte iface) {}
+byte dazzler_get_iface() { return 0xff; }
 void dazzler_setup() {}
 
 #else
@@ -283,6 +284,12 @@ void dazzler_set_iface(byte iface)
       if( iface==0xff ) Serial.println("Dazzler disabled"); else {Serial.print("Dazzler on interface:"); Serial.println(iface);}
 #endif
     }
+}
+
+
+byte dazzler_get_iface()
+{
+  return dazzler_iface;
 }
 
 

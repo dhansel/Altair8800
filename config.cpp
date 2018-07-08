@@ -29,6 +29,7 @@
 #include "dazzler.h"
 #include "sdmanager.h"
 #include "vdm1.h"
+#include "cpucore.h"
 
 #define CONFIG_FILE_VERSION 6
 
@@ -80,12 +81,13 @@ uint32_t config_flags;
 
 
 // config_flags2:
-// xxxxxxxx xxxKKKMM MMMMDDDD DDVVVZZZ
+// xxxxxxxx xxPKKKMM MMMMDDDD DDVVVZZZ
 // ZZZ  = map dazzler to host interface (000=NONE, 001=1st, 010=2nd, 011=3rd, 100=4th, 101=5th)
 // VVV  = map VDM-1   to host interface (see above)
 // D    = VDM-1 dip switch settings
 // M    = VDM-1 memory address (6 highest bits)
 // KKK  = map VDM-1 keyboard to serial device (000=NONE, 1=SIO, 2=ACR, 3=2SIO1, 4=2SIO2, 5=2SIO3, 6=2SIO4)
+// P    = Processor (0=i8080, 1=z80)
 uint32_t config_flags2;
 
 
@@ -172,6 +174,8 @@ static uint32_t toggle_vdm1_dip(uint32_t v, byte i, bool allowBoth)
     case 1: return set_bits(v, i, 2, allowBoth ? 3 : 0);
     case 3: return set_bits(v, i, 2, 0);
     }
+
+  return v;
 }
 
 
@@ -473,6 +477,15 @@ static void set_cursor(byte row, byte col)
   Serial.print(';');
   Serial.print(col);
   Serial.print(F("H\033[K"));
+}
+
+
+static void print_cpu()
+{
+  if( config_use_z80() )
+    Serial.print(F("Zilog Z80"));
+  else
+    Serial.print(F("Intel 8080"));
 }
 
 
@@ -1118,6 +1131,11 @@ static void toggle_aux1_program_down(byte row, byte col)
   print_aux1_program(row, col);
 }
 
+bool config_use_z80()
+{
+  return get_bits(config_flags2, 21, 1) ? true : false;
+}
+
 
 static void toggle_flag(uint32_t value, byte row, byte col)
 {
@@ -1744,7 +1762,6 @@ void config_edit_vdm1()
 {
   byte row, col, r_iface, r_dip12, r_dip34, r_dip56, r_addr, r_cmd, r_kbd;
   bool go = true;
-  byte i, j;
 
   // if a VDM-1 client is connected then this will initialize it
   // in case it is not already initialized
@@ -2238,7 +2255,7 @@ void config_edit()
   bool redraw = true;
 
   config_mem_size = ((uint32_t) mem_get_ram_limit_usr())+1;
-  byte row, col, r_profile, r_throttle, r_panel, r_debug, r_clearmem, r_aux1, r_cmd, r_memsize, r_input, r_dazzler;
+  byte row, col, r_cpu, r_profile, r_throttle, r_panel, r_debug, r_clearmem, r_aux1, r_cmd, r_memsize, r_input, r_dazzler;
   while( true )
     {
       char c;
@@ -2259,6 +2276,9 @@ void config_edit()
 #endif
           Serial.print(F("Enable serial (d)ebug       : ")); print_flag(CF_SERIAL_DEBUG); Serial.println(); r_debug = row++;
           Serial.print(F("Clear (m)emory on powerup   : ")); print_flag(CF_CLEARMEM); Serial.println(); r_clearmem = row++;
+#if USE_Z80==2
+          Serial.print(F("Pro(c)essor                 : ")); print_cpu(); Serial.println(); r_cpu = row++;
+#endif
           Serial.print(F("RAM size (+/-)              : ")); print_mem_size(config_mem_size, row, col); r_memsize = row++;
           Serial.print(F("Aux1 shortcut program (u/U) : ")); print_aux1_program(); Serial.println(); r_aux1 = row++;
           Serial.print(F("Configure host (s)erial     : ")); 
@@ -2323,6 +2343,15 @@ void config_edit()
       redraw = true;
       switch( c )
         {
+#if USE_Z80==2
+        case 'c': 
+          config_flags2 = toggle_bits(config_flags2, 21, 1); 
+          set_cursor(r_cpu, col);
+          print_cpu(); 
+          redraw = false; 
+          break;
+#endif
+
         case 'f': toggle_flag(CF_PROFILE, r_profile, col); redraw = false; break;
 #if USE_THROTTLE>0
         case 't': toggle_throttle(r_throttle, col, true); redraw = false; break;
@@ -2513,8 +2542,12 @@ void config_edit()
               {
                 mem_set_ram_limit_usr(config_mem_size-1);
                 serial_set_config();
+                if( vdm1_get_iface()==config_dazzler_interface() ) vdm1_set_iface(0xff);
                 dazzler_set_iface(config_dazzler_interface());
                 vdm1_set_iface(config_vdm1_interface());
+#if USE_Z80==2
+                cpu_set_processor(config_use_z80() ? PROC_Z80 : PROC_I8080);
+#endif
                 Serial.print(F("\033[2J\033[0;0H"));
                 return;
               }

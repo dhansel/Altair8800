@@ -10,6 +10,12 @@
 #include <avr/pgmspace.h>
 
 // Mega2650: 8k SRAM, use 6k for emulated RAM
+// NOTE: Using too much emulated RAM can cause stability issues when
+//       running the emulator. Modify settings in config.h and the MEMSIZE
+//       setting here to make sure Arduino IDE says (after compiling) that
+//       AT LEAST 310 bytes of RAM are left for local variables!
+//       If you run into weird emulation issues, consider (temporarily)
+//       using only 5K MEMSIZE here to see if that resolves the problem.
 #define MEMSIZE (4096+2048)
 
 #define HOST_STORAGESIZE 4096 // have 4k EEPROM

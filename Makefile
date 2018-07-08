@@ -11,7 +11,7 @@ else
 endif
 
 
-OBJECTS=$(OBJ)/cpucore.o $(OBJ)/mem.o $(OBJ)/serial.o $(OBJ)/profile.o $(OBJ)/breakpoint.o $(OBJ)/numsys.o $(OBJ)/filesys.o $(OBJ)/drive.o $(OBJ)/disassembler.o $(OBJ)/prog_basic.o $(OBJ)/prog_ps2.o $(OBJ)/prog_examples.o $(OBJ)/prog_tools.o $(OBJ)/prog_games.o $(OBJ)/prog_dazzler.o $(OBJ)/host_pc.o $(OBJ)/config.o $(OBJ)/timer.o $(OBJ)/prog.o $(OBJ)/printer.o $(OBJ)/hdsk.o $(OBJ)/image.o $(OBJ)/switch_serial.o $(OBJ)/sdmanager.o $(OBJ)/dazzler.o $(OBJ)/vdm1.o
+OBJECTS=$(OBJ)/cpucore.o $(OBJ)/cpucore_z80.o $(OBJ)/cpucore_i8080.o $(OBJ)/mem.o $(OBJ)/serial.o $(OBJ)/profile.o $(OBJ)/breakpoint.o $(OBJ)/numsys.o $(OBJ)/filesys.o $(OBJ)/drive.o $(OBJ)/disassembler.o $(OBJ)/disassembler_z80.o $(OBJ)/disassembler_i8080.o $(OBJ)/prog_basic.o $(OBJ)/prog_ps2.o $(OBJ)/prog_examples.o $(OBJ)/prog_tools.o $(OBJ)/prog_games.o $(OBJ)/prog_dazzler.o $(OBJ)/host_pc.o $(OBJ)/config.o $(OBJ)/timer.o $(OBJ)/prog.o $(OBJ)/printer.o $(OBJ)/hdsk.o $(OBJ)/image.o $(OBJ)/switch_serial.o $(OBJ)/sdmanager.o $(OBJ)/dazzler.o $(OBJ)/vdm1.o
 
 Altair8800$(EXT): $(OBJ) $(OBJECTS) $(OBJ)/Altair8800.o $(OBJ)/Arduino.o $(OBJ)/Print.o
 	g++ $(OBJECTS) $(OBJ)/Altair8800.o $(OBJ)/Arduino.o $(OBJ)/Print.o $(LFLAGS) -o Altair8800$(EXT)
@@ -44,6 +44,7 @@ deps:
 # The following list of dependencies can be created by typing "make deps"
 # --------------------------------------------------------------------------------------------------
 
+
 $(OBJ)/Altair8800.o: Altair8800.ino Altair8800.h Arduino/Arduino.h \
  Arduino/inttypes.h Arduino/Print.h config.h cpucore.h host.h host_pc.h \
  switch_serial.h mem.h prog_basic.h breakpoint.h dazzler.h vdm1.h \
@@ -56,16 +57,31 @@ $(OBJ)/breakpoint.o: breakpoint.cpp breakpoint.h config.h Arduino/Arduino.h \
 $(OBJ)/config.o: config.cpp Altair8800.h Arduino/Arduino.h Arduino/inttypes.h \
  Arduino/Print.h config.h mem.h host.h host_pc.h switch_serial.h \
  prog_basic.h breakpoint.h dazzler.h vdm1.h serial.h filesys.h numsys.h \
- drive.h hdsk.h prog.h sdmanager.h
+ drive.h hdsk.h prog.h sdmanager.h cpucore.h
 $(OBJ)/cpucore.o: cpucore.cpp cpucore.h Arduino/Arduino.h Arduino/inttypes.h \
- Arduino/Print.h timer.h mem.h config.h host.h host_pc.h switch_serial.h \
- prog_basic.h breakpoint.h dazzler.h vdm1.h Altair8800.h
+ Arduino/Print.h config.h Altair8800.h cpucore_z80.h cpucore_i8080.h
+$(OBJ)/cpucore_i8080.o: cpucore_i8080.cpp cpucore.h Arduino/Arduino.h \
+ Arduino/inttypes.h Arduino/Print.h config.h timer.h mem.h host.h \
+ host_pc.h switch_serial.h prog_basic.h breakpoint.h dazzler.h vdm1.h \
+ numsys.h disassembler.h Altair8800.h
+$(OBJ)/cpucore_z80.o: cpucore_z80.cpp cpucore.h Arduino/Arduino.h \
+ Arduino/inttypes.h Arduino/Print.h config.h timer.h mem.h host.h \
+ host_pc.h switch_serial.h prog_basic.h breakpoint.h dazzler.h vdm1.h \
+ numsys.h disassembler.h Altair8800.h
 $(OBJ)/dazzler.o: dazzler.cpp dazzler.h Arduino/Arduino.h Arduino/inttypes.h \
  Arduino/Print.h mem.h config.h host.h host_pc.h switch_serial.h \
  prog_basic.h breakpoint.h vdm1.h cpucore.h serial.h timer.h
 $(OBJ)/disassembler.o: disassembler.cpp Arduino/Arduino.h Arduino/inttypes.h \
- Arduino/Print.h disassembler.h numsys.h mem.h config.h host.h host_pc.h \
- switch_serial.h prog_basic.h breakpoint.h dazzler.h vdm1.h
+ Arduino/Print.h disassembler.h disassembler_i8080.h disassembler_z80.h \
+ cpucore.h config.h
+$(OBJ)/disassembler_i8080.o: disassembler_i8080.cpp Arduino/Arduino.h \
+ Arduino/inttypes.h Arduino/Print.h disassembler.h numsys.h mem.h \
+ config.h host.h host_pc.h switch_serial.h prog_basic.h breakpoint.h \
+ dazzler.h vdm1.h
+$(OBJ)/disassembler_z80.o: disassembler_z80.cpp Arduino/Arduino.h \
+ Arduino/inttypes.h Arduino/Print.h disassembler.h numsys.h mem.h \
+ config.h host.h host_pc.h switch_serial.h prog_basic.h breakpoint.h \
+ dazzler.h vdm1.h
 $(OBJ)/drive.o: drive.cpp drive.h Arduino/Arduino.h Arduino/inttypes.h \
  Arduino/Print.h config.h host.h host_pc.h switch_serial.h cpucore.h \
  Altair8800.h timer.h image.h

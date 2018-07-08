@@ -75,7 +75,11 @@ void numsys_print_byte(byte b)
       Serial.print(d);
     }
   else
-    Serial.print(b);
+    {
+      if( b<10 )  Serial.print(' ');
+      if( b<100 ) Serial.print(' ');
+      Serial.print(b);
+    }
 }
 
 
@@ -97,6 +101,10 @@ void numsys_print_word(uint16_t w)
     }
   else
     {
+      if( w<10 )    Serial.print(' ');
+      if( w<100 )   Serial.print(' ');
+      if( w<1000 )  Serial.print(' ');
+      if( w<10000 ) Serial.print(' ');
       Serial.print(w);
     }
 }
@@ -179,4 +187,16 @@ uint16_t numsys_read_word(bool *ESC)
     }
 
   return w;
+}
+
+
+byte numsys_get()
+{
+  return numsys;
+}
+
+
+byte numsys_get_byte_length()
+{
+  return numsys==NUMSYS_HEX ? 2 : 3;
 }

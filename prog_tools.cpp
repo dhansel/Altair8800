@@ -1964,9 +1964,10 @@ uint16_t prog_tools_copy_serialirqtest(byte *dst)
   return 0x0;
 }
 
+#if USE_VDM1>0
 uint16_t prog_tools_copy_vdmcuter(byte *dst)
 {
   host_copy_flash_to_ram(dst+0xC000, prog_vdmcuter, sizeof(prog_vdmcuter));
   return 0xC000;
 }
-
+#endif

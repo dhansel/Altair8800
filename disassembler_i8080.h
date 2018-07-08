@@ -3,9 +3,9 @@
 // Copyright (C) 2017 David Hansel
 // -----------------------------------------------------------------------------
 
-#ifndef DISASSEMBLER_H
-#define DISASSEMBLER_H
+#ifndef DISASSEMBLER_I8080_H
+#define DISASSEMBLER_I8080_H
 
-byte disassemble(byte *Mem, uint16_t PC, bool print_bytes);
+byte disassemble_i8080(byte *Mem, uint16_t PC, bool print_bytes);
 
 #endif

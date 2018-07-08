@@ -20,6 +20,7 @@ byte dazzler_in(byte port);
 void dazzler_receive(int size, byte *data);
 
 void dazzler_set_iface(byte iface);
+byte dazzler_get_iface(byte iface);
 void dazzler_setup();
 
 #endif

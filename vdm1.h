@@ -18,6 +18,7 @@ void vdm1_out(byte v);
 void vdm1_receive(int size, byte *data);
 
 void vdm1_set_iface(byte iface);
+byte vdm1_get_iface();
 void vdm1_set_dip(byte dip);
 void vdm1_set_address(uint16_t a);
 void vdm1_setup();
