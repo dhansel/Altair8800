@@ -387,13 +387,13 @@ static byte da_jpHL(byte opcode, byte *Mem, uint16_t PC)
 
 static byte da_jr(byte opcode, byte *Mem, uint16_t PC)
 {
-  pBN(Mem, PC, 3); Serial.print(F("jr   ")); numsys_print_word(PC + 2 + (int8_t) (MREAD(PC+1)));
+  pBN(Mem, PC, 2); Serial.print(F("jr   ")); numsys_print_word(PC + 2 + (int8_t) (MREAD(PC+1)));
   return 2;
 }
 
 static byte da_jrC(byte opcode, byte *Mem, uint16_t PC)
 {
-  pBN(Mem, PC, 3); Serial.print(F("jr   ")); pC((opcode&0x18)/8); Serial.print(','); numsys_print_word(PC + 2 + (int8_t) (MREAD(PC+1)));
+  pBN(Mem, PC, 2); Serial.print(F("jr   ")); pC((opcode&0x18)/8); Serial.print(','); numsys_print_word(PC + 2 + (int8_t) (MREAD(PC+1)));
   return 2;
 }
 
