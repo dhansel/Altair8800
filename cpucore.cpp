@@ -57,7 +57,7 @@ void cpu_setup()
 void cpu_set_processor(int p)
 {
   processor = p;
-  clock_KHz = processor==PROC_I8080 ? 2000 : 4000;
+  clock_KHz = processor==PROC_I8080 ? CPU_CLOCK_I8080 : CPU_CLOCK_Z80;
   memcpy(cpu_opcodes, processor==PROC_I8080 ? cpucore_i8080_opcodes : cpucore_z80_opcodes, 256*sizeof(CPUFUN));
 }
 

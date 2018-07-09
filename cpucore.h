@@ -15,6 +15,12 @@
 #define PS_ZERO        0x40
 #define PS_SIGN        0x80
 
+
+// The emulated Z80 runs at 2MHz (true Z80, not Z80a or Z80b)
+#define CPU_CLOCK_I8080 2000
+#define CPU_CLOCK_Z80   2000
+
+
 extern union unionAF
 {
   struct { byte A, F; };
@@ -62,13 +68,13 @@ extern uint16_t regSP;
 
   // fixed I8080 CPU
   #define cpu_opcodes cpucore_i8080_opcodes
-  #define cpu_clock_KHz()     2000
+  #define cpu_clock_KHz()     CPU_CLOCK_I8080
 
 #elif USE_Z80==1 
 
   // fixed Z80 CPU
   #define cpu_opcodes cpucore_z80_opcodes
-  #define cpu_clock_KHz()     4000
+  #define cpu_clock_KHz()     CPU_CLOCK_Z80
 
 #else 
 
