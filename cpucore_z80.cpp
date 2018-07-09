@@ -1024,7 +1024,8 @@ static void cpu_jpHL() /* jp (hl) */
 
 static void cpu_jr()
 {
-  regPC += MEM_READ(regPC) + 1;
+  int8_t offset = MEM_READ(regPC);
+  regPC += offset+1;
   TIMER_ADD_CYCLES(12);
 }
 
