@@ -562,7 +562,7 @@ static byte da_ixiy(byte prefix, byte *Mem, uint16_t PC) // 0xDD/0xFD prefix
   // IX/IY register instructions (0xDD/0xFD prefix)
 #define pr(s1, s2) {Serial.print(F(s1)); Serial.print('i'); Serial.print(xy); Serial.print(F(s2)); }
   byte opcode = MREAD(PC+1);
-  int8_t xy = opcode==0xDD ? 'x' : 'y';
+  char xy = opcode==0xDD ? 'x' : 'y';
 
   switch( opcode )
     {
@@ -574,7 +574,7 @@ static byte da_ixiy(byte prefix, byte *Mem, uint16_t PC) // 0xDD/0xFD prefix
     case 0x24: pBN(Mem, PC, 2); pr("inc  ", "h"); return 2; 
     case 0x25: pBN(Mem, PC, 2); pr("dec  ", "h"); return 2; 
     case 0x26: pBN(Mem, PC, 3); pr("ld   ", "h,"); pB(Mem, PC+2); return 3;
-    case 0x29: pBN(Mem, PC, 2); pr("add  ", "i"); Serial.print(xy); return 2;
+    case 0x29: pBN(Mem, PC, 2); pr("add  ", ",i"); Serial.print(xy); return 2;
     case 0x2A: pBN(Mem, PC, 4); pr("ld   ", ",("); pW(Mem, PC+2); Serial.print(')'); return 4;
     case 0x2B: pBN(Mem, PC, 2); pr("dec  ", ""); return 2; 
     case 0x2C: pBN(Mem, PC, 2); pr("inc  ", "l"); return 2; 
@@ -718,7 +718,7 @@ static byte da_ext(byte prefix, byte *Mem, uint16_t PC) // 0xED prefix
           case 0xB8: pBN(Mem, PC, 2); Serial.print(F("lddr")); return 2;
           case 0xB9: pBN(Mem, PC, 2); Serial.print(F("cpdr")); return 2;
           case 0xBA: pBN(Mem, PC, 2); Serial.print(F("indr")); return 2;
-          case 0xBB: pBN(Mem, PC, 2); Serial.print(F("outdr")); return 2;
+          case 0xBB: pBN(Mem, PC, 2); Serial.print(F("otdr")); return 2;
       
           default:
             pBN(Mem, PC, 1); 
