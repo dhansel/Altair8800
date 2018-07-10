@@ -1022,14 +1022,14 @@ static void cpu_jpHL() /* jp (hl) */
 }
 
 
-static void cpu_jr()
+static void cpu_jr() /* jr NN */
 {
   int8_t offset = MEM_READ(regPC);
   regPC += offset+1;
   TIMER_ADD_CYCLES(12);
 }
 
-static void cpu_jrz()
+static void cpu_jrz() /* jr z, NN */
 {
   int8_t offset = MEM_READ(regPC);
   if( (regS & PS_ZERO) ) 
@@ -1038,7 +1038,7 @@ static void cpu_jrz()
     { regPC += 1; TIMER_ADD_CYCLES(7); }
 }
 
-static void cpu_jrnz()
+static void cpu_jrnz() /* jr nz, NN */
 {
   int8_t offset = MEM_READ(regPC);
   if( !(regS & PS_ZERO) ) 
@@ -1047,7 +1047,7 @@ static void cpu_jrnz()
     { regPC += 1; TIMER_ADD_CYCLES(7); }
 }
 
-static void cpu_jrc()
+static void cpu_jrc() /* jr c, NN */
 {
   int8_t offset = MEM_READ(regPC);
   if( (regS & PS_CARRY) ) 
@@ -1056,7 +1056,7 @@ static void cpu_jrc()
     { regPC += 1; TIMER_ADD_CYCLES(7); }
 }
 
-static void cpu_jrnc()
+static void cpu_jrnc()  /* jr nc, NN */
 {
   int8_t offset = MEM_READ(regPC);
   if( !(regS & PS_CARRY) ) 
@@ -1065,7 +1065,7 @@ static void cpu_jrnc()
     { regPC += 1; TIMER_ADD_CYCLES(7); }
 }
 
-static void cpu_djnz()
+static void cpu_djnz() /* djnz NN */
 {
   int8_t offset = MEM_READ(regPC);
   if( --regB != 0 )
@@ -2296,7 +2296,7 @@ static void cpu_ext() // 0xED prefix
       regB--;
       regS = (regS & ~PS_ZERO) | PS_ADDSUB;
       if( regB==0 ) regS |= PS_ZERO;
-      if( opcode==0xB2 && regBC.BC!=0 ) 
+      if( opcode==0xB2 && regB!=0 )
         { regPC -= 2; TIMER_ADD_CYCLES(21); }
       else
         TIMER_ADD_CYCLES(16);
@@ -2310,27 +2310,27 @@ static void cpu_ext() // 0xED prefix
       regB--;
       regS = (regS & ~PS_ZERO) | PS_ADDSUB;
       if( regB==0 ) regS |= PS_ZERO;
-      if( opcode==0xBA && regBC.BC!=0 ) 
+      if( opcode==0xBA && regB!=0 )
         { regPC -= 2; TIMER_ADD_CYCLES(21); }
       else
         TIMER_ADD_CYCLES(16);
       break;
 
     case 0xA3: // outi
-    case 0xB3: // outir
+    case 0xB3: // otir
       altair_out(regC, MEM_READ(regHL.HL));
       regHL.HL++;
       regB--;
       regS = (regS & ~PS_ZERO) | PS_ADDSUB;
       if( regB==0 ) regS |= PS_ZERO;
-      if( opcode==0xB3 && regBC.BC!=0 ) 
+      if( opcode==0xB3 && regB!=0 )
         { regPC -= 2; TIMER_ADD_CYCLES(21); }
       else
         TIMER_ADD_CYCLES(16);
       break;
 
     case 0xAB: // outd
-    case 0xBB: // outdr
+    case 0xBB: // otdr
       altair_out(regC, MEM_READ(regHL.HL));
       regHL.HL--;
       regB--;
