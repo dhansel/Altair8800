@@ -682,8 +682,6 @@ const DAFUN da_opcodes[] PROGMEM = {
 byte disassemble_i8080(byte *Mem, uint16_t PC, bool pb)
 {
   byte opcode = MREAD(PC);
-  DAFUN f = (DAFUN) pgm_read_word(&da_opcodes[opcode]);
-
 #if defined(__AVR_ATmega2560__)
   return ((DAFUN)pgm_read_word(&da_opcodes[opcode]))(opcode, Mem, PC);
 #else
