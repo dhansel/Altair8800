@@ -553,7 +553,7 @@ static void da_bitop(byte opcode, char xy, char offset)
 
   Serial.print((opcode & 0x38)/8);
   if( xy!=0 ) { Serial.print(','); printIXYOffset(xy, offset); }
-  if( xy==0 || (opcode&0xC0)!=0x40 ) { Serial.print(','); pRN(opcode & 0x07); }
+  if( xy==0 || ((opcode&0xC0)!=0x40 && (opcode&0x07)!=0x06) ) { Serial.print(','); pRN(opcode & 0x07); }
 }
 
 
@@ -562,7 +562,7 @@ static byte da_ixiy(byte prefix, byte *Mem, uint16_t PC) // 0xDD/0xFD prefix
   // IX/IY register instructions (0xDD/0xFD prefix)
 #define pr(s1, s2) {Serial.print(F(s1)); Serial.print('i'); Serial.print(xy); Serial.print(F(s2)); }
   byte opcode = MREAD(PC+1);
-  char xy = opcode==0xDD ? 'x' : 'y';
+  char xy = prefix==0xDD ? 'x' : 'y';
 
   switch( opcode )
     {
