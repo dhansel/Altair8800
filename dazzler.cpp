@@ -97,10 +97,13 @@ void dazzler_write_mem_(uint16_t a, byte v)
 void dazzler_out_ctrl(byte v)
 {
 #if DEBUGLVL>0
-  printf("dazzler_out_ctrl(%02x)\n", v);
+  {
+    static byte prev = 0xff;
+    if( v!=prev ) {printf("dazzler_out_ctrl(%02x)\n", v); prev = v; }
+  }
 #endif
 
-  byte b[2];
+  byte b[3];
   b[0] = DAZ_CTRL;
   b[1] = v;
   dazzler_send(b, 2);
@@ -117,9 +120,35 @@ void dazzler_out_ctrl(byte v)
     }
   else if( a != dazzler_mem_start )
     {
+      int n = 0, d = a-dazzler_mem_start;
       dazzler_mem_start = a;
       dazzler_mem_end   = a + dazzler_mem_size;
-      dazzler_send_fullframe();
+
+      // check how many bytes actually differ between the 
+      // old and new memory locations (if a program is
+      // switching quickly between two locations then likely
+      // not a large number of pixels/bytes will differ)
+      for(int i=dazzler_mem_start; i<=dazzler_mem_end; i++)
+        if( Mem[i] != Mem[i-d] )
+          n++;
+
+      if( n*3 < dazzler_mem_size )
+        {
+          // it takes less data to send a diff than the full frame
+          for(int i=dazzler_mem_start; i<dazzler_mem_end; i++)
+            if( Mem[i] != Mem[i-d] )
+              {
+                b[0] = DAZ_MEMBYTE | ((i & 0x0700)/256) ;
+                b[1] = i & 255;
+                b[2] = Mem[i];
+                dazzler_send(b, 3);
+              }
+        }
+      else
+        {
+          // sending full frame is shorter
+          dazzler_send_fullframe();
+        }
     }
 }
 
@@ -133,7 +162,10 @@ void dazzler_out_pict(byte v)
   // D3-D0: color info for x4 high res mode
 
 #if DEBUGLVL>0
-  printf("dazzler_out_pict(%02x)\n", v);
+  {
+    static byte prev = 0xff;
+    if( v!=prev ) {printf("dazzler_out_pict(%02x)\n", v); prev = v; }
+  }
 #endif
 
   byte b[2];
@@ -233,9 +265,14 @@ byte dazzler_in(byte port)
       // the values here are approximated and certainly not
       // synchronized with the actual picture on the client
       // we just provide them here so programs waiting for the
-      // signals don't get stuck
-      const uint32_t cycles_per_frame = 66734;
-      const uint32_t cycles_per_line  = cycles_per_frame/525;
+      // signals don't get stuck.
+      // If I understand correctly, the Dazzler does not
+      // interlace two fields and instead counts each field
+      // (half-frame) as a full frame (of 262 lines). Therefore 
+      // its frame rate is 29.97 * 2 = 59.94Hz, i.e. 16683us per frame,
+      // i.e. 33367 cycles per frame.
+      const uint32_t cycles_per_frame = 33367;
+      const uint32_t cycles_per_line  = cycles_per_frame/262;
 
       // determine position within frame
       uint32_t c = timer_get_cycles() % cycles_per_frame;
