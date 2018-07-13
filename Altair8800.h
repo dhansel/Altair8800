@@ -69,6 +69,7 @@ void altair_interrupt(uint32_t i, bool set = true);
 bool altair_interrupt_active(uint32_t i);
 void altair_interrupt_enable();
 void altair_interrupt_disable();
+bool altair_interrupt_enabled();
 bool altair_isreset();
 void altair_wait_step();
 void altair_set_outputs(uint16_t a, byte v);

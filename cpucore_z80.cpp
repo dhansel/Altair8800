@@ -47,6 +47,7 @@ union unionBC regBC_;
 union unionDE regDE_;
 union unionHL regHL_;
 union unionIXY regIX, regIY;
+byte regRL, regRH, regI;
 
 byte     *registers[8]      = {&regB, &regC, &regD, &regE, &regH, &regL, NULL, &regA };
 uint16_t *registers_wide[4] = {&regBC.BC, &regDE.DE, &regHL.HL, &regSP};
@@ -2213,6 +2214,35 @@ static void cpu_ext() // 0xED prefix
       TIMER_ADD_CYCLES(8);
       break;
 
+    case 0x47: // ld i, a
+      regI = regA;
+      TIMER_ADD_CYCLES(9);
+      break;
+
+    case 0x57: // ld a, i
+      regA = regI;
+      regS = (regS & (PS_CARRY|PS_UNUSED)) | (regA & PS_SIGN);
+      if( regA==0 ) regS |= PS_ZERO;
+      if( altair_interrupt_enabled() ) regS |= PS_PARITY;
+      TIMER_ADD_CYCLES(9);
+      break;
+
+    case 0x4F: // ld r, a
+      regRH = regA;
+      TIMER_ADD_CYCLES(9);
+      break;
+
+    case 0x5F: // ld a, r
+      // we merge the instruction counter and the user-settable
+      // bit 7 here instead of having to deal with a potential
+      // overflow at each instruction fetch
+      regA = (regRL & 0x7f) | (regRH & 0x80);
+      regS = (regS & (PS_CARRY|PS_UNUSED)) | (regA & PS_SIGN);
+      if( regA==0 ) regS |= PS_ZERO;
+      if( altair_interrupt_enabled() ) regS |= PS_PARITY;
+      TIMER_ADD_CYCLES(9);
+      break;
+
     case 0x67: // rrd
       w = MEM_READ(regHL.HL) | (regA << 8);
       regA = (regA & 0xF0) | (w & 0x0F);
@@ -2341,6 +2371,11 @@ static void cpu_ext() // 0xED prefix
       else
         TIMER_ADD_CYCLES(16);
       break;
+
+    default:
+      // ignore 0xED prefix
+      CPU_EXEC(opcode);
+      break;
     }
 }
 
@@ -2414,8 +2449,6 @@ void cpucore_z80_print_registers()
   Serial.print(F(" regE = "));   numsys_print_byte(regE);
   Serial.print(F(" regH = "));   numsys_print_byte(regH);
   Serial.print(F(" regL = "));   numsys_print_byte(regL);
-  Serial.print(F("\r\n regIX= ")); numsys_print_word(regIX.HL);
-  Serial.print(F(" regIY= ")); numsys_print_word(regIY.HL);
   Serial.print(F("\r\n regA'= ")); numsys_print_byte(regAF_.A);
   Serial.print(F(" regS'= "));   numsys_print_byte(regAF_.F);
   Serial.print(F(" = "));  cpu_print_status_register(regAF_.F);
@@ -2425,6 +2458,12 @@ void cpucore_z80_print_registers()
   Serial.print(F(" regE'= "));   numsys_print_byte(regDE_.E);
   Serial.print(F(" regH'= "));   numsys_print_byte(regHL_.H);
   Serial.print(F(" regL'= "));   numsys_print_byte(regHL_.L);
+  Serial.print(F("\r\n regXH= ")); numsys_print_byte(regIX.H);
+  Serial.print(F(" regXL= ")); numsys_print_byte(regIX.L);
+  Serial.print(F(" regYH= ")); numsys_print_byte(regIY.H);
+  Serial.print(F(" regYL= ")); numsys_print_byte(regIY.L);
+  Serial.print(F(" regR = ")); numsys_print_byte((regRL & 0x7f) | (regRH & 0x80));
+  Serial.print(F(" regI = ")); numsys_print_byte(regI);
   Serial.println();
 }
 

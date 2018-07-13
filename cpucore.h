@@ -69,16 +69,20 @@ extern uint16_t regSP;
   // fixed I8080 CPU
   #define cpu_opcodes cpucore_i8080_opcodes
   #define cpu_clock_KHz()     CPU_CLOCK_I8080
+  #define CPU_EXEC(opcode) (cpu_opcodes[opcode])()
+
 
 #elif USE_Z80==1 
 
   // fixed Z80 CPU
+  extern byte regRL;
   #define cpu_opcodes cpucore_z80_opcodes
   #define cpu_clock_KHz()     CPU_CLOCK_Z80
 
 #else 
 
   // CPU is switchable
+  extern byte regRL;
   #define PROC_I8080 0
   #define PROC_Z80   1
   void cpu_set_processor(int processor);
@@ -89,7 +93,7 @@ extern uint16_t regSP;
 
 typedef void (*CPUFUN)();
 extern CPUFUN cpu_opcodes[256];
-#define CPU_EXEC(opcode) (cpu_opcodes[opcode])()
+#define CPU_EXEC(opcode) (cpu_opcodes[opcode])();
 
 void cpu_setup();
 void cpu_print_registers();

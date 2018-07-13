@@ -1085,6 +1085,12 @@ void altair_interrupt_enable()
 }
 
 
+bool altair_interrupt_enabled()
+{
+  return altair_interrupts_enabled;
+}
+
+
 void altair_interrupt_disable()
 {
   host_clr_status_led_INTE();
@@ -1508,6 +1514,10 @@ void loop()
               opcode = MREAD(regPC);
               host_set_data_leds(opcode);
               regPC++;
+#if USE_Z80!=0
+              // when emulating Z80 we need to increment the R register at each instruction fetch
+              regRL++;
+#endif
               host_clr_status_led_M1();
             }
 
@@ -1552,6 +1562,11 @@ void loop()
     { opcode = altair_interrupt_handler(); }
   else
     { opcode = MEM_READ(regPC); regPC++; }
+
+#if USE_Z80!=0
+  // when emulating Z80 we need to increment the R register at each instruction fetch
+  regRL++;
+#endif
 
   host_clr_status_led_M1();
   if( !(cswitch & BIT(SW_RESET)) ) 
