@@ -65,7 +65,8 @@ struct prog_info_struct get_prog_info(byte i)
       {PSTR("Multi-boot loader ROM"),      prog_tools_copy_multiboot,     true},
 #endif
 #if USE_DAZZLER>0
-      {PSTR("Kaleidoscope"),               prog_dazzler_copy_kaleidoscope,true},
+      {PSTR("Dazzler Kaleidoscope"),       prog_dazzler_copy_kaleidoscope,true},
+#if 0
       {PSTR("DazzleDoodle"),               prog_dazzler_copy_doodle,      true},
       {PSTR("DazzleMation"),               prog_dazzler_copy_animation,   true},
       {PSTR("DazzleWriter"),               prog_dazzler_copy_writer,      true},
@@ -75,6 +76,7 @@ struct prog_info_struct get_prog_info(byte i)
       {PSTR("Dazzler Spacewar"),           prog_dazzler_copy_spacewar,    true},
       {PSTR("Dazzler Gotcha"),             prog_dazzler_copy_gotcha,      true},
       {PSTR("Dazzler 4d Tic Tac Toe"),     prog_dazzler_copy_tic_tac_toe, true},
+#endif
 #endif
 #if USE_VDM1>0
       {PSTR("Cuter for VDM-1"),            prog_tools_copy_vdmcuter,      true},
