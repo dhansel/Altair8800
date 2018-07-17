@@ -18,6 +18,7 @@ Available disks images:
 01110) DISK0E.DSK: Altair Mini-Disk DOS
 01111) DISK0F.DSK: Altair Mini-Disk DOS programs
 10000) DISK10.DSK: Dazzler programs (boots CP/M)
+10001) DISK11.DSK: VDM-1 programs (boots CP/M)
 ---------------------------------------------
 
 These images were put together by Mike Douglas.
