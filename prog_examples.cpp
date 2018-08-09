@@ -46,7 +46,7 @@ static byte     NULs     = 0;
 
 bool prog_examples_read_start(byte idx)
 {
-  if( idx < NUM_BASIC_PROGRAMS || idx >= 0x80 && idx < NUM_ASM_PROGRAMS || idx == 0xc0 )
+  if( idx < NUM_BASIC_PROGRAMS || idx >= 0x80 && idx < 0x80+NUM_ASM_PROGRAMS || idx == 0xc0 )
     {
       prog_idx = idx;
       prog_ctr = 0;
