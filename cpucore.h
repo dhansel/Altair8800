@@ -69,8 +69,6 @@ extern uint16_t regSP;
   // fixed I8080 CPU
   #define cpu_opcodes cpucore_i8080_opcodes
   #define cpu_clock_KHz()     CPU_CLOCK_I8080
-  #define CPU_EXEC(opcode) (cpu_opcodes[opcode])()
-
 
 #elif USE_Z80==1 
 
