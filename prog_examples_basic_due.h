@@ -16,40 +16,6 @@
 #include "config.h"
 
 
-#ifdef USE_SHORT_EXAMPLE_LIST
-
-const char PROGMEM primes_bas[] = 
-  "100 PRINT \"Interface Age Prime-Number Benchmark Program\"\r"
-  "110 FOR N=1 TO 200\r"
-  "120 FOR K=2 TO 100\r"
-  "130 M=N/K\r"
-  "140 L=INT(M)\r"
-  "150 IF L=0 THEN 200\r"
-  "160 IF L=1 THEN 190\r"
-  "170 IF M>L THEN 190\r"
-  "180 IF M=L THEN 210\r"
-  "190 NEXT  K\r"
-  "200 PRINT N\r"
-  "210 NEXT  N\r"
-  "220 PRINT\r"
-  "230 PRINT\r"
-  "240 PRINT \"Done\"\r"
-  "250 END\r";
-
-
-const char dir[] = 
-  "0  \"0000) [this directory]\"\r"
-  "1  \"0001) PRIMES\"\r";
-
-
-const char * const basic_programs[]  = { 
-  dir, 
-  primes_bas, 
-};
-
-
-#else
-
 const char basic_23_match[] =
   "20 PRINT TAB(31);\"23 MATCHES\"\r"
   "30 PRINT TAB(15);\"CREATIVE COMPUTING  MORRISTOWN, NEW JERSEY\"\r"
@@ -8514,6 +8480,9 @@ struct entry_struct { const char *name, *data; };
 
 const entry_struct basic_programs[]  = {
   {"[this directory]", NULL}
+#ifdef USE_SHORT_EXAMPLE_LIST
+  ,{"prime numbers",    basic_isprime}
+#else
   ,{"23-match",         basic_23_match}
   ,{"amazing",          basic_amazing}
   ,{"baccarat",         basic_baccarat}
@@ -8571,6 +8540,7 @@ const entry_struct basic_programs[]  = {
   ,{"towers",           basic_towers}
   ,{"word puzzle",      basic_word_puzzle}
   ,{"wumpus",           basic_wumpus}
+#endif
   };
 
 
@@ -8608,6 +8578,3 @@ byte read_basic_example(int n, int i)
       return basic_programs[n].data[i];
     }
 }
-
-
-#endif
