@@ -114,7 +114,9 @@ void altair_wait_reset()
   // wait while RESET switch is held
   while( host_read_function_switch_debounced(SW_RESET) );
 
-  cswitch |= BIT(SW_RESET);
+  // if in single-step mode we need to set a flag so we know
+  // to exit out of the currently executing instruction
+  if( host_read_status_led_WAIT() ) cswitch |= BIT(SW_RESET);
 }
 
 
