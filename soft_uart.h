@@ -24,8 +24,8 @@
  **/
 /*
  * File: soft_uart.h 
- * Description:  This  is  an  implementation  of  a  software  UART  (Universal
- * Asynchronous Receiver  Transmitter)  library  for  the  Arduino  Due's  Atmel
+ * Description:  This  is  an  implementation  of  a  software	UART  (Universal
+ * Asynchronous Receiver  Transmitter)	library  for  the  Arduino  Due's  Atmel
  * ATSAM3X8E micro-controller.
  * Date: June 22nd, 2015
  * Author: Antonio C. Dominguez-Brito <adominguez@iusiani.ulpgc.es>
@@ -33,7 +33,7 @@
  */
 
 /**
- ** Modifications by David Hansel on 11/2/17:
+ ** Modifications by David Hansel on 11/10/18:
  ** - Added "set_rx_handler" function which sets a call-back handler to be called
  **   after a byte of data has been received. Note that the call-back will be
  **   invoked from within an interrupt handler so it should be coded to finish
@@ -44,7 +44,11 @@
  **   to allow using the (otherwise unused) pins connected to the RX and TX 
  **   lights between the two USB connectors as a serial interface
  **   (those are digital pins 72 and 73 but NUM_DIGITAL_PINS is defined as 72)
+ ** - Fixed code in rx_interrupt() to avoid race condition if timer overrun
+ **   occurred during rx_interrupt function.
+ ** - Fixed "tx code" section in tc_interrupt() to avoid off-spec short stop bits
  **/
+
 
 #ifndef SOFT_UART_H
 #define SOFT_UART_H
@@ -113,6 +117,20 @@ serial_tc_declaration(7,rx_length,tx_length)
 
 #define serial_tc8_declaration(rx_length,tx_length) \
 serial_tc_declaration(8,rx_length,tx_length)
+
+/** \brief  Get Enabled Interrupt
+
+  This function reads the set-enable register in the NVIC and returns the enabled bit
+  for the specified interrupt.
+
+  \param [in]      IRQn  Number of the interrupt for get pending
+  \return             0  Interrupt status is not enabled 
+  \return             1  Interrupt status is enabled 
+ */
+static __INLINE uint32_t NVIC_GetEnabledIRQ(IRQn_Type IRQn)
+{
+  return((uint32_t) ((NVIC->ISER[(uint32_t)(IRQn) >> 5] & (1 << ((uint32_t)(IRQn) & 0x1F)))?1:0)); /* Return 1 if enabled else 0 */
+}
 
 namespace arduino_due
 {
@@ -214,6 +232,14 @@ namespace arduino_due
       IRQn_Type irq;
     };
 
+    class interrupt_guard
+    {
+      public:
+
+        interrupt_guard() { __disable_irq(); }
+        ~interrupt_guard() { __enable_irq(); }
+    };
+
     extern tc_timer_data 
       tc_timer_table[static_cast<uint32_t>(timer_ids::TIMER_IDS)];
     
@@ -273,12 +299,11 @@ namespace arduino_due
           pinMode(rx_pin,INPUT_PULLUP);
           attachInterrupt(rx_pin,uart::rx_interrupt,CHANGE);
 
-          _ctx_.enable_rx_interrupts(); 
           _mode_=mode_codes::FULL_DUPLEX;
 
           return return_codes::EVERYTHING_OK;
         }
-  
+	
         return_codes half_duplex_config(
           uint32_t rx_tx_pin = default_pins::DEFAULT_RX_PIN,
           uint32_t bit_rate = bit_rates::DEFAULT_BIT_RATE,
@@ -290,7 +315,7 @@ namespace arduino_due
         {
           _mode_=mode_codes::INVALID_MODE;
 
-          if(rx_tx_pin>=NUM_DIGITAL_PINS)
+          if(rx_tx_pin>=74)
             return return_codes::BAD_HALF_DUPLEX_PIN;
 
           return_codes ret_code=
@@ -310,7 +335,6 @@ namespace arduino_due
             // configure & attatch interrupt on rx pin
             pinMode(rx_tx_pin,INPUT_PULLUP);
             attachInterrupt(rx_tx_pin,uart::rx_interrupt,CHANGE);
-            _ctx_.enable_rx_interrupts(); 
             _mode_=mode_codes::RX_MODE;
           }
           else
@@ -340,7 +364,6 @@ namespace arduino_due
           attachInterrupt(_ctx_.rx_pin,uart::rx_interrupt,CHANGE);
           
           _mode_=mode_codes::RX_MODE;
-          _ctx_.enable_rx_interrupts(); 
           return true;
         }
 
@@ -353,12 +376,8 @@ namespace arduino_due
 
           if(_mode_==mode_codes::TX_MODE) return true;
 
-          while(true)
-          {
-            _ctx_.disable_rx_interrupts();
-            if(_ctx_.rx_status==rx_status_codes::LISTENING) break;
-            _ctx_.enable_rx_interrupts();
-          }
+          // waiting to finish reception
+          while(_ctx_.rx_status==rx_status_codes::RECEIVING) { /* do nothing */ } 
 
           detachInterrupt(_ctx_.rx_pin);
           pinMode(_ctx_.tx_pin,OUTPUT);
@@ -385,8 +404,8 @@ namespace arduino_due
         size_t get_tx_buffer_length() { return TX_BUFFER_LENGTH; }
   
         uint32_t get_bit_rate() { return _ctx_.bit_rate; }
-        double get_bit_time() { return _ctx_.bit_time; }  
-        double get_frame_time() { return _ctx_.frame_time; }  
+        double get_bit_time() { return _ctx_.bit_time; }	
+        double get_frame_time() { return _ctx_.frame_time; }	
 
         uint32_t get_rx_data(uint32_t& data) 
         { 
@@ -489,12 +508,8 @@ namespace arduino_due
 
           int available()
           {
-            register int any;
-            disable_tc_interrupts();
-            any=rx_buffer.items();
-            enable_tc_interrupts();
-
-            return any;
+            interrupt_guard guard;
+            return rx_buffer.items();
           }
 
           bool data_available(uint32_t status)
@@ -533,18 +548,14 @@ namespace arduino_due
           // is TX buffer full?
           bool is_tx_full() 
           { 
-            disable_tc_interrupts();
-            auto full=tx_buffer.is_full();
-            enable_tc_interrupts();
-            return full;
+            interrupt_guard guard;
+            return tx_buffer.is_full();
           }
 
           int available_for_write() 
           { 
-            disable_tc_interrupts();
-            auto items=tx_buffer.available();
-            enable_tc_interrupts();
-            return items;
+            interrupt_guard guard;
+            return tx_buffer.available();
           }
 
           // NOTE: only the 5, 6, 7, 8  or 9 lowest significant bits
@@ -560,9 +571,8 @@ namespace arduino_due
 
           void flush_rx()
           {
-            disable_tc_interrupts();
+            interrupt_guard guard;
             rx_buffer.reset();
-            enable_tc_interrupts();
           }
 
           tx_status_codes get_tx_status() { return tx_status; }
@@ -575,24 +585,34 @@ namespace arduino_due
             return odd_parity;
           }
 
-          void enable_rx_interrupts() { NVIC_EnableIRQ(rx_irq); }
-          void disable_rx_interrupts() { NVIC_DisableIRQ(rx_irq); }
+          void config_rx_interrupt() 
+          { NVIC_SetPriority(rx_irq,0); NVIC_EnableIRQ(timer_p->irq); }
+
+          void enable_rx_interrupts() { rx_pio_p->PIO_IER=rx_mask; }
+
+          void disable_rx_interrupts() { rx_pio_p->PIO_IDR=rx_mask; }
+
+          bool is_rx_interrupts_enabled() { return bool{rx_pio_p->PIO_IMR & rx_mask}; }
 
           void config_tc_interrupt() { NVIC_SetPriority(timer_p->irq,0); }
 
           void enable_tc_interrupts() { NVIC_EnableIRQ(timer_p->irq); }
+          
           void disable_tc_interrupts() { NVIC_DisableIRQ(timer_p->irq); }
+
+          bool is_tc_interrupts_enabled()
+          { return bool{NVIC_GetEnabledIRQ(timer_p->irq)}; }
 
           void start_tc_interrupts()
           {
             NVIC_ClearPendingIRQ(timer_p->irq);
-            NVIC_EnableIRQ(timer_p->irq);
+            enable_tc_interrupts();
             TC_Start(timer_p->tc_p,timer_p->channel);
           }
 
           void stop_tc_interrupts()
           {
-            NVIC_DisableIRQ(timer_p->irq);
+            disable_tc_interrupts();
             TC_Stop(timer_p->tc_p,timer_p->channel);
           }
 
@@ -692,13 +712,15 @@ namespace arduino_due
           volatile uint32_t rx_bit;
           volatile rx_status_codes rx_status;
           volatile uint32_t rx_data_status;
-          volatile bool rx_at_end_quarter;
+          //volatile bool rx_at_end_quarter;
+          volatile uint32_t rx_interrupt_counter;
 
           // tx data
           fifo<uint32_t,TX_BUFFER_LENGTH> tx_buffer;
           volatile uint32_t tx_data;
           volatile uint32_t tx_bit_counter;
           volatile tx_status_codes tx_status;
+          volatile uint32_t tx_interrupt_counter;
         };
   
         static _uart_ctx_ _ctx_;
@@ -738,6 +760,7 @@ namespace arduino_due
             stop_bit_codes::ONE_STOP_BIT
           );
         }
+
 	void begin(uint32_t rx_pin, uint32_t tx_pin, unsigned long baud_rate, unsigned long config)
 	{
 	  data_bit_codes bits = data_bit_codes::EIGHT_BITS;
@@ -774,7 +797,6 @@ namespace arduino_due
 
 	  _tc_uart_.config(rx_pin, tx_pin, static_cast<uint32_t>(baud_rate), bits, parity, stop);
 	}
-
 
         void begin(
           uint32_t rx_pin = default_pins::DEFAULT_RX_PIN,
@@ -858,8 +880,10 @@ namespace arduino_due
 
           return _last_data_; 
         }
+
         void set_rx_handler(void (*h)(void)) { _tc_uart_.set_rx_handler(h); }
 
+        bool data_available() { _tc_uart_.data_available(_last_data_status_); }
 
         bool data_lost() { return _tc_uart_.data_lost(_last_data_status_); }
 
@@ -952,7 +976,6 @@ namespace arduino_due
       ) return return_codes::BAD_BIT_RATE_ERROR;
       rx_handler = NULL;
 
-
       timer_p=&(tc_timer_table[static_cast<uint32_t>(TIMER)]);
       bit_rate=the_bit_rate;
       
@@ -996,7 +1019,7 @@ namespace arduino_due
       rx_status=rx_status_codes::LISTENING;
       rx_data_status=rx_data_status_codes::NO_DATA_AVAILABLE;
       rx_buffer.reset();
-      rx_at_end_quarter=false;
+      rx_interrupt_counter=0;
 
       rx_irq=(
         (rx_pio_p==PIOA)? 
@@ -1012,6 +1035,7 @@ namespace arduino_due
       tx_mask=g_APinDescription[tx_pin].ulPin;
       tx_status=tx_status_codes::IDLE;
       tx_buffer.reset();
+      tx_interrupt_counter=0;
 
       // PMC settings
       pmc_set_writeprotect(0);
@@ -1026,12 +1050,13 @@ namespace arduino_due
         TC_CMR_WAVSEL_UP_RC
       );
       
-      TC_SetRA(timer_p->tc_p,timer_p->channel,bit_1st_half);
+      TC_SetRA(timer_p->tc_p,timer_p->channel,bit_1st_half>>1);
       disable_tc_ra_interrupt();
 
-      TC_SetRC(timer_p->tc_p,timer_p->channel,bit_ticks);
-      disable_tc_rc_interrupt();
+      TC_SetRC(timer_p->tc_p,timer_p->channel,bit_1st_half);
+      enable_tc_rc_interrupt();
 
+      config_rx_interrupt();
       config_tc_interrupt();
       stop_tc_interrupts();
 
@@ -1050,81 +1075,52 @@ namespace arduino_due
       uint32_t the_status
     )
     {
-      // RA compare interrupt
-      if((the_status & TC_SR_CPAS) && is_enabled_ra_interrupt())
+      // RC compare interrupt
+      if((the_status & TC_SR_CPCS) && is_enabled_rc_interrupt())
       {
+        // rx code
         if(rx_status==rx_status_codes::RECEIVING)
-        { 
-          if(!rx_at_end_quarter)
+        {
+          if((rx_interrupt_counter++)&1)
           {
             get_incoming_bit();
-            if((rx_bit_counter++)==rx_frame_bits-1)  
+            if((rx_bit_counter++)==rx_frame_bits-1)
             {
               if(stop_bits==stop_bit_codes::TWO_STOP_BITS)
                 get_incoming_bit();
 
-              disable_tc_ra_interrupt();
-
-              if(tx_status==tx_status_codes::IDLE)
-                stop_tc_interrupts();
+              if(tx_status==tx_status_codes::IDLE) stop_tc_interrupts(); 
 
               update_rx_data_buffer();
 
               rx_status=rx_status_codes::LISTENING;
             }
           }
-          else rx_at_end_quarter=false;
-        }
-      }
-     
-      // RC compare interrupt
-      if((the_status & TC_SR_CPCS) && is_enabled_rc_interrupt())
-      {
-        // rx code
-        if(
-            !is_enabled_ra_interrupt() && 
-            (rx_status==rx_status_codes::RECEIVING)
-        )
-        {
-          get_incoming_bit();
-          if((rx_bit_counter++)==rx_frame_bits-1)
-          {
-            if(stop_bits==stop_bit_codes::TWO_STOP_BITS)
-              get_incoming_bit();
-
-            if(tx_status==tx_status_codes::IDLE)
-            {
-              disable_tc_rc_interrupt();
-              stop_tc_interrupts(); 
-            }
-
-            update_rx_data_buffer();
-
-            rx_status=rx_status_codes::LISTENING;
-          }
         }
 
         // tx code
         if(tx_status==tx_status_codes::SENDING)
         {
-          set_outgoing_bit();
-          if((tx_bit_counter++)==tx_frame_bits-1) 
+          if((tx_interrupt_counter++)&1)
           {
             uint32_t data_to_send;
-            if(tx_buffer.pop(data_to_send)) 
-            { tx_data=data_to_send; tx_bit_counter=0; }
-            else
-            {
-              if(rx_status==rx_status_codes::LISTENING)
-              { disable_tc_rc_interrupt(); stop_tc_interrupts(); }
-              else
+            if( tx_bit_counter<tx_frame_bits ) 
               {
-                if(is_enabled_ra_interrupt())
-                  disable_tc_rc_interrupt();
+                set_outgoing_bit();
+                tx_bit_counter++;
               }
-
-              tx_status=tx_status_codes::IDLE;
-            }
+            else if( tx_buffer.pop(data_to_send) )
+              { 
+                tx_data=data_to_send; 
+                tx_bit_counter=0; 
+                set_outgoing_bit();
+                tx_bit_counter++;
+              }
+            else
+              {
+                if(rx_status==rx_status_codes::LISTENING) stop_tc_interrupts(); 
+                tx_status=tx_status_codes::IDLE;
+              }
           }
         }
       }
@@ -1151,26 +1147,24 @@ namespace arduino_due
             rx_status=rx_status_codes::RECEIVING;
             rx_data=rx_bit_counter=rx_bit=0;
             
-            if(tx_status==tx_status_codes::IDLE)
-            { 
-              enable_tc_ra_interrupt(); 
-              start_tc_interrupts(); 
-            } 
+            if(tx_status==tx_status_codes::IDLE) 
+              { rx_interrupt_counter=1; start_tc_interrupts(); }
             else 
             {
-              register uint32_t timer_value=
-                TC_ReadCV(timer_p->tc_p,timer_p->channel);
-
-              if(timer_value<=(bit_1st_half>>1)) 
-                enable_tc_ra_interrupt();
-              else
-              {
-                if(timer_value>bit_1st_half+(bit_1st_half>>1))
+              uint32_t timer_status = TC_GetStatus(timer_p->tc_p,timer_p->channel);
+              if( timer_status & TC_SR_CPCS )
                 {
-                  enable_tc_ra_interrupt();
-                  rx_at_end_quarter=true;
+                  // a RC compare event just happened => process it but prevent RX part from running
+                  rx_interrupt_counter = 0;
+                  tc_interrupt(timer_status);
+                  timer_status = 0;
                 }
-              }
+
+              // if we are in the first half of current half-bit interval then
+              // start sampling RX bits at upcoming half-bit interrupt
+              // if we are in the second half of current half-bit interval then
+              // start sampling RX bits one after upcoming half-bit interrupt
+              rx_interrupt_counter = (timer_status & TC_SR_CPAS)==0 ? 1 : 0;
             }
           } 
           break;
@@ -1196,23 +1190,21 @@ namespace arduino_due
       register uint32_t status;
       register bool not_empty;
       uint32_t data_received;
-
-      disable_tc_interrupts();
       
-      if(!(not_empty=rx_buffer.pop(data_received)))
-        rx_data_status=rx_data_status_codes::NO_DATA_AVAILABLE;
-      status=rx_data_status;
-
-      enable_tc_interrupts();
+      {
+        interrupt_guard guard;
+        
+        status=(not_empty=rx_buffer.pop(data_received))?
+          rx_data_status_codes::DATA_AVAILABLE:
+          rx_data_status_codes::NO_DATA_AVAILABLE;
+      }
 
       if(!not_empty) return status;
       
       // checking start bit
-      status=(
-        (data_received & 1)?
-          status|rx_data_status_codes::BAD_START_BIT:
-          status&(~rx_data_status_codes::BAD_START_BIT)
-      );
+      status=(data_received & 1)?
+        status|rx_data_status_codes::BAD_START_BIT:
+        status&(~rx_data_status_codes::BAD_START_BIT);
 
       // cheking parity
       if(parity!=parity_codes::NO_PARITY)
@@ -1229,20 +1221,16 @@ namespace arduino_due
           (data_received>>parity_bit_pos) & 1;
 
         // verifying parity bit
-        status=(
-          (received_parity^data_parity)?
+        status=(received_parity^data_parity)?
             status|rx_data_status_codes::BAD_PARITY:
-            status&(~rx_data_status_codes::BAD_PARITY)
-        );
+            status&(~rx_data_status_codes::BAD_PARITY);
       }
 
       // checking stop bit
       // NOTE: we only verify the first stop bit
-      status=(
-        ((data_received>>first_stop_bit_pos) & 1)?
-          status&(~rx_data_status_codes::BAD_STOP_BIT):
-          status|rx_data_status_codes::BAD_STOP_BIT
-      );
+      status=((data_received>>first_stop_bit_pos) & 1)?
+        status&(~rx_data_status_codes::BAD_STOP_BIT):
+        status|rx_data_status_codes::BAD_STOP_BIT;
 
       // NOTE: in case of error, we put the received raw data
       // on the high 16 bits of status
@@ -1291,35 +1279,25 @@ namespace arduino_due
         data_to_send=data_to_send|(0x3<<first_stop_bit_pos);
 
       register bool not_full;
-  
-      disable_tc_interrupts();
+      interrupt_guard guard;
+
       not_full=tx_buffer.push(data_to_send);
-      enable_tc_interrupts();
 
       if(!not_full) return false;
-      
-      enable_tc_rc_interrupt();
 
-      disable_tc_interrupts();
-
-      disable_rx_interrupts();
-      if(
-        (rx_status==rx_status_codes::LISTENING)
-        && (tx_status==tx_status_codes::IDLE) 
-      ) start_tc_interrupts();
-      enable_rx_interrupts();
-
-      //disable_tc_interrupts();
-      
       if(tx_status==tx_status_codes::IDLE)
       {
         tx_buffer.pop(data_to_send); 
         tx_data=data_to_send; tx_bit_counter=0; 
+        tx_interrupt_counter=1;
       }
 
+      if(
+        (rx_status==rx_status_codes::LISTENING)
+        && (tx_status==tx_status_codes::IDLE) 
+      ) start_tc_interrupts();
+
       tx_status=tx_status_codes::SENDING;
-      
-      enable_tc_interrupts();
 
       return true;
     }
@@ -1329,4 +1307,3 @@ namespace arduino_due
 }
 
 #endif // SOFT_UART_H
-
