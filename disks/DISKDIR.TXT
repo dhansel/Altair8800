@@ -19,7 +19,8 @@ Available disks images:
 01111) DISK0F.DSK: Altair Mini-Disk DOS programs
 10000) DISK10.DSK: Dazzler programs (boots CP/M)
 10001) DISK11.DSK: VDM-1 programs (boots CP/M)
+10010) DISK12.DSK: IMP modem executive (CP/M)
 ---------------------------------------------
 
-These images were put together by Mike Douglas.
+Images 00-0F were put together by Mike Douglas.
 See README.TXT for more information.
