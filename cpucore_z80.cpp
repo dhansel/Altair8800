@@ -78,6 +78,11 @@ inline uint16_t MEM_READ_WORD(uint16_t addr)
   else
     {
       byte l, h;
+#if USE_REAL_MREAD_TIMING>0
+      l = MEM_READ(addr);
+      addr++;
+      h = MEM_READ(addr);
+#else
       host_set_status_leds_READMEM();
       host_set_addr_leds(addr);
       l = MREAD(addr);
@@ -85,6 +90,7 @@ inline uint16_t MEM_READ_WORD(uint16_t addr)
       host_set_addr_leds(addr);
       h = MREAD(addr);
       host_set_data_leds(h);
+#endif
       return l | (h * 256);
     }
 }
@@ -101,6 +107,13 @@ inline void MEM_WRITE_WORD(uint16_t addr, uint16_t v)
   else
     {
       byte b;
+#if SHOW_BUS_OUTPUT>0
+      b = v & 255;
+      MEM_WRITE(addr, b);
+      b = v / 256;
+      addr++;
+      MEM_WRITE(addr, b);
+#else
       host_set_status_leds_WRITEMEM();
       host_set_data_leds(0xff);
       host_set_addr_leds(addr);
@@ -110,6 +123,7 @@ inline void MEM_WRITE_WORD(uint16_t addr, uint16_t v)
       host_set_addr_leds(addr);
       b = v / 256;
       MWRITE(addr, b);
+#endif
     }
 }
 
@@ -147,6 +161,23 @@ static void popStackSlow(byte *valueH, byte *valueL)
     }
 }
 
+
+#if SHOW_BUS_OUTPUT>0
+
+#define pushStack(valueH, valueL)               \
+  if( !host_read_status_led_WAIT() )            \
+    {                                           \
+      host_set_status_led_STACK();              \
+      regSP--;                                  \
+      MEM_WRITE(regSP, valueH);                 \
+      regSP--;                                  \
+      MEM_WRITE(regSP, valueL);                 \
+      host_clr_status_led_STACK();              \
+    }                                           \
+  else pushStackSlow(valueH, valueL);
+
+#else
+
 #define pushStack(valueH, valueL)               \
   if( !host_read_status_led_WAIT() )            \
     {                                           \
@@ -162,6 +193,23 @@ static void popStackSlow(byte *valueH, byte *valueL)
     }                                           \
   else pushStackSlow(valueH, valueL);
 
+#endif
+
+#if USE_REAL_MREAD_TIMING>0
+
+#define popStack(valueH, valueL)                \
+  if( !host_read_status_led_WAIT() )            \
+    {                                           \
+      host_set_status_led_STACK();              \
+      valueL = MEM_READ(regSP);                 \
+      regSP++;                                  \
+      valueH = MEM_READ(regSP);                 \
+      regSP++;                                  \
+      host_clr_status_led_STACK();              \
+    }                                           \
+  else popStackSlow(&valueH, &valueL);
+
+#else
 
 #define popStack(valueH, valueL)                     \
   if( !host_read_status_led_WAIT() )                 \
@@ -176,6 +224,9 @@ static void popStackSlow(byte *valueH, byte *valueL)
       host_clr_status_led_STACK();                   \
     }                                                \
   else popStackSlow(&valueH, &valueL);
+
+
+#endif
 
 
 inline void pushStackWord(uint16_t v)

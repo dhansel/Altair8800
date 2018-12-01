@@ -63,6 +63,7 @@ bool read_intel_hex();
 void empty_input_buffer();
 void rtc_setup();
 
+#if USE_THROTTLE>0
 uint32_t  throttle_micros = 0;
 uint16_t  throttle_delay  = 0;
 
@@ -80,6 +81,7 @@ void update_throttle()
 
   throttle_micros = now;
 }
+#endif
 
 
 void altair_set_outputs(uint16_t a, byte v)
@@ -1254,12 +1256,13 @@ inline byte altair_read_sense_switches()
 }
 
 
-void altair_out(byte addr, byte data)
+void altair_out(byte port, byte data)
 {
-  host_set_status_led_OUT();
-  host_set_status_led_WO();
-  host_set_addr_leds(addr|addr*256);
+  host_set_addr_leds(port|port*256);
 
+#if SHOW_BUS_OUTPUT>0
+  host_set_data_leds(data);
+#else
   // The S-100 bus on the real Altair has separate data
   // buses for data in (to CPU) and data out (from CPU).
   // The data LEDs on the front panel are connected to
@@ -1269,114 +1272,179 @@ void altair_out(byte addr, byte data)
   // We simulate the original behavior here even though
   // we could just as well show the proper data.
   host_set_data_leds(0xff);
+#endif
 
-  switch( addr )
-    {
-    case 0000: serial_sio_out_ctrl(data); break;
-    case 0001: serial_sio_out_data(data); break;
-    case 0002: printer_out_ctrl(data); break;
-    case 0003: printer_out_data(data); break;
-    case 0006: serial_acr_out_ctrl(data); break;
-    case 0007: serial_acr_out_data(data); break;
-    case 0010:
-    case 0011:
-    case 0012: drive_out(addr, data); break;
-#ifdef USE_DAZZLER
-    case 0016: dazzler_out_ctrl(data); break;
-    case 0017: dazzler_out_pict(data); break;
+  host_set_status_led_OUT();
+  host_set_status_led_WO();
+
+#if NUM_DRIVES>0
+  if( port>=0x08 && port<=0x0A )
+    drive_out(port, data);
+#else
+  if(0) {}
 #endif
-    case 0240:
-    case 0241:
-    case 0242:
-    case 0243:
-    case 0244:
-    case 0245:
-    case 0246:
-    case 0247: hdsk_4pio_out(addr, data); break;
-#ifdef USE_VDM1
-    case 0310: vdm1_out(data); break;
+#if NUM_HDSK_UNITS>0
+  else if( port>=0xA0 && port<=0xA7 )
+    hdsk_4pio_out(port, data);
 #endif
-    case 0020: serial_2sio1_out_ctrl(data); break;
-    case 0021: serial_2sio1_out_data(data); break;
-    case 0022: serial_2sio2_out_ctrl(data); break;
-    case 0023: serial_2sio2_out_data(data); break;
+#if USE_DAZZLER>0
+  else if( port==0x0E )
+    dazzler_out_ctrl(data);
+  else if( port==0x0F )
+    dazzler_out_pict(data);
+#endif
+#if USE_VDM1>0
+  else if( port==0xC8 )
+    vdm1_out(data);
+#endif
+  else if( port==0x00 )
+    serial_sio_out_ctrl(data);
+  else if( port==0x01 )
+    serial_sio_out_data(data);
+  else if( port==0x06 )
+    serial_acr_out_ctrl(data);
+  else if( port==0x07 )
+    serial_acr_out_data(data);
+  else if( port==0x10 )
+    serial_2sio1_out_ctrl(data);
+  else if( port==0x11 )
+    serial_2sio1_out_data(data);
+  else if( port==0x12 )
+    serial_2sio2_out_ctrl(data);
+  else if( port==0x13 )
+    serial_2sio2_out_data(data);
 #if USE_SECOND_2SIO>0
-    case 0024: serial_2sio3_out_ctrl(data); break;
-    case 0025: serial_2sio3_out_data(data); break;
-    case 0026: serial_2sio4_out_ctrl(data); break;
-    case 0027: serial_2sio4_out_data(data); break;
+  else if( port==0x14 )
+    serial_2sio3_out_ctrl(data);
+  else if( port==0x15 )
+    serial_2sio3_out_data(data);
+  else if( port==0x16 )
+    serial_2sio4_out_ctrl(data);
+  else if( port==0x17 )
+    serial_2sio4_out_data(data);
 #endif
-    case 0376: altair_vi_out_control(data); break;
-    }
+  else if( port==0xFE )
+    altair_vi_out_control(data);
+#if USE_PRINTER>0
+  else if( port==0x02 )
+    printer_out_ctrl(data);
+  else if( port==0x03 )
+    printer_out_data(data);
+#endif
   
   if( host_read_status_led_WAIT() )
     {
-      altair_set_outputs(addr | addr*256, 0xff);
+#if SHOW_BUS_OUTPUT>0
+      altair_set_outputs(port | port*256, data);
+#else
+      altair_set_outputs(port | port*256, 0xff);
+#endif
       altair_wait_step();
     }
 
   host_clr_status_led_OUT();
+#if SHOW_BUS_OUTPUT>0
+  host_clr_status_led_WO();
+#endif
 }
 
 
-byte altair_in(byte addr)
+inline byte exec_input(byte port)
+{
+  // check the most common cases fist:
+  //  - reading SIO/ACR/2SIO control registers (i.e. waiting for serial input,
+  //    which is often done in a very tight loop)
+  //  - reading front panel switches
+  if( port==0x00 )
+    return serial_sio_in_ctrl(); 
+  else if( port==0x06 )
+    return serial_acr_in_ctrl();
+  else if( port==0x10 )
+    return serial_2sio1_in_ctrl();
+  else if( port==0x12 )
+    return serial_2sio2_in_ctrl();
+#if USE_SECOND_2SIO>0
+  else if( port==0x14 )
+    return serial_2sio3_in_ctrl();
+  else if( port==0x16 )
+    return serial_2sio4_in_ctrl();
+#endif
+  else if( port==0xff )
+    return altair_read_sense_switches();
+#if NUM_DRIVES>0
+  else if( port>=0x08 && port<=0x0A )
+    return drive_in(port);
+#endif
+#if NUM_HDSK_UNITS>0
+  else if( port>=0xA0 && port<=0xA7 )
+    return drive_in(port);
+#endif
+  else if( port==0x01 )
+    return serial_sio_in_data(); 
+  else if( port==0x07 )
+    return serial_acr_in_data(); 
+  else if( port==0x11 )
+    return serial_2sio1_in_data(); 
+  else if( port==0x13 )
+    return serial_2sio2_in_data(); 
+#if USE_SECOND_2SIO>0
+  else if( port==0x15 )
+    return serial_2sio3_in_data(); 
+  else if( port==0x17 )
+    return serial_2sio4_in_data(); 
+#endif  
+#if USE_PRINTER>0
+  else if( port==0x02 )
+    return printer_in_ctrl();
+  else if( port==0x03 )
+    return printer_in_data();
+#endif
+#if USE_DAZZLER>0      
+  else if( port==0x0e || (port>=0x18 && port<=0x1c) )
+    return dazzler_in(port);
+#endif
+  else
+    {
+#if !(READ_UNUSED_PORTS_EXT>0)
+      return 0xff; 
+#elif STANDALONE>0
+      return dswitch / 256;
+#else
+      return altair_read_sense_switches();
+#endif
+    }
+}
+
+
+byte altair_in(byte port)
 {
   byte data = 0;
 
+  host_set_addr_leds(port | port*256);
   host_set_status_led_INP();
-  host_set_addr_leds(addr | addr*256);
-
-  // check the most common cases fist:
-  //  - reading 2-SIO control register (i.e. waiting for serial input)
-  //  - reading front panel switches
-  switch( addr )
-    {
-    case 0000: data = serial_sio_in_ctrl(); break;
-    case 0006: data = serial_acr_in_ctrl(); break;
-    case 0020: data = serial_2sio1_in_ctrl(); break;
-    case 0022: data = serial_2sio2_in_ctrl(); break;
-#if USE_SECOND_2SIO>0
-    case 0024: data = serial_2sio3_in_ctrl(); break;
-    case 0026: data = serial_2sio4_in_ctrl(); break;
-#endif
-    case 0377: data = altair_read_sense_switches(); break;
-    case 0010:
-    case 0011:
-    case 0012: data = drive_in(addr); break;
-    case 0240:
-    case 0241:
-    case 0242:
-    case 0243:
-    case 0244:
-    case 0245:
-    case 0246:
-    case 0247: data = hdsk_4pio_in(addr); break;
-    case 0001: data = serial_sio_in_data(); break;
-    case 0007: data = serial_acr_in_data(); break;
-    case 0021: data = serial_2sio1_in_data(); break;
-    case 0023: data = serial_2sio2_in_data(); break;
-    case 0016:
-    case 0030:
-    case 0031:
-    case 0032:
-    case 0033:
-    case 0034: data = dazzler_in(addr); break;
-#if USE_SECOND_2SIO>0
-    case 0025: data = serial_2sio3_in_data(); break;
-    case 0027: data = serial_2sio4_in_data(); break;
-#endif
-    case 0002: data = printer_in_ctrl(); break;
-    case 0003: data = printer_in_data(); break;
-    default:   data = 0xff; break;
-    }
 
   if( host_read_status_led_WAIT() )
     {
-      altair_set_outputs(addr| addr*256, data);
-      altair_wait_step();
+      cswitch &= BIT(SW_RESET); // clear everything but RESET status
+      
+      // keep reading input data while we are waiting
+      while( host_read_status_led_WAIT() && (cswitch & (BIT(SW_STEP) | BIT(SW_SLOW) | BIT(SW_RESET)))==0 )
+        { 
+          data = exec_input(port);
+          altair_set_outputs(port| port*256, data);
+          read_inputs(); 
+
+          // advance simulation time (so timers can expire)
+          TIMER_ADD_CYCLES(50);
+        }
+      
+      if( cswitch & BIT(SW_SLOW) ) delay(500);
     }
   else
-    host_set_data_leds(data);
+    {
+      data = exec_input(port);
+      host_set_data_leds(data);
+    }
 
   host_clr_status_led_INP();
   return data;
@@ -1511,10 +1579,15 @@ void loop()
             {
               // no interrupt => read opcode, put it on data bus LEDs and advance PC
               p_regPC = regPC;
+#if USE_REAL_MREAD_TIMING>0
+              host_set_status_led_M1();
+              opcode = MEM_READ(regPC);
+#else
               host_set_status_leds_READMEM_M1();
               host_set_addr_leds(regPC);
               opcode = MREAD(regPC);
               host_set_data_leds(opcode);
+#endif
               regPC++;
 #if USE_Z80!=0
               // when emulating Z80 we need to increment the R register at each instruction fetch

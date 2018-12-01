@@ -47,7 +47,11 @@ void MEM_WRITE_STEP(uint16_t a, byte v)
     {
       MWRITE(a, v);
       host_set_status_leds_WRITEMEM();
+#if SHOW_BUS_OUTPUT>0
+      altair_set_outputs(a, v);
+#else
       altair_set_outputs(a, 0xff);
+#endif
       altair_wait_step();
       host_clr_status_led_WO();
     }

@@ -67,6 +67,42 @@
 #define USE_VDM1 0
 
 
+// If enabled, the D0-7 LEDs will show values being output to the data bus
+// (i.e. memory write or OUT operations). This is different from the original
+// Altair behavior where the D0-7 LEDs were all on for write operations
+// (because the LEDs are wired to the DIN bus lines which are floating during
+// CPU write).
+// Enabling this (a) helps debugging and (b) allows to connect external devices
+// using the data LEDs as a data bus.
+// Enabling this also makes sure that the "WO" LED will go out (negative logic)
+// AFTER the address and data buses have been set to the proper values.
+// It also enables real timing of the "WO" LED similar to the
+// USE_REAL_MREAD_TIMING setting below.
+// Enable this if you want to connect some external hardware that needs to see
+// data during memory write or OUT instructions.
+// Or if you want to see CPU output data during writes and do not care that this
+// behavior does not match the original.
+#define SHOW_BUS_OUTPUT 0
+
+
+// To improve performance, the MEMR LED handling is a bit lazy while a program is
+// running. Memory reads are by far the most common bus action and any tiny
+// bit of time that can be cut here makes a significant performance difference.
+// Setting USE_REAL_MREAD_TIMING to 1 will improve the accuracy of MREAD at the
+// cost of performace. Leaving this at 0 has virtually no visible consequences
+// apart from a slight difference in brightness of the MEMR LED while running.
+// Setting it to 1 significantly reduces performance.
+// Most users should keep this at 0
+#define USE_REAL_MREAD_TIMING 0
+
+
+// If enabled and an "IN" instruction is executed for a port that is not
+// emulated, read the input data from the SW15-8 inputs instead.
+// Enable this if you want to connect external hardware that provides
+// input data for IN instructions.
+#define READ_UNUSED_PORTS_EXT 0
+
+
 // If enabled, Address switch state will be set by issuing the '/'
 // serial command.  Actual switches will be ignored.
 // Useful when operating while not connected to the front panel hardware.

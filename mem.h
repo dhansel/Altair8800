@@ -10,6 +10,7 @@
 #include "host.h"
 #include "prog_basic.h"
 #include "breakpoint.h"
+#include "Altair8800.h"
 
 extern byte Mem[MEMSIZE];
 extern word mem_ram_limit;
@@ -56,13 +57,49 @@ void mem_unprotect(uint16_t a);
 
 #endif
 
-// WARNING: arguments to MEM_READ and MEM_WRITE macros should not have side effects
-// (e.g. MEM_READ(addr++)) => any side effects will be executed multiple times!
-#define MEM_READ(a)       ( host_read_status_led_WAIT() ? MEM_READ_STEP(a) :         ( host_set_status_leds_READMEM(),  host_set_addr_leds(a), host_set_data_leds(MREAD(a)) ))
-#define MEM_WRITE(a, v) if( host_read_status_led_WAIT() ) MEM_WRITE_STEP(a, v); else { host_set_status_leds_WRITEMEM(); host_set_addr_leds(a); host_set_data_leds(0xff); MWRITE(a, v); }
-
 byte MEM_READ_STEP(uint16_t a);
 void MEM_WRITE_STEP(uint16_t a, byte v);
+
+// WARNING: arguments to MEM_READ and MEM_WRITE macros should not have side effects
+// (e.g. MEM_READ(addr++)) => any side effects will be executed multiple times!
+
+#if USE_REAL_MREAD_TIMING>0
+inline byte MEM_READ(uint16_t a)
+{
+  byte res;
+  if( host_read_status_led_WAIT() )
+    res = MEM_READ_STEP(a);
+  else
+    {
+      host_set_addr_leds(a);
+      host_set_status_leds_READMEM();
+      res = host_set_data_leds(MREAD(a));
+      host_clr_status_led_MEMR();
+    }
+  return res;
+}
+#else
+#define MEM_READ(a) ( host_read_status_led_WAIT() ? MEM_READ_STEP(a) : (host_set_status_leds_READMEM(),  host_set_addr_leds(a), host_set_data_leds(MREAD(a)) ))
+#endif
+
+#if SHOW_BUS_OUTPUT>0
+inline void MEM_WRITE(uint16_t a, byte v)
+{
+  if( host_read_status_led_WAIT() )
+    MEM_WRITE_STEP(a,v );
+  else
+    {
+      host_set_addr_leds(a);
+      host_set_data_leds(v);
+      host_set_status_leds_WRITEMEM();
+      MWRITE(a, v);
+      host_clr_status_led_WO();
+    }
+}
+#else
+#define MEM_WRITE(a, v) if( host_read_status_led_WAIT() ) MEM_WRITE_STEP(a, v); else { host_set_status_leds_WRITEMEM(); host_set_addr_leds(a); host_set_data_leds(0xff); MWRITE(a, v); }
+#endif
+
 
 // set the highest address to be treated as RAM (everything above is ROM)
 void mem_set_ram_limit_sys(uint16_t a);
