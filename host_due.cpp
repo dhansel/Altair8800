@@ -841,12 +841,29 @@ void host_serial_receive_start_interrupt_if2()
 #include "soft_uart.h"
 serial_tc5_declaration(16,16);
 
+void CAN1_Handler()
+{
+  while( serial_tc5.available() )
+    {
+      int d = serial_tc5.read();
+      if( d>=0 ) serial_receive_callback[3](3, d);
+    }
+}
+
 static void host_serial_receive_finished_interrupt_if3()
 {
-  // a new character has been received
-  int d = serial_tc5.read();
-  if( d>=0 ) serial_receive_callback[3](3, d);
+  // This function is set to be called from the soft_uart code after a new
+  // character has been received - from within the timer interrupt handler.
+  // If we call serial_receive_callback directly from here then
+  // the time spent in that function will (at higher baud rates)
+  // prevent the soft_uart interrupt from happening again (since
+  // the interrupt function is still active), causing receive errors.
+  // So instead we schedule the (otherwise unused) CAN1 interrupt (which
+  // is set up with a lower priority) to actually handle the character.
+  // This frees the soft_uart timer interrupt to be handled again.
+  NVIC_SetPendingIRQ(CAN1_IRQn);
 }
+
 #endif
 
 
@@ -856,12 +873,29 @@ static void host_serial_receive_finished_interrupt_if3()
 #include "soft_uart.h"
 serial_tc4_declaration(16,16);
 
+void CAN0_Handler()
+{
+  while( serial_tc4.available() )
+    {
+      int d = serial_tc4.read();
+      if( d>=0 ) serial_receive_callback[HOST_NUM_SERIAL_PORTS-1](HOST_NUM_SERIAL_PORTS-1, d);
+    }
+}
+
 static void host_serial_receive_finished_interrupt_if4()
 {
-  // a new character has been received
-  int d = serial_tc4.read();
-  if( d>=0 ) serial_receive_callback[HOST_NUM_SERIAL_PORTS-1](HOST_NUM_SERIAL_PORTS-1, d);
+  // This function is set to be called from the soft_uart code after a new
+  // character has been received - from within the timer interrupt handler.
+  // If we call serial_receive_callback directly from here then
+  // the time spent in that function will (at higher baud rates)
+  // prevent the soft_uart interrupt from happening again (since
+  // the interrupt function is still active), causing receive errors.
+  // So instead we schedule the (otherwise unused) CAN0 interrupt (which
+  // is set up with a lower priority) to actually handle the character.
+  // This frees the soft_uart timer interrupt to be handled again.
+  NVIC_SetPendingIRQ(CAN0_IRQn);
 }
+
 #endif
 
 
@@ -977,6 +1011,10 @@ void host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_prim
       serial_tc5.begin(60, 61, baud, config);
       serial_tc5.setTimeout(10000); 
 
+      // see comment in function: host_serial_receive_finished_interrupt_if3
+      NVIC_SetPriority(CAN1_IRQn, 10);
+      NVIC_EnableIRQ(CAN1_IRQn);
+
       // rx_handler will be called (from within serial_tc5's ISR) after 
       // a complete byte has been received
       serial_tc5.set_rx_handler(host_serial_receive_finished_interrupt_if3);
@@ -987,6 +1025,10 @@ void host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_prim
     { 
       serial_tc4.begin(72, 73, baud, config);
       serial_tc4.setTimeout(10000); 
+
+      // see comment in function: host_serial_receive_finished_interrupt_if4
+      NVIC_SetPriority(CAN0_IRQn, 10);
+      NVIC_EnableIRQ(CAN0_IRQn);
 
       // rx_handler will be called (from within serial_tc4's ISR) after 
       // a complete byte has been received
@@ -1232,7 +1274,7 @@ bool host_serial_port_baud_limits(byte i, uint32_t *min, uint32_t *max)
     {
     case 0: *min = 600;    *max = 1050000; break;
     case 1: *min = 110;    *max = 1050000; break;
-    case 2: *min = 115200; *max =  115200; break;
+    case 2: *min = 110;    *max = 1050000; break;
 #if USE_SERIAL_ON_A6A7>0
     case 3: *min = 110;    *max =   38400; break;
 #endif
