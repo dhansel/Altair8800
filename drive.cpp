@@ -325,16 +325,9 @@ byte drive_in(byte addr)
                     drive_sector_true = true;
                   }
               }
-            else if( !drive_sector_true )
-              {
-                // if interrupts are enabled then the drive_sector_true flag and
-                // the drive_current_sector setting are handled in the interrupt
-                // routine.
-                data |= 0x01;
-              }
             
             if( (drive_status[drive_selected] & DRIVE_STATUS_HAVEDISK) && (drive_status[drive_selected] & DRIVE_STATUS_HEADLOAD) )
-              data |= 0xC0 | (drive_current_sector[drive_selected] * 2);
+              data |= 0xC0 | (drive_current_sector[drive_selected] * 2) | (drive_sector_true ? 0 : 1);
           }
 
         break;
