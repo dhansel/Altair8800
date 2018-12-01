@@ -13,8 +13,12 @@
 #include <inttypes.h>
 #include <Print.h>
 
+#ifndef min
 #define min(x, y) ((x)<(y)?(x):(y))
+#endif
+#ifndef max
 #define max(x, y) ((x)>(y)?(x):(y))
+#endif
 
 unsigned long millis();
 unsigned long micros();
