@@ -1,6 +1,6 @@
 /**
  ** soft_uart library
- ** Copyright (C) 2015
+ ** Copyright (C) 2015-2018
  **
  **   Antonio C. Domínguez Brito <adominguez@iusiani.ulpgc.es>
  **     División de Robótica y Oceanografía Computacional <www.roc.siani.es>
@@ -139,4 +139,3 @@ namespace arduino_due
 }
 
 #endif // FIFO_H
-

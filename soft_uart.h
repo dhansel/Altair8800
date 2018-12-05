@@ -1,6 +1,6 @@
 /**
  ** soft_uart library
- ** Copyright (C) 2015
+ ** Copyright (C) 2015-2018
  **
  **   Antonio C. Domínguez Brito <adominguez@iusiani.ulpgc.es>
  **     División de Robótica y Oceanografía Computacional <www.roc.siani.es>
@@ -33,7 +33,7 @@
  */
 
 /**
- ** Modifications by David Hansel on 11/10/18:
+ ** Modifications by David Hansel on 11/27/18:
  ** - Added "set_rx_handler" function which sets a call-back handler to be called
  **   after a byte of data has been received. Note that the call-back will be
  **   invoked from within an interrupt handler so it should be coded to finish
@@ -44,11 +44,7 @@
  **   to allow using the (otherwise unused) pins connected to the RX and TX 
  **   lights between the two USB connectors as a serial interface
  **   (those are digital pins 72 and 73 but NUM_DIGITAL_PINS is defined as 72)
- ** - Fixed code in rx_interrupt() to avoid race condition if timer overrun
- **   occurred during rx_interrupt function.
- ** - Fixed "tx code" section in tc_interrupt() to avoid off-spec short stop bits
  **/
-
 
 #ifndef SOFT_UART_H
 #define SOFT_UART_H
@@ -315,7 +311,7 @@ namespace arduino_due
         {
           _mode_=mode_codes::INVALID_MODE;
 
-          if(rx_tx_pin>=74)
+          if(rx_tx_pin>=NUM_DIGITAL_PINS)
             return return_codes::BAD_HALF_DUPLEX_PIN;
 
           return_codes ret_code=
@@ -657,7 +653,9 @@ namespace arduino_due
           }
 
           void get_incoming_bit()
-          { rx_data |= (rx_bit<<rx_bit_counter); }
+          { 
+            rx_data |= (rx_bit<<rx_bit_counter); 
+          }
 
           void update_rx_data_buffer()
           {
@@ -692,6 +690,7 @@ namespace arduino_due
           double frame_time;
           uint32_t bit_ticks;
           uint32_t bit_1st_half;
+          uint32_t bit_1st_quarter;
 
           // serial protocol
           uint32_t bit_rate;
@@ -986,6 +985,7 @@ namespace arduino_due
   
       bit_ticks=static_cast<uint32_t>(bit_time/tc_tick);
       bit_1st_half=(bit_ticks>>1);
+      bit_1st_quarter=(bit_ticks>>2);
 
       data_bits=the_data_bits; parity=the_parity; stop_bits=the_stop_bits;
 
@@ -1050,10 +1050,13 @@ namespace arduino_due
         TC_CMR_WAVSEL_UP_RC
       );
       
-      TC_SetRA(timer_p->tc_p,timer_p->channel,bit_1st_half>>1);
-      disable_tc_ra_interrupt();
+      //TC_SetRA(timer_p->tc_p,timer_p->channel,bit_1st_half);
+      //disable_tc_ra_interrupt();
 
-      TC_SetRC(timer_p->tc_p,timer_p->channel,bit_1st_half);
+      //TC_SetRC(timer_p->tc_p,timer_p->channel,bit_ticks);
+      //TC_SetRC(timer_p->tc_p,timer_p->channel,bit_1st_half);
+      TC_SetRC(timer_p->tc_p,timer_p->channel,bit_1st_quarter);
+      //disable_tc_rc_interrupt();
       enable_tc_rc_interrupt();
 
       config_rx_interrupt();
@@ -1081,10 +1084,11 @@ namespace arduino_due
         // rx code
         if(rx_status==rx_status_codes::RECEIVING)
         {
-          if((rx_interrupt_counter++)&1)
+          if(rx_interrupt_counter==1)
           {
-            get_incoming_bit();
-            if((rx_bit_counter++)==rx_frame_bits-1)
+            get_incoming_bit(); 
+            rx_bit_counter++;
+            if(rx_bit_counter==rx_frame_bits)
             {
               if(stop_bits==stop_bit_codes::TWO_STOP_BITS)
                 get_incoming_bit();
@@ -1096,32 +1100,33 @@ namespace arduino_due
               rx_status=rx_status_codes::LISTENING;
             }
           }
+          rx_interrupt_counter=(rx_interrupt_counter+1)&0x3;
         }
 
         // tx code
         if(tx_status==tx_status_codes::SENDING)
         {
-          if((tx_interrupt_counter++)&1)
+          if(tx_interrupt_counter==0)
           {
-            uint32_t data_to_send;
-            if( tx_bit_counter<tx_frame_bits ) 
-              {
-                set_outgoing_bit();
-                tx_bit_counter++;
-              }
-            else if( tx_buffer.pop(data_to_send) )
+            if(tx_bit_counter>=tx_frame_bits)
+            {
+              uint32_t data_to_send;
+              if(tx_buffer.pop(data_to_send)) 
               { 
-                tx_data=data_to_send; 
-                tx_bit_counter=0; 
-                set_outgoing_bit();
-                tx_bit_counter++;
+                tx_data=data_to_send; tx_bit_counter=0; 
+                set_outgoing_bit(); tx_bit_counter++;
               }
-            else
+              else
               {
-                if(rx_status==rx_status_codes::LISTENING) stop_tc_interrupts(); 
+                if(rx_status==rx_status_codes::LISTENING) 
+                  stop_tc_interrupts(); 
+
                 tx_status=tx_status_codes::IDLE;
               }
+            }
+            else { set_outgoing_bit(); tx_bit_counter++; }
           }
+          tx_interrupt_counter=(tx_interrupt_counter+1)&0x3;
         }
       }
     }
@@ -1146,26 +1151,10 @@ namespace arduino_due
           {
             rx_status=rx_status_codes::RECEIVING;
             rx_data=rx_bit_counter=rx_bit=0;
+            rx_interrupt_counter=0;
             
             if(tx_status==tx_status_codes::IDLE) 
-              { rx_interrupt_counter=1; start_tc_interrupts(); }
-            else 
-            {
-              uint32_t timer_status = TC_GetStatus(timer_p->tc_p,timer_p->channel);
-              if( timer_status & TC_SR_CPCS )
-                {
-                  // a RC compare event just happened => process it but prevent RX part from running
-                  rx_interrupt_counter = 0;
-                  tc_interrupt(timer_status);
-                  timer_status = 0;
-                }
-
-              // if we are in the first half of current half-bit interval then
-              // start sampling RX bits at upcoming half-bit interrupt
-              // if we are in the second half of current half-bit interval then
-              // start sampling RX bits one after upcoming half-bit interrupt
-              rx_interrupt_counter = (timer_status & TC_SR_CPAS)==0 ? 1 : 0;
-            }
+            { start_tc_interrupts(); rx_interrupt_counter=1; }
           } 
           break;
           
@@ -1289,7 +1278,7 @@ namespace arduino_due
       {
         tx_buffer.pop(data_to_send); 
         tx_data=data_to_send; tx_bit_counter=0; 
-        tx_interrupt_counter=1;
+        tx_interrupt_counter=0;
       }
 
       if(
