@@ -1154,7 +1154,7 @@ namespace arduino_due
             rx_interrupt_counter=0;
             
             if(tx_status==tx_status_codes::IDLE) 
-            { start_tc_interrupts(); rx_interrupt_counter=1; }
+            { start_tc_interrupts(); if( bit_rate>9600 ) rx_interrupt_counter=1; }
           } 
           break;
           
