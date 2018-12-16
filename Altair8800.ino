@@ -1410,7 +1410,7 @@ inline byte exec_input(byte port)
 #elif STANDALONE>0
       return dswitch / 256;
 #else
-      return altair_read_sense_switches();
+      return host_read_sense_switches();
 #endif
     }
 }
