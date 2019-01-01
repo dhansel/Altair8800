@@ -1377,7 +1377,7 @@ inline byte exec_input(byte port)
 #endif
 #if NUM_HDSK_UNITS>0
   else if( port>=0xA0 && port<=0xA7 )
-    return drive_in(port);
+    return hdsk_4pio_in(port);
 #endif
   else if( port==0x01 )
     return serial_sio_in_data(); 
