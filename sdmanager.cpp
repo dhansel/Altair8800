@@ -197,6 +197,35 @@ static char *getFilename(const char *prompt)
     }
 }
 
+static char *getLine()
+{
+  static char buf[81];
+  int l = 0;
+
+  while(1)
+    {
+      int c = Serial.read();
+      if ( c==-1 ) continue;
+      if( c==13 )
+        {
+          buf[l]=0;
+          Serial.println();
+          return buf;
+        }
+      else if( c==8 || c==127 )
+        {
+          if( l>0 )
+            {
+              l--;
+              Serial.print(F("\010 \010"));
+            }
+        }
+      else if( l<80 )
+        {
+          buf[l++]=c; Serial.write(c);
+        }
+    }
+}
 
 static void consume_input()
 {
@@ -385,6 +414,33 @@ static void typeFile()
   host_clr_status_led_HLDA();
 }
 
+static void appendFile()
+{
+  Serial.println();
+  char *fname = getFilename("File name to append to: ");
+  char *line;
+  int len;
+  if( fname!=NULL )
+    {
+      Serial.println(F("Enter text, Return to finish. Enter blank line to cancel."));
+      line = getLine();
+      if( line[0] != 0 )
+        {
+          len = strlen(line);
+  
+          File f = SD.open(fname, FILE_WRITE);
+          if( f )
+            {
+              f.write(line, len);
+              f.write("\r\n");
+              f.flush();
+              f.close();
+            }
+        }
+    }
+
+  host_clr_status_led_HLDA();
+}
 
 static void printDirectory()
 {
@@ -423,6 +479,7 @@ void sd_manager()
         {
           Serial.println(F("\n(d)irectory"));
           Serial.println(F("(t)ype out file"));
+          Serial.println(F("(a)ppend to file"));
           Serial.println(F("(r)eceive file via XMODEM"));
           Serial.println(F("(s)end file via XMODEM"));
           Serial.println(F("(c)opy file"));
@@ -465,6 +522,10 @@ void sd_manager()
 
         case 't':
           typeFile();
+          break;
+
+        case 'a':
+          appendFile();
           break;
 
         case 'x':
