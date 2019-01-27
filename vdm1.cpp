@@ -54,6 +54,16 @@ static void vdm1_send_dip();
 static void vdm1_send_ctrl();
 static void vdm1_send_fullframe();
 
+
+static void vdm1_connect()
+{
+  vdm_connected = 1;
+  vdm1_send_dip();
+  vdm1_send_ctrl();
+  vdm1_send_fullframe();
+}
+
+
 static void vdm1_send(const byte *data, uint16_t size)
 {
   if( vdm_iface<0xff && vdm_connected!=0 )
@@ -68,10 +78,7 @@ static void vdm1_send(const byte *data, uint16_t size)
         {
           // if the VDM-1 client has connected but has not been initialized
           // yet then do that before sending the data
-          vdm_connected = 1;
-          vdm1_send_dip();
-          vdm1_send_ctrl();
-          vdm1_send_fullframe();
+          vdm1_connect();
           delay(100);
         }
       
@@ -183,6 +190,14 @@ void vdm1_receive(byte iface, byte data)
 
           case VDM_CONNECT:
             vdm_connected = -1;
+
+            // start a timer that will finish the initialization sequence
+            // by sending the current information to the VDM1 client.
+            // note that this timer will only run when the Altair is in "run" mode.
+            // we can not finish the sequence right here because vdm1_receive is
+            // called from within the host's receive interrupt.
+            timer_start(TIMER_VDM1, 1000);
+
             state = 0;
             break;
 
@@ -230,11 +245,18 @@ byte vdm1_get_iface()
 }
 
 
+static void vdm1_timer()
+{
+  if( vdm_connected<0 ) vdm1_connect();
+}
+
+
 void vdm1_setup()
 {
   vdm1_set_dip(config_vdm1_dip());
   vdm1_set_address(config_vdm1_address());
   vdm1_set_iface(config_vdm1_interface());
+  timer_setup(TIMER_VDM1, 0, vdm1_timer);
   vdm_connected = 0;
 }
 

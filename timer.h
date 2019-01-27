@@ -8,8 +8,6 @@
 
 #include <Arduino.h>
 
-#define MAX_TIMERS 12
-
 // timers 0-4 must represent the four serial devices
 #define TIMER_SIO      0
 #define TIMER_ACR      1
@@ -17,12 +15,14 @@
 #define TIMER_2SIO2    3
 #define TIMER_2SIO3    4
 #define TIMER_2SIO4    5
-#define TIMER_DRIVE    6
-#define TIMER_RTC      7
-#define TIMER_PRINTER  8
+#define TIMER_RTC      6
+#define TIMER_PRINTER  7
+#define TIMER_PROFILE  8
+// timers below here are not needed for Arduino MEGA build
 #define TIMER_THROTTLE 9
-#define TIMER_PROFILE  10
+#define TIMER_DRIVE    10
 #define TIMER_HDSK     11
+#define TIMER_VDM1     12
 
 
 extern uint32_t timer_cycle_counter, timer_cycle_counter_offset, timer_next_expire_cycles;

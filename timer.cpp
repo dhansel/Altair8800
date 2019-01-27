@@ -18,6 +18,14 @@
 // -----------------------------------------------------------------------------
 
 #include "timer.h"
+#include "config.h"
+
+#ifdef __AVR_ATmega2560__
+#define MAX_TIMERS 9
+#else
+#define MAX_TIMERS 13
+#endif
+
 
 #define DEBUG 0
 
