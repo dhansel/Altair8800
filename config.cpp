@@ -2395,6 +2395,9 @@ void config_edit()
         case 'h': 
           {
             Serial.println(F("\n\n"));
+            Serial.println(F("Altair 8800 Simulator (C) 2017-2019 David Hansel"));
+            Serial.println(F("https://www.hackster.io/david-hansel/arduino-altair-8800-simulator-3594a6"));
+            Serial.println(F("https://github.com/dhansel/Altair8800\n"));
             host_system_info();
             Serial.print(F("\n\nPress any key to continue..."));
             while( !serial_available() ); 
@@ -2439,16 +2442,15 @@ void config_edit()
         case 'C': 
           {
             for(uint16_t i=0; i<mem_ram_limit; i++) Mem[i] = 0; 
-            Serial.print(F("\nMemory cleared."));
+            Serial.print(F("\r\nMemory cleared."));
             delay(1500);
-            set_cursor(r_cmd+1, 0);
-            redraw = false;
+            redraw = true;
             break;
           }
 
         case 'S': 
           {
-            Serial.print(F("\nSave as config # (0=default): "));
+            Serial.print(F("\r\nSave as config # (0=default): "));
             bool esc = false;
             byte i = (byte) numsys_read_word(&esc);
             Serial.println();
@@ -2460,7 +2462,7 @@ void config_edit()
           }
         case 'L':
           {
-            Serial.print(F("\nLoad config #: "));
+            Serial.print(F("\r\nLoad config #: "));
             bool esc = false;
             byte i = (byte) numsys_read_word(&esc);
             Serial.println();
@@ -2494,7 +2496,7 @@ void config_edit()
 
                 if( !ok )
                   {
-                    Serial.print("\nDazzler can not use the same host interface as any other serial device.\nDisable Dazzler and continue (y/n/ESC)? ");
+                    Serial.print("\r\nDazzler can not use the same host interface as any other serial device.\nDisable Dazzler and continue (y/n/ESC)? ");
                     do { delay(50); c = serial_read(); } while( c!='y' && c!='n' && c!=27 );
                     if( c=='y' )
                       config_flags2 = set_bits(config_flags2, 0, 3, 0);
@@ -2516,7 +2518,7 @@ void config_edit()
 
                 if( !ok )
                   {
-                    Serial.print("\nVDM-1 can not use the same host interface as any other serial device.\nVisable VDM-1 and continue (y/n/ESC)? ");
+                    Serial.print("\r\nVDM-1 can not use the same host interface as any other serial device.\nVisable VDM-1 and continue (y/n/ESC)? ");
                     do { delay(50); c = serial_read(); } while( c!='y' && c!='n' && c!=27 );
                     if( c=='y' )
                       config_flags2 = set_bits(config_flags2, 3, 3, 0);
@@ -2529,7 +2531,7 @@ void config_edit()
             if( (config_serial_settings&0xFFF7FF) != (new_config_serial_settings&0xFFF7FF) ||
                 (config_serial_settings2) != (new_config_serial_settings2) )
               {
-                Serial.print(F("\nApply new host serial settings (y/n/ESC)? "));
+                Serial.print(F("\r\nApply new host serial settings (y/n/ESC)? "));
                 do { delay(50); c = serial_read(); } while( c!='y' && c!='n' && c!=27 );
                 Serial.println(c);
                 if( c=='n' || (c=='y' && apply_host_serial_settings()) )
