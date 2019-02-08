@@ -29,6 +29,7 @@
 #include "profile.h"
 #include "timer.h"
 
+
 // un-define Serial which was #define'd to SwitchSerialClass in switch_serial.h
 // otherwise we get infinite loops when calling Serial.* functions below
 #undef Serial

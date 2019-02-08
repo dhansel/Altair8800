@@ -31,7 +31,7 @@
 #include "vdm1.h"
 #include "cpucore.h"
 
-#define CONFIG_FILE_VERSION 6
+#define CONFIG_FILE_VERSION 7
 
 #define BAUD_110     0
 #define BAUD_150     1
@@ -81,7 +81,7 @@ uint32_t config_flags;
 
 
 // config_flags2:
-// xxxxxxxx xxPKKKMM MMMMDDDD DDVVVZZZ
+// xxxxxxxx xAPKKKMM MMMMDDDD DDVVVZZZ
 // ZZZ  = map dazzler to host interface (000=NONE, 001=1st, 010=2nd, 011=3rd, 100=4th, 101=5th)
 // VVV  = map VDM-1   to host interface (see above)
 // D    = VDM-1 dip switch settings
@@ -143,6 +143,42 @@ uint32_t config_mem_size;
 
 
 // --------------------------------------------------------------------------------
+
+
+static bool config_read_string(char *buf, byte bufsize)
+{
+  int l = 0;
+  
+  while( true )
+    {
+      int c = serial_read();
+      if( c>=32 && c<127 )
+        {
+          if( l < bufsize-1 ) { buf[l++] = c; Serial.write(c); }
+        }
+      else if( c==8 || c==127 )
+        {
+          if( l>0 )
+            {
+              l--;
+              Serial.print(F("\010 \010"));
+            }
+        }
+      else if( c==13 )
+        {
+          Serial.println();
+          buf[l]=0;
+          return true;
+        }
+      else if( c==27 )
+        {
+          Serial.println();
+          return false;
+        }
+    }
+
+  return true;
+}
 
 
 inline uint32_t get_bits(uint32_t v, byte i, byte n)
@@ -496,12 +532,12 @@ static void print_mem_size(uint32_t s, byte row=0, byte col=0)
   if( (s&0x3FF)==0 )
     {
       Serial.print(s/1024); 
-      Serial.println(F(" KB     "));
+      Serial.print(F(" KB"));
     }
   else
     {
       Serial.print(s); 
-      Serial.println(F(" bytes     "));
+      Serial.print(F(" bytes"));
     }
 }
 
@@ -516,6 +552,12 @@ static void print_flag(uint32_t data, uint32_t value, byte row=0, byte col=0)
 static void print_flag(uint32_t value, byte row=0, byte col=0)
 {
   print_flag(config_flags, value, row, col);
+}
+
+
+static void print_flag2(uint32_t value, byte row=0, byte col=0)
+{
+  print_flag(config_flags2, value, row, col);
 }
 
 
@@ -1144,6 +1186,13 @@ static void toggle_flag(uint32_t value, byte row, byte col)
 }
 
 
+static void toggle_flag2(uint32_t value, byte row, byte col)
+{
+  config_flags2 = (config_flags2 & ~value) | (~(config_flags2 & value) & value);
+  print_flag(config_flags2, value, row, col);
+}
+
+
 static bool apply_host_serial_settings()
 {
   char c;
@@ -1204,10 +1253,9 @@ static bool apply_host_serial_settings()
 
 static bool save_config(byte fileno)
 {
-  // better to write all data at once (will overwrite instead
-  // of deleting/creating the file)
+  bool res = false;
   byte s = sizeof(uint32_t);
-  byte data[(13+NUM_SERIAL_DEVICES)*sizeof(uint32_t)+1+1+NUM_DRIVES+1+NUM_HDSK_UNITS*4+1+1];
+  byte data[4*4+(1+NUM_SERIAL_DEVICES*4)+9*4+1+(1+NUM_DRIVES)+(1+NUM_HDSK_UNITS*4)+1+1];
 
   // merge version number into config_flags
   config_flags = (config_flags & 0x00ffffff) | (((uint32_t) CONFIG_FILE_VERSION) << 24);
@@ -1233,7 +1281,42 @@ static bool save_config(byte fileno)
       data[n++] = hdsk_get_mounted_image(i, j);
 
   data[n++] = config_mem_size/256;
-  return filesys_write_file('C', fileno, (void *) data, n);
+  data[n++] = mem_get_num_roms(false);
+
+  if( data[n-1]==0 )
+    {
+      // better to write all data at once (will overwrite instead
+      // of deleting/creating the file)
+      res = filesys_write_file('C', fileno, (void *) data, n);
+    }
+  else
+    {
+      // can't write all at once if we have to store ROM data
+      byte fid = filesys_open_write('C', fileno);
+      if( fid>0 )
+        {
+          res = filesys_write_data(fid, (void *) data, n);
+          for(byte i=0; i<mem_get_num_roms() && res; i++)
+            {
+              char name[9];
+              uint16_t start, length, flags;
+              mem_get_rom_info(i, name, &start, &length, &flags);
+              if( !(flags & MEM_ROM_FLAG_TEMP) )
+                {
+                  memcpy(data+0, &start, 2);
+                  memcpy(data+2, &length, 2);
+                  memcpy(data+4, &flags, 2);
+                  memcpy(data+6, name, 8);
+                  res &= filesys_write_data(fid, (void *) data, 6+8);
+                  res &= filesys_write_data(fid, Mem+start, length);
+                }
+            }
+
+          filesys_close(fid);
+        }
+    }
+
+  return res;
 }
 
 
@@ -1347,7 +1430,28 @@ static bool load_config(byte fileno)
         config_mem_size = (d==0) ? 0x10000 : (d*256);
       else
         config_mem_size = MEMSIZE;
-      
+
+      // ROMs
+      if( filesys_read_data(fid, &n, 1)!=1 ) n = 0;
+      mem_clear_roms();
+      for(i=0; i<n; i++)
+        {
+          char name[9];
+          uint16_t start, length, flags;
+          name[8] = 0;
+          if( filesys_read_data(fid, &start, 2)==2 )
+            if( filesys_read_data(fid, &length, 2)==2 )
+              if( filesys_read_data(fid, &flags, 2)==2 )
+                if( filesys_read_data(fid, name, 8)==8 )
+                  {
+                    if( mem_add_rom(start, length, name, flags) )
+                      filesys_read_data(fid, Mem+start, length);
+                    else
+                      for(uint16_t j=0; j<length; j++)
+                        filesys_read_data(fid, name, 1);
+                  }
+        }
+
       filesys_close(fid);
 
 #if defined(__AVR_ATmega2560__)
@@ -2244,6 +2348,201 @@ void config_host_serial()
 // --------------------------------------------------------------------------------
 
 
+static void config_toggle_rom_flag(byte i, uint16_t f)
+{
+  uint16_t flags;
+  mem_get_rom_info(i, NULL, NULL, NULL, &flags);
+  mem_set_rom_flags(i, flags ^ f);
+}
+
+
+void config_memory()
+{
+  byte row, col, r_memsize, r_clearmem, r_cmd;
+  bool redraw = true;
+
+  while( true )
+    {
+      if( redraw )
+        {
+          row = 4;
+          col = 30;
+          Serial.print(F("\033[2J\033[0;0H\n"));
+          Serial.println(F("Configure memory"));
+          if( mem_get_num_roms()>0 )
+            {
+              Serial.println(F("\nInstalled ROMS: "));
+              row+=2;
+              
+              byte i = 0;
+              char name[9];
+              uint16_t start, length, flags;
+              while( mem_get_rom_info(i++, name, &start, &length, &flags) )
+                {
+                  numsys_print_byte(i);
+                  Serial.print(F(") "));
+                  numsys_print_word(start);
+                  Serial.print('-');
+                  numsys_print_word(start+length-1);
+                  Serial.print(F(": "));
+                  Serial.print(name);
+                  if( flags!=0 )
+                    {
+                      bool comma = false;
+                      Serial.print(F(" ("));
+                      if( flags & MEM_ROM_FLAG_AUTOSTART ) { if( comma ) Serial.print(','); else comma=true; Serial.print(F("auto-start")); }
+                      if( flags & MEM_ROM_FLAG_TEMP )     { if( comma ) Serial.print(','); else comma=true; Serial.print(F("temporary")); }
+                      Serial.print(')');
+                    }
+                  Serial.println();
+                  row++;
+                }
+            }
+          
+          Serial.print(F("\nRAM size (+/-)             : ")); print_mem_size(config_mem_size, row, col); Serial.println(); r_memsize = row++;
+          Serial.print(F("(c)lear memory on powerup  : ")); print_flag(CF_CLEARMEM); Serial.println(); r_clearmem = row++;
+          Serial.println(F("(C)lear memory now")); row++;
+#if MAX_NUM_ROMS>0
+          Serial.println(F("(A)dd ROM")); row++;
+          if( mem_get_num_roms()>0 ) 
+            { 
+              Serial.println(F("(R)emove ROM")); row++; 
+              Serial.println(F("(a)uto-start ROM")); row++;
+            }
+#endif          
+          Serial.println(F("\nE(x)it to previous menu"));
+          Serial.print(F("\n\nCommand: ")); r_cmd = row+4;
+          redraw = false;
+        }
+      else
+        set_cursor(r_cmd, 10);
+
+      while( !serial_available() ) delay(50);
+      char c = serial_read();
+      if( c>31 && c<127 ) Serial.println(c);
+
+      switch( c )
+        {
+        case 'c': 
+          toggle_flag(CF_CLEARMEM, r_clearmem, col); 
+          redraw = false; 
+          break;
+
+        case 'C': 
+          {
+            mem_reset_roms();
+            mem_ram_init(0, MEMSIZE-1, true);
+            Serial.print(F("\r\nMemory cleared."));
+            delay(1500);
+            redraw = true;
+            break;
+          }
+
+#if MAX_NUM_ROMS>0
+        case 'A': 
+          {
+            bool ESC = false, ok = false;
+            uint16_t start, end;
+            char name[9];
+            redraw = true;
+
+            Serial.println(F("\r\nSend ROM content in Intel HEX format now...\n"));
+            ok = altair_read_intel_hex(&start, &end);
+            while( true ) { if( serial_read()<0 ) { delay(15); if( serial_read()<0 ) { delay(150); if( serial_read()<0 ) break; } } }
+
+            if( ok )
+              {
+                Serial.print(F("\r\nName (max 8 characters): "));
+                if( config_read_string(name, 9) )
+                  ok = mem_add_rom(start, end-start+1, name);
+              }
+            else
+              Serial.println(F("Error!"));
+
+            if( !ok )
+              {
+                Serial.print(F("\n\nPress any key to continue..."));
+                while( !serial_available() ); 
+                while( serial_available() ) serial_read();
+              }
+
+            break;
+          }
+
+        case 'R': 
+          {
+            if( mem_get_num_roms()>0 )
+              {
+                bool ESC = false;
+                redraw = true;
+                Serial.print(F("Remove ROM number: "));
+                byte i = (byte) numsys_read_word(&ESC);
+                if( ESC ) break;
+                if( i>0 && i<=mem_get_num_roms() )
+                  mem_remove_rom(i-1);
+              }
+            break;
+          }
+
+        case 'a':
+          {
+            if( mem_get_num_roms()>0 )
+              {
+                bool ESC = false;
+                redraw = true;
+                Serial.print(F("ROM to auto-start (0 for none): "));
+                byte i = (byte) numsys_read_word(&ESC);
+                if( ESC ) break;
+                for(byte j=0; j<mem_get_num_roms(); j++) 
+                  {
+                    uint16_t flags;
+                    mem_get_rom_info(j, NULL, NULL, NULL, &flags);
+                    mem_set_rom_flags(j, j==(i-1) ? (flags | MEM_ROM_FLAG_AUTOSTART) : (flags & ~MEM_ROM_FLAG_AUTOSTART));
+                  }
+              }
+            break;
+          }
+#endif
+
+        case '-': 
+          {
+            if( config_mem_size > 1024 )
+              config_mem_size -= 1024;
+            else if( config_mem_size > 256 )
+              config_mem_size -= 256;
+            else
+              config_mem_size = MEMSIZE;
+
+            print_mem_size(config_mem_size, r_memsize, col); Serial.print(F("     ")); 
+            redraw = false;
+            break;
+          }
+
+        case '+': 
+          {
+            if( config_mem_size < 1024 )
+              config_mem_size += 256;
+            else if( config_mem_size < MEMSIZE )
+              config_mem_size += 1024;
+            else
+              config_mem_size = 256;
+
+            print_mem_size(config_mem_size, r_memsize, col); Serial.print(F("     ")); 
+            redraw = false;
+            break;
+          }
+
+        case 27:
+        case 'x': 
+          return;
+        }
+    }
+}
+
+
+// --------------------------------------------------------------------------------
+
+
 void config_edit()
 {
   new_config_serial_settings  = config_serial_settings;
@@ -2255,7 +2554,7 @@ void config_edit()
   bool redraw = true;
 
   config_mem_size = ((uint32_t) mem_get_ram_limit_usr())+1;
-  byte row, col, r_cpu, r_profile, r_throttle, r_panel, r_debug, r_clearmem, r_aux1, r_cmd, r_memsize, r_input, r_dazzler;
+  byte row, col, r_cpu, r_profile, r_throttle, r_panel, r_debug, r_aux1, r_cmd, r_input, r_dazzler;
   while( true )
     {
       char c;
@@ -2275,11 +2574,14 @@ void config_edit()
           Serial.print(F("Enable serial (i)nput       : ")); print_flag(CF_SERIAL_INPUT); Serial.println(); r_input = row++;
 #endif
           Serial.print(F("Enable serial (d)ebug       : ")); print_flag(CF_SERIAL_DEBUG); Serial.println(); r_debug = row++;
-          Serial.print(F("Clear (m)emory on powerup   : ")); print_flag(CF_CLEARMEM); Serial.println(); r_clearmem = row++;
+          Serial.print(F("Configure (m)emory          : ")); print_mem_size(config_mem_size, row, col); row++; Serial.print(F(" RAM"));
+#if MAX_NUM_ROMS>0
+          Serial.print(F(", ")); Serial.print(mem_get_num_roms(false)); Serial.print(F(" ROMs"));
+#endif
+          Serial.println();
 #if USE_Z80==2
           Serial.print(F("Pro(c)essor                 : ")); print_cpu(); Serial.println(); r_cpu = row++;
 #endif
-          Serial.print(F("RAM size (+/-)              : ")); print_mem_size(config_mem_size, row, col); r_memsize = row++;
           Serial.print(F("Aux1 shortcut program (u/U) : ")); print_aux1_program(); Serial.println(); r_aux1 = row++;
           Serial.print(F("Configure host (s)erial     : ")); 
 #if HOST_NUM_SERIAL_PORTS>1
@@ -2326,10 +2628,9 @@ void config_edit()
           if( host_have_sd_card() ) Serial.print(F("(F)ile manager for SD card")); 
 #endif
           Serial.println(); row++;
-          Serial.println(F("(S)ave configuration    (C)lear memory"));
-          Serial.println(F("(L)oad configuration    (R)eset to defaults"));
-          Serial.println(F("E(x)it"));
-          row += 3;
+          Serial.println(F("(S)ave configuration    (L)oad configuration"));
+          Serial.println(F("(R)eset to defaults     E(x)it"));
+          row += 2;
 
           Serial.print(F("\nCommand: ")); r_cmd = row+1;
         }
@@ -2362,11 +2663,11 @@ void config_edit()
         case 'i': toggle_flag(CF_SERIAL_INPUT, r_input, col); redraw = false; break;
 #endif
         case 'd': toggle_flag(CF_SERIAL_DEBUG, r_debug, col); redraw = false; break;
-        case 'm': toggle_flag(CF_CLEARMEM, r_clearmem, col); redraw = false; break;
         case 'u': toggle_aux1_program_up(r_aux1, col); redraw = false; break;
         case 'U': toggle_aux1_program_down(r_aux1, col); redraw = false; break;
         case 's': config_host_serial(); break;
         case 'E': config_serial_devices(); break;
+        case 'm': config_memory(); break;
           
 #if USE_PRINTER>0
         case 'P': config_edit_printer(); break;
@@ -2405,48 +2706,11 @@ void config_edit()
             break;
           }
           
-        case '-': 
-          {
-            if( config_mem_size > 1024 )
-              config_mem_size -= 1024;
-            else if( config_mem_size > 256 )
-              config_mem_size -= 256;
-            else
-              config_mem_size = MEMSIZE;
-
-            print_mem_size(config_mem_size, r_memsize, col);
-            redraw = false;
-            break;
-          }
-
-        case '+': 
-          {
-            if( config_mem_size < 1024 )
-              config_mem_size += 256;
-            else if( config_mem_size < MEMSIZE )
-              config_mem_size += 1024;
-            else
-              config_mem_size = 256;
-
-            print_mem_size(config_mem_size, r_memsize, col);
-            redraw = false;
-            break;
-          }
-
         case 'M': filesys_manage(); break;
 
 #if NUM_DRIVES>0 || NUM_HDSK_UNITS>0
         case 'F': if( host_have_sd_card() ) sd_manager(); break;
 #endif
-
-        case 'C': 
-          {
-            for(uint16_t i=0; i<mem_ram_limit; i++) Mem[i] = 0; 
-            Serial.print(F("\r\nMemory cleared."));
-            delay(1500);
-            redraw = true;
-            break;
-          }
 
         case 'S': 
           {
@@ -2511,7 +2775,7 @@ void config_edit()
               {
                 bool ok = config_printer_map_to_host_serial()!=vi;
 #if USE_DAZZLER>0
-                ok = config_dazzler_interface()!=vi;
+                ok &= config_dazzler_interface()!=vi;
 #endif
                 for(byte i=0; ok && i<NUM_SERIAL_DEVICES; i++) 
                   ok = config_serial_map_sim_to_host(i)!=vi;
@@ -2643,6 +2907,7 @@ void config_defaults(bool apply)
 
   // maximum amount of RAM supported by host
   config_mem_size = MEMSIZE; 
+  mem_clear_roms();
 
   if( apply ) 
     {

@@ -11,7 +11,7 @@
 #include <Arduino.h>
 
 #include "prog_tools.h"
-#include "host.h"
+#include "prog.h"
 #include "serial.h"
 #include "Altair8800.h"
 
@@ -828,11 +828,11 @@ static const byte ps2_tape[] = {
  };
 
 
-uint16_t prog_ps2_copy_monitor(byte *dst)
+uint16_t prog_ps2_copy_monitor()
 {
   if( serial_acr_mount_ps2() && !have_ps2 )
     {
-      host_copy_flash_to_ram(dst+0x0038, ps2_monitor, sizeof(ps2_monitor));
+      if( !prog_copy_to_ram(0x0038, ps2_monitor, sizeof(ps2_monitor)) ) return 0xFFFF;
       have_ps2 = true;
       return 0x0040;
     }

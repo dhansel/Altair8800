@@ -32,12 +32,12 @@
 
 struct prog_info_struct {
   PGM_P name;
-  uint16_t (*load)(byte *);
+  uint16_t (*load)();
   bool run;
 };
 
 
-uint16_t prog_print_dir(byte *mem);
+uint16_t prog_print_dir();
 
 
 struct prog_info_struct get_prog_info(byte i)
@@ -91,7 +91,7 @@ struct prog_info_struct get_prog_info(byte i)
 }
 
 
-uint16_t prog_print_dir(byte *mem)
+uint16_t prog_print_dir()
 {
   int i = 0;
 
@@ -136,29 +136,62 @@ const char *prog_get_name(byte n)
 }
 
 
-bool prog_load(byte n, uint16_t *pc, byte *mem)
+bool prog_load(byte n, uint16_t *pc)
 {
   // check that program #n exists
   for(int i=0; i<=n; i++) 
     if( get_prog_info(i).name == NULL )
       return false;
   
-  uint16_t addr = get_prog_info(n).load(mem);
-  if( n>0 && addr<0xffff )
+  uint16_t addr = get_prog_info(n).load();
+  if( n>0 )
     {
-      if( get_prog_info(n).run )
+      if( addr==0xFFFF )
+        Serial.print(F("[Unable to load "));
+      else if( get_prog_info(n).run )
         Serial.print(F("[Running "));
       else
         Serial.print(F("[Loading "));
 
       Serial.print(FP(get_prog_info(n).name));
       Serial.println(']');
+      
+      if( addr!=0xFFFF )
+        {
+          *pc = addr;
+          return get_prog_info(n).run;
+        }
+    }
+  
+  return false;
+}
 
-      *pc = addr;
-      return get_prog_info(n).run;
+
+bool prog_copy_to_ram(uint16_t ramdst, const void *src, uint32_t length)
+{
+  if( mem_is_writable(ramdst, ramdst+length-1) ) 
+    {
+      host_copy_flash_to_ram(Mem+ramdst, src, length);
+      return true;
     }
   else
     return false;
+}
+
+
+bool prog_create_temporary_rom(uint16_t ramdst, const void *src, uint32_t length, const char *name)
+{
+#if MAX_NUM_ROMS==0
+  return prog_copy_to_ram(ramdst, src, length);
+#else
+  if( ramdst+length <= MEMSIZE && mem_add_rom(ramdst, length, name, MEM_ROM_FLAG_TEMP) )
+    {
+      host_copy_flash_to_ram(Mem+ramdst, src, length);
+      return true;
+    }
+  else
+    return false;
+#endif
 }
 
 

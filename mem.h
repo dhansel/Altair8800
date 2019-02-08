@@ -13,27 +13,22 @@
 #include "Altair8800.h"
 
 extern byte Mem[MEMSIZE];
-extern word mem_ram_limit;
+extern word mem_protected_limit;
 
-#if USE_PROTECT>0
+extern byte mem_protected_flags[32];
 
-extern word protected_flag;
-extern byte protected_flags[32];
-#define MEM_IS_PROTECTED(a) (protected_flag ? (protected_flags[((a)>>8)/8] & (1<<(((a)>>8)&0x07))) : 0)
+#define MEM_IS_WRITABLE(a) ((a) < mem_protected_limit || !(mem_protected_flags[(a)>>11] & (1<<(((a)>>8)&0x07))))
 
 void mem_protect(uint16_t a);
 void mem_unprotect(uint16_t a);
-
-#else
-#define MEM_IS_PROTECTED(a) false
-#define mem_protect(a)      while(0)
-#define mem_unprotect(a)    while(0)
-#endif
+bool mem_is_protected(uint16_t a);
+bool mem_is_writable(uint16_t from, uint16_t to);
+void mem_print_layout();
 
 #if MEMSIZE < 0x10000
 // if we have less than 64k of RAM then always map ROM basic to 0xC000-0xFFFF
 #define MREAD(a)    ((a)>=0xC000 ? prog_basic_read_16k(a) : ((a) < MEMSIZE ? Mem[a] : 0xFF))
-#define MWRITE(a,v) {if( (a)<=mem_ram_limit && !MEM_IS_PROTECTED(a) ) Mem[a]=v;}
+#define MWRITE(a,v) {if( MEM_IS_WRITABLE(a) ) Mem[a]=v;}
 #else
 // If we have 64k of RAM then we just copy ROM basic to the upper 16k and write-protect
 // that area.  Faster to check the address on writing than reading since there are far more
@@ -44,15 +39,15 @@ void mem_unprotect(uint16_t a);
 #include "dazzler.h"
 #if USE_VDM1>0
 #include "vdm1.h"
-#define MWRITE(a,v) {if( (a)<=mem_ram_limit && !MEM_IS_PROTECTED(a) ) Mem[a]=v; dazzler_write_mem(a, v); vdm1_write_mem(a, v); }
+#define MWRITE(a,v) {if( MEM_IS_WRITABLE(a) ) Mem[a]=v; dazzler_write_mem(a, v); vdm1_write_mem(a, v); }
 #else
-#define MWRITE(a,v) {if( (a)<=mem_ram_limit && !MEM_IS_PROTECTED(a) ) Mem[a]=v; dazzler_write_mem(a, v); }
+#define MWRITE(a,v) {if( MEM_IS_WRITABLE(a) ) Mem[a]=v; dazzler_write_mem(a, v); }
 #endif
 #elif USE_VDM1>0
 #include "vdm1.h"
-#define MWRITE(a,v) {if( (a)<=mem_ram_limit && !MEM_IS_PROTECTED(a) ) Mem[a]=v; vdm1_write_mem(a, v); }
+#define MWRITE(a,v) {if( MEM_IS_WRITABLE(a) ) Mem[a]=v; vdm1_write_mem(a, v); }
 #else
-#define MWRITE(a,v) {if( (a)<=mem_ram_limit && !MEM_IS_PROTECTED(a) ) Mem[a]=v; }
+#define MWRITE(a,v) {if( MEM_IS_WRITABLE(a) ) Mem[a]=v; }
 #endif
 
 #endif
@@ -101,11 +96,26 @@ inline void MEM_WRITE(uint16_t a, byte v)
 #endif
 
 
+// manage ROMs
+#define MEM_ROM_FLAG_TEMP      0x01
+#define MEM_ROM_FLAG_AUTOSTART 0x04
+
+bool mem_add_rom(uint16_t start, uint16_t length, const char *name = NULL, uint16_t flags = 0);
+bool mem_remove_rom(byte i, bool clear = true);
+byte mem_get_num_roms(bool includeTemp = true);
+void mem_set_rom_flags(byte i, uint16_t flags);
+bool mem_get_rom_info(byte i, char *name = NULL, uint16_t *start = NULL, uint16_t *length = NULL, uint16_t *flags = NULL);
+uint16_t mem_get_rom_autostart_address();
+void mem_clear_roms();
+void mem_reset_roms();
+
+
 // set the highest address to be treated as RAM (everything above is ROM)
-void mem_set_ram_limit_sys(uint16_t a);
-void mem_set_ram_limit_usr(uint16_t a);
+void     mem_set_ram_limit_usr(uint16_t a);
 uint16_t mem_get_ram_limit_usr();
-void mem_clr_ram_limit();
+
+void mem_ram_init(uint16_t from, uint16_t to, bool force_clear = false);
+
 void mem_setup();
 
 #endif

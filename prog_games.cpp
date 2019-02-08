@@ -14,7 +14,8 @@
 #include <Arduino.h>
 
 #include "prog_games.h"
-#include "host.h"
+#include "prog.h"
+#include "mem.h"
 
 static const byte PROGMEM killbits[] = {
 0x21, 0x00, 0x00, 0x16, 0x80, 0x01, 0x0E, 0x00, 0x1A, 0x1A, 0x1A, 0x1A, 0x09, 0xD2, 0x08, 0x00,
@@ -103,43 +104,52 @@ static const byte PROGMEM daisy[] = {
   0046, 0071, 0053, 0053, 0053, 0053, 0002, 0377};
 
 
-uint16_t prog_games_copy_killbits(byte *dst)
+uint16_t prog_games_copy_killbits()
 {
-  host_copy_flash_to_ram(dst, killbits, sizeof(killbits));
+  if( prog_copy_to_ram(0x0000, killbits, sizeof(killbits)) )
+    {
 #ifdef __AVR_ATmega2560__
-  // modify game to run at reasonable speed on (slow) MEGA
-  dst[6] = 056;
+      // modify game to run at reasonable speed on (slow) MEGA
+      MWRITE(6, 056);
 #endif
-
-  return 0x0;
+      return 0x0000;
+    }
+  else
+    return 0xFFFF;
 }
 
-
-uint16_t prog_games_copy_pong(byte *dst)
+uint16_t prog_games_copy_pong()
 {
-  host_copy_flash_to_ram(dst, pong, sizeof(pong));
-  host_copy_flash_to_ram(dst+0x200, saver, sizeof(saver));
-  host_copy_flash_to_ram(dst+0x300, loader, sizeof(loader));
+  if( prog_copy_to_ram(0x0000, pong, sizeof(pong)) )
+    {
+      prog_copy_to_ram(0x0200, saver, sizeof(saver));
+      prog_copy_to_ram(0x0300, loader, sizeof(loader));
 #ifdef __AVR_ATmega2560__
-  // modify game to run at reasonable speed on (slow) MEGA
-  dst[1] = 056;
+      // modify game to run at reasonable speed on (slow) MEGA
+      MWRITE(1, 056);
 #endif
-
-  return 0x0;
+      return 0x0000;
+    }
+  else
+    return 0xFFFF;
 }
 
 
-uint16_t prog_games_copy_pongterm(byte *dst)
+uint16_t prog_games_copy_pongterm()
 {
-  host_copy_flash_to_ram(dst, pong_terminal, sizeof(pong_terminal));
-  return 0x0;
+  if( prog_copy_to_ram(0x0000, pong_terminal, sizeof(pong_terminal)) )
+    return 0x0000;
+  else
+    return 0xFFFF;
 }
 
 
-uint16_t prog_games_copy_daisy(byte *dst)
+uint16_t prog_games_copy_daisy()
 {
-  host_copy_flash_to_ram(dst, daisy, sizeof(daisy));
-  return 0x0;
+  if( prog_copy_to_ram(0x0000, daisy, sizeof(daisy)) )
+    return 0x0000;
+  else
+    return 0xFFFF;
 }
 
 

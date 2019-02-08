@@ -1403,35 +1403,29 @@ E34A   SHLD 0376    ; store in 0376
 */
 
 
-uint16_t prog_basic_copy_4k(byte *dst)
+uint16_t prog_basic_copy_4k()
 {
-  // we use the MREAD/MWRITE macros in prog_checksum_loader, so make 
-  // sure dst is the same as Mem (it should be).
-  if( dst != Mem ) return 0xffff;
-
   // first 0x00c0 bytes are headers and the checksum loader
   // so start reading BASIC after that
   uint16_t addr = prog_checksum_loader(basic4k + 0x00c0, sizeof(basic4k) - 0x00c0);
 
   // 4k BASIC will get into an infinite loop if a full 64k RAM are
-  // available => purposely reduce the RAM size by 1 byte
-  mem_set_ram_limit_sys(0xfffe);
-
+  // available => purposely reduce the RAM size by 1 byte if necessary
+  if( mem_is_writable(0x1000, 0xFFFF) ) mem_add_rom(0xFFFF, 1, "RAMLIMIT", MEM_ROM_FLAG_TEMP);
+  
   return addr;
 }
 
 
-uint16_t prog_basic_copy_16k(byte *dst)
+uint16_t prog_basic_copy_16k()
 {
-  // if memory is less than 64k then we read ROM Basic directly
+  // if RAM memory is less than 64k then we read ROM Basic directly (e.g. Arduino Mega)
   // from ROM, otherwise we copy it to RAM (faster)
 
 #if MEMSIZE>=0x10000
-  // ROM BASIC starts at 0xC000 so RAM goes up to 0xBFFF
-  mem_set_ram_limit_sys(0xbfff);
-  host_copy_flash_to_ram(dst+0xC000, basic16k, 0x4000);
+  if( !prog_create_temporary_rom(0xC000, basic16k, 0x4000, "16kBASIC") ) return 0xFFFF;
 #endif
-
+  
   return 0xC000;
 }
 

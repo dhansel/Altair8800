@@ -90,7 +90,7 @@ size_t Print::print(unsigned int n, int base)
 size_t Print::print(long n, int base)
 {
   if (base == 0) {
-    return write(n);
+    return write((uint8_t) n);
   } else if (base == 10) {
     if (n < 0) {
       int t = print('-');
@@ -105,7 +105,7 @@ size_t Print::print(long n, int base)
 
 size_t Print::print(unsigned long n, int base)
 {
-  if (base == 0) return write(n);
+  if (base == 0) return write((uint8_t) n);
   else return printNumber(n, base);
 }
 

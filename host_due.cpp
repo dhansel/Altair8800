@@ -45,11 +45,6 @@
 #define USE_NATIVE_USB_TX_OPTIMIZATION
 
 
-#if USE_PROTECT>0 && USE_SERIAL_ON_A6A7>0
-#error Only one of USE_PROTECT (in config.h) and USE_SERIAL_ON_A6A7 (in host_due.h) can be set to 1.
-#endif
-
-
 // un-define Serial which was #define'd to SwitchSerialClass in switch_serial.h
 // otherwise we get infinite loops when calling Serial.* functions below
 #undef Serial
@@ -1399,7 +1394,7 @@ static void switches_setup()
   attachInterrupt(function_switch_pin[ 7], switch_interrupt_7,  CHANGE);
   attachInterrupt(function_switch_pin[ 8], switch_interrupt_8,  CHANGE);
   attachInterrupt(function_switch_pin[ 9], switch_interrupt_9,  CHANGE);
-#if USE_PROTECT>0
+#if !(USE_SERIAL_ON_A6A7>0)
   attachInterrupt(function_switch_pin[10], switch_interrupt_10, CHANGE);
   attachInterrupt(function_switch_pin[11], switch_interrupt_11, CHANGE);
 #endif
@@ -1478,12 +1473,12 @@ signed char isinput[] =
     1, // D57 (A3)    => EXAMINE NEXT
     1, // D58 (A4)    => DEPOSIT
     1, // D59 (A5)    => DEPOSIT NEXT
-#if USE_PROTECT>0
-    1, // D60 (A6)    => PROTECT
-    1, // D61 (A7)    => UNPROTECT
-#else
+#if USE_SERIAL_ON_A6A7>0
    -1, // D60 (A6)    => serial_tc5 RX (don't set)
    -1, // D61 (A7)    => serial_tc5 TX (don't set)
+#else
+    1, // D60 (A6)    => PROTECT
+    1, // D61 (A7)    => UNPROTECT
 #endif
     1, // D62 (A8)    => SW0
     1, // D63 (A9)    => SW1

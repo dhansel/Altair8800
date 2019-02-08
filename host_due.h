@@ -10,9 +10,10 @@
 #include "switch_serial.h"
 
 
-// If the PROTECT switch is not used (USE_PROTECT set to 0 in config.h) then those pins
-// can be used to provide an additional serial interface. Set USE_SERIAL_ON_A6A7 to 1
-// here. The A6 pin is RX and A7 is TX.
+// The (rarely used) PROTECT switch can be sacrificed to enable an additional
+// serial port on the pins usually used for the switch. If USE_SERIAL_ON_A6A7
+// is set to 1 here then the PROTECT switch is not used and instead
+// pins A6 (RX) and A7 (TX) are used as the additional serial port.
 // WARNING: It is highly recommended to physically disable the PROTECT switch by
 //          disconnecting the GND wire from the switch before enabling this. The serial
 //          lines idle HIGH and the PROTECT switch will connect them to GND when pressed,

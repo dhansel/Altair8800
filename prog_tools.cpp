@@ -1845,129 +1845,117 @@ static const byte prog_vdmcuter[] = {
   0x00,0x00,0x1B,0x7A,0xB3,0xC2,0xF2,0xC7,0x05,0xC2,0xEF,0xC7,0xC9,0x33};
 
 
-uint16_t prog_tools_copy_turnmon(byte *dst)
+uint16_t prog_tools_copy_turnmon()
 {
-  if( MEMSIZE > 0xFFFF )
-    {
-      host_copy_flash_to_ram(dst+0xFD00, prog_turnmon, sizeof(prog_turnmon));
-      return 0xFD00;
-    }
+  if( prog_create_temporary_rom(0xFD00, prog_turnmon, sizeof(prog_turnmon), "TURNMON") )
+    return 0xFD00;
   else
     return 0xFFFF;
 }
 
 
-uint16_t prog_tools_copy_multiboot(byte *dst)
+uint16_t prog_tools_copy_multiboot()
 {
-  if( MEMSIZE > 0xFFFF )
-    {
-      host_copy_flash_to_ram(dst+0xFF00, prog_mble, sizeof(prog_mble));
-
-      // multi boot rom starts at 0xff00 so RAM goes up to 0xfeff
-      mem_set_ram_limit_sys(0xfeff);
-
-      return 0xFF00;
-    }
+  if( prog_create_temporary_rom(0xFF00, prog_mble, sizeof(prog_mble), "MBLE") )
+    return 0xFF00;
   else
     return 0xFFFF;
 }
 
 
-uint16_t prog_tools_copy_diskboot(byte *dst)
+uint16_t prog_tools_copy_diskboot()
 {
-  if( MEMSIZE > 0xFFFF )
-    {
-      host_copy_flash_to_ram(dst+0xFF00, prog_cdbl, sizeof(prog_cdbl));
-
-      // disk boot rom starts at 0xff00 so RAM goes up to 0xfeff
-      mem_set_ram_limit_sys(0xfeff);
-
-      return 0xFF00;
-    }
+  if( prog_create_temporary_rom(0xFF00, prog_cdbl, sizeof(prog_cdbl), "CDBL") )
+    return 0xFF00;
   else
     return 0xFFFF;
 }
 
 
-uint16_t prog_tools_copy_hdbl(byte *dst)
+uint16_t prog_tools_copy_hdbl()
 {
-  if( MEMSIZE > 0xFCFF )
-    {
-      host_copy_flash_to_ram(dst+0xFC00, prog_hdbl, sizeof(prog_hdbl));
-      mem_set_ram_limit_sys(0xfbff);
-      return 0xFC00;
-    }
+  if( prog_create_temporary_rom(0xFC00, prog_hdbl, sizeof(prog_hdbl), "HDBL") )
+    return 0xFC00;
   else
     return 0xFFFF;
 }
 
 
-uint16_t prog_tools_copy_musicsys(byte *dst)
+uint16_t prog_tools_copy_musicsys()
 {
-  if( MEMSIZE > 0xFFFF )
-    {
-      host_copy_flash_to_ram(dst, prog_musicsys, sizeof(prog_musicsys));
-      host_copy_flash_to_ram(dst+0xF000, prog_acuter, sizeof(prog_acuter));
-      return 0xF000;
-    }
+  if( prog_copy_to_ram(0x0000, prog_musicsys, sizeof(prog_musicsys)) &&
+      prog_copy_to_ram(0xF000, prog_acuter,   sizeof(prog_acuter)) )
+    return 0xF000;
   else
     return 0xFFFF;
 }
 
 
-uint16_t prog_tools_copy_adexer(byte *dst)
+uint16_t prog_tools_copy_adexer()
 {
-  host_copy_flash_to_ram(dst, prog_adexer, sizeof(prog_adexer));
-  return 0x0000;
+  if( prog_copy_to_ram(0x0000, prog_adexer, sizeof(prog_adexer)) )
+    return 0x0000;
+  else
+    return 0xFFFF;
 }
 
 #endif
 
 
-uint16_t prog_tools_copy_diag(byte *dst)
+uint16_t prog_tools_copy_diag()
 {
-  int i=0;
-
-  host_copy_flash_to_ram(dst, BDOS, 28);
-  host_copy_flash_to_ram(dst+0x100, i8080_cpudiag, sizeof(i8080_cpudiag));
-  return 0x100;
+  if( prog_copy_to_ram(0x0000, BDOS, 28) &&
+      prog_copy_to_ram(0x0100, i8080_cpudiag, sizeof(i8080_cpudiag)) )
+    return 0x0100;
+  else
+    return 0xFFFF;
 }
 
 
-uint16_t prog_tools_copy_exerciser(byte *dst)
+uint16_t prog_tools_copy_exerciser()
 {
-  int i=0;
-
-  host_copy_flash_to_ram(dst, BDOS, 28);
-  host_copy_flash_to_ram(dst+0x100, i8080_exerciser, sizeof(i8080_exerciser));
-  return 0x100;
+  if( prog_copy_to_ram(0x0000, BDOS, 28) &&
+      prog_copy_to_ram(0x0100, i8080_exerciser, sizeof(i8080_exerciser)) )
+    return 0x0100;
+  else
+    return 0xFFFF;
 }
 
 
-uint16_t prog_tools_copy_calc(byte *dst)
+uint16_t prog_tools_copy_calc()
 {
-  host_copy_flash_to_ram(dst, calc, sizeof(calc));
-  return 0x0;
+  if( prog_copy_to_ram(0x0000, calc, sizeof(calc)) )
+    return 0x0000;
+  else
+    return 0xFFFF;
 }
 
 
-uint16_t prog_tools_copy_statustest(byte *dst)
+uint16_t prog_tools_copy_statustest()
 {
-  host_copy_flash_to_ram(dst, statustest, sizeof(statustest));
-  return 0x0;
+  if( prog_copy_to_ram(0x0000, statustest, sizeof(statustest)) )
+    return 0x0000;
+  else
+    return 0xFFFF;
 }
 
 
-uint16_t prog_tools_copy_serialirqtest(byte *dst)
+uint16_t prog_tools_copy_serialirqtest()
 {
-  host_copy_flash_to_ram(dst, serialirqtest, sizeof(serialirqtest));
-  return 0x0;
+  if( prog_copy_to_ram(0x0000, serialirqtest, sizeof(serialirqtest)) )
+    return 0x0000;
+  else
+    return 0xFFFF;
 }
 
 #if USE_VDM1>0
-uint16_t prog_tools_copy_vdmcuter(byte *dst)
+uint16_t prog_tools_copy_vdmcuter()
 {
-  host_copy_flash_to_ram(dst+0xC000, prog_vdmcuter, sizeof(prog_vdmcuter));
-  return 0xC000;
+  // can't make this a ROM because the CP/M version using the CUTER display
+  // routines needs to modify it in order to work properly
+  if( prog_copy_to_ram(0xC000, prog_vdmcuter, sizeof(prog_vdmcuter)) )
+    return 0xC000;
+  else
+    return 0xFFFF;
 }
 #endif

@@ -31,9 +31,11 @@
 #define USE_THROTTLE 1
 
 
-// Enables function of the PROTECT/UNPROTECT switches.
-// Reduces performance and uses 33 bytes of RAM.
-#define USE_PROTECT 1
+// Maximum number of ROMs that can be added. 
+// Uses 13+(15*MAX_NUM_ROMS) bytes of RAM for organizational data. The actual 
+// ROM content is stored in the emulated RAM and therefore does not occupy any 
+// additional memory on the host. Set to 0 to completely disable ROM support.
+#define MAX_NUM_ROMS 8
 
 
 // Enables support for disk drives. Each drive uses about 160 bytes
@@ -145,7 +147,7 @@
 #define CP_OKI          1
 #define CP_C700         2
 
-extern uint32_t config_flags;
+extern uint32_t config_flags, config_flags2;
 extern uint32_t config_serial_settings;
 extern uint32_t config_interrupt_mask;
 extern uint32_t config_interrupt_vi_mask[8];

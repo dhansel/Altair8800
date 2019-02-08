@@ -1,3 +1,11 @@
+// -----------------------------------------------------------------------------
+// Altair 8800 Simulator
+// Copyright (C) 2017-2019 David Hansel
+// -----------------------------------------------------------------------------
+
+// Provide a (minimalistic) compatibility layer that
+// allows the code to be compiled on Windows/Linux hosts.
+
 #ifndef ARDUINO_H
 #define ARDUINO_H
 
@@ -5,6 +13,7 @@
 #include <float.h>
 #define isnan    _isnan
 #define isinf(x) (!_finite(x))
+#pragma warning(disable:4996)
 #endif
 
 #include <stdlib.h>

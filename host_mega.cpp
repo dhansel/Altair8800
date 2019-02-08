@@ -50,6 +50,10 @@
 #error Arduino MEGA does not support VDM-1 emulation
 #endif
 
+#if MAX_NUM_ROMS>1
+#error MAX_NUM_ROMS>1 is NOT recommended due to memory constraints. See comment in host_mega.h
+#endif
+
 #if USE_Z80==2
 #error Arduino MEGA does not support dynamic processor switching
 #endif

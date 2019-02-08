@@ -59,7 +59,6 @@ void print_dbg_info();
 void read_inputs_panel();
 void read_inputs_serial();
 void process_inputs();
-bool read_intel_hex();
 void empty_input_buffer();
 void rtc_setup();
 
@@ -88,7 +87,7 @@ void altair_set_outputs(uint16_t a, byte v)
 {
   host_set_addr_leds(a);
   host_set_data_leds(v);
-  if( MEM_IS_PROTECTED(a) )
+  if( mem_is_protected(a) )
     host_set_status_led_PROT();
   else
     host_clr_status_led_PROT();
@@ -110,8 +109,8 @@ void altair_wait_reset()
   host_clr_status_led_M1();
   host_clr_status_led_INP();
   host_clr_status_led_MEMR();
-  host_clr_status_led_INTE();
   host_clr_status_led_PROT();
+  altair_interrupt_disable();
 
   // wait while RESET switch is held
   while( host_read_function_switch_debounced(SW_RESET) );
@@ -192,7 +191,9 @@ void process_inputs()
           else
             {
               // SW6 is down => load memory page
-              if( filesys_read_file('M', filenum, Mem+page, 256)==256 )
+              if( !MEM_IS_WRITABLE(page) )
+                DBG_FILEOPS3(2, "memory page ", int(page>>8), F(" is not writable"));
+              else if( filesys_read_file('M', filenum, Mem+page, 256)==256 )
                 {
                   DBG_FILEOPS4(3, "loaded memory page ", int(page>>8), F(" from file #"), int(filenum));
                   regPC = page;
@@ -208,7 +209,7 @@ void process_inputs()
       else if (dswitch & 0x40 )
         {
           Serial.println(F("\r\nReceiving Intel HEX data..."));
-          if( read_intel_hex() )
+          if( altair_read_intel_hex() )
             Serial.println(F("Success."));
           else
             Serial.println(F("Error!"));
@@ -219,16 +220,17 @@ void process_inputs()
       else
         {
           // SW7 is down => load program
-          if( prog_load(dswitch & 0xff, &regPC, Mem) )
+          if( prog_load(dswitch & 0xff, &regPC) )
             {
               // program exists and is supposed to run immediately
               host_set_data_leds(MREAD(regPC));
               host_clr_status_led_WAIT();
+              host_clr_status_led_PROT();
             }
           else
             {
               // either program does not exist or is not supposed to run immediately
-              p_regPC = ~regPC;
+              p_regPC = regPC;
               altair_set_outputs(regPC, MREAD(regPC));
             }
         }
@@ -244,6 +246,7 @@ void process_inputs()
               Serial.print(F("\033[14B")); 
               print_panel_serial(true); 
             }
+
           p_regPC = ~regPC;
           altair_set_outputs(regPC, MREAD(regPC));
           rtc_setup();
@@ -403,16 +406,17 @@ void process_inputs()
       if( config_serial_debug_enabled() && config_serial_input_enabled() )
         Serial.print(F("\r\n\n--- RUNNING (press ESC twice to stop) ---\r\n\n"));
       host_clr_status_led_WAIT();
+      host_clr_status_led_PROT();
     }
   if( cswitch & (BIT(SW_PROTECT)) )
     {
       mem_protect(regPC);
-      host_set_status_led_PROT();
+      if( mem_is_protected(regPC) ) host_set_status_led_PROT();
     }
   if( cswitch & (BIT(SW_UNPROTECT)) )
     {
       mem_unprotect(regPC);
-      host_clr_status_led_PROT();
+      if( !mem_is_protected(regPC) ) host_clr_status_led_PROT();
     }
 }
 
@@ -483,9 +487,39 @@ byte read_device()
 }
 
 
-bool read_intel_hex()
+void altair_dump_intel_hex(uint16_t start, uint16_t end)
+{
+  uint16_t a = start;
+  while( a<=end )
+    {
+      byte cs = 0;
+      Serial.write(':');
+      byte n = min(16, end-a+1);
+      numsys_print_byte_hex(n); cs -= n; // record length
+      numsys_print_byte_hex(a>>8); cs -= a>>8; // address high byte
+      numsys_print_byte_hex(a&0xff); cs -= a&0xff; // address low byte
+      numsys_print_byte_hex(0); // record type (0=data record)
+      for(uint16_t i=0; i<n; i++)
+        {
+          byte b = MREAD(a+i);
+          numsys_print_byte_hex(b);
+          cs -= b;
+        }
+      numsys_print_byte_hex(cs);
+      Serial.println();
+      a+=n;
+      if( a==0 ) break;
+    }
+  Serial.println(F(":0000000000"));
+}
+
+
+bool altair_read_intel_hex(uint16_t *start, uint16_t *end)
 {
   word aa = 0xffff;
+  if( start!=NULL ) *start = 0xFFFF;
+  if( end!=NULL   ) *end   = 0x0000;
+
   while( 1 )
     {
       // expect line to start with a colon
@@ -522,13 +556,16 @@ bool read_intel_hex()
             aa += n;
             Serial.print('.');
 
+            if( n>0 && start!=NULL && a < *start ) *start = a;
             for(byte i=0; i<n; i++)
               {
                 d = numsys_read_hex_byte();
-                Mem[a] = d;
+                MWRITE(a, d);
                 cs -= d;
                 a++;
               }
+            if( n>0 && end!=NULL && a-1 > *end ) *end = a-1;
+
             break;
           }
 
@@ -566,7 +603,7 @@ void read_data()
   while( len>0 )
     {
       Serial.write(' ');
-      Mem[addr] = (byte) numsys_read_word();
+      MWRITE(addr, (byte) numsys_read_word());
       ++addr;
       --len;
     }
@@ -631,6 +668,7 @@ void read_inputs_serial()
         Serial.print(F("\r\n\n--- RUNNING (press ESC twice to stop) ---\r\n\n"));
       Serial.println();
       host_clr_status_led_WAIT();
+      host_clr_status_led_PROT();
     }
 #if STANDALONE>0
   else if( data == 's' )
@@ -787,6 +825,20 @@ void read_inputs_serial()
       dswitch = 0x40;
       cswitch = BIT(SW_AUX1DOWN);
     }
+  else if( data == 'h' )
+    {
+      bool ESC = false;
+      Serial.print(F("Start address: "));
+      uint16_t start = numsys_read_word(&ESC);
+      Serial.println();
+      if( !ESC)
+        {
+          Serial.print(F("End address: "));
+          uint16_t end = numsys_read_word(&ESC);
+          Serial.println();
+          if( !ESC ) altair_dump_intel_hex(start, end);
+        }
+    }
   else if( data == 'L' )
     {
       read_data();
@@ -798,6 +850,8 @@ void read_inputs_serial()
       p_regPC = ~regPC;
       print_dbg_info();
     }
+  else if( data == 'Y' )
+    mem_print_layout();
   else if( data == 'C' )
     {
       cswitch = BIT(SW_STOP) | BIT(SW_AUX1UP);
@@ -937,14 +991,15 @@ void reset(bool resetPC)
   host_clr_status_led_M1();
   host_clr_status_led_INP();
   host_clr_status_led_MEMR();
-  host_clr_status_led_INTE();
   host_clr_status_led_PROT();
   serial_update_hlda_led();
-
+  altair_interrupt_disable();
+  
   if( resetPC )
     {
-      regPC      = 0x0000;
-      p_regPC    = 0xffff;
+      uint16_t a = mem_get_rom_autostart_address();
+      regPC      = (a==0xffff) ? 0x0000 : a;
+      p_regPC    = ~regPC;
     }
 
   serial_reset();
@@ -955,8 +1010,10 @@ void reset(bool resetPC)
   if( host_read_function_switch(SW_STOP) )
 #endif
     {
-      // clear memory limit
-      mem_clr_ram_limit();
+      // remove ROMS that were temporarily installed by the Simulator
+      // and restore auto-disable ROMS
+      mem_reset_roms();
+
       have_ps2 = false;
 
       // close all open files
@@ -1211,7 +1268,10 @@ void altair_hlt()
           while( !(cswitch & BIT(SW_RESET)) ) read_inputs_panel();
         }
       else if( altair_interrupts & INT_DEVICE )
-        host_clr_status_led_WAIT();
+        {
+          host_clr_status_led_WAIT();
+          host_clr_status_led_PROT();
+        }
     }
   else
     {
@@ -1456,6 +1516,8 @@ void setup()
   cswitch = 0;
   dswitch = 0;
 
+  Serial.begin(115200);
+
   timer_setup();
   mem_setup();
   host_setup();
@@ -1485,7 +1547,7 @@ void setup()
   else
     {
       // set up serial connection on the host
-      for(byte i=0; i<HOST_NUM_SERIAL_PORTS; i++)
+      for(byte i=0 ; i<HOST_NUM_SERIAL_PORTS; i++)
         host_serial_setup(i, config_host_serial_baud_rate(i), config_host_serial_config(i),
                           config_host_serial_primary()==i);
     }
@@ -1494,11 +1556,10 @@ void setup()
   if( host_read_function_switch(SW_EXAMINE) )
     host_system_info();
 
-  host_set_status_led_WAIT();
-
   // emulator extra: holding down CLR at powerup will keep all registers
   // and memory content initialized with 0. Otherwise (as would be normal 
   // with the Altair), everything is random.
+  mem_ram_init(0, MEMSIZE-1);
   if( !host_read_function_switch(SW_CLR) && !config_clear_memory() )
     {
       regPC = host_get_random();
@@ -1511,14 +1572,19 @@ void setup()
       regE  = host_get_random();
       regH  = host_get_random();
       regL  = host_get_random();
-
-      for(word i=0; i<MEMSIZE/4; i++)
-        ((uint32_t *) Mem)[i] = host_get_random();
     }
 
+  host_set_status_led_WAIT();
   reset(false);
 
   if( config_serial_panel_enabled() ) Serial.print(F("\033[2J\033[14B\r\n"));
+
+  uint16_t a = mem_get_rom_autostart_address();
+  if( a!=0xFFFF )
+    {
+      regPC = a;
+      host_clr_status_led_WAIT();
+    }
 }
 
 

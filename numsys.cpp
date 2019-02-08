@@ -57,28 +57,42 @@ void numsys_print_byte_bin(byte b)
     }
 }
 
+
+void numsys_print_byte_oct(byte b)
+{
+  byte d;
+  d = (b&0700) >> 6;
+  Serial.print(d);
+  d = (b&0070) >> 3;
+  Serial.print(d);
+  d = (b&0007);
+  Serial.print(d);
+}
+
+
+void numsys_print_byte_dec(byte b)
+{
+  if( b<10 )  Serial.print(' ');
+  if( b<100 ) Serial.print(' ');
+  Serial.print(b);
+}
+
+
+void numsys_print_byte_hex(byte b)
+{
+  if( b<16 ) Serial.print('0');
+  Serial.print(b, HEX);
+}
+
+
+
 void numsys_print_byte(byte b)
 {
-  if( numsys==NUMSYS_HEX )
+  switch( numsys )
     {
-      if( b<16 ) Serial.print('0');
-      Serial.print(b, HEX);
-    }
-  else if( numsys==NUMSYS_OCT )
-    {
-      byte d;
-      d = (b&0700) >> 6;
-      Serial.print(d);
-      d = (b&0070) >> 3;
-      Serial.print(d);
-      d = (b&0007);
-      Serial.print(d);
-    }
-  else
-    {
-      if( b<10 )  Serial.print(' ');
-      if( b<100 ) Serial.print(' ');
-      Serial.print(b);
+    case NUMSYS_HEX: numsys_print_byte_hex(b); break;
+    case NUMSYS_OCT: numsys_print_byte_oct(b); break;
+    default: numsys_print_byte_dec(b); break;
     }
 }
 

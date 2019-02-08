@@ -20,6 +20,11 @@
 #include "Altair8800.h"
 #include "mem.h"
 #include "host.h"
+#include "numsys.h"
+
+
+word mem_ram_limit = 0xFFFF, mem_protected_limit = 0xFFFF;
+byte mem_protected_flags[32];
 
 byte Mem[MEMSIZE];
 
@@ -58,87 +63,428 @@ void MEM_WRITE_STEP(uint16_t a, byte v)
 }
 
 
-#if USE_PROTECT>0
+static bool mem_is_rom(uint16_t a)
+{
+  for(int i=0; i<mem_get_num_roms(); i++)
+    {
+      uint16_t pa, pl, pe;
+      mem_get_rom_info(i, NULL, &pa, &pl);
+      pa &= ~0xFF;
+      pe  = ((pa+pl-1)|0xFF);
+      if( pa>a )
+        return false;
+      else if( a>=pa && a<=pe )
+        return true;
+    }
 
-word protected_flag = 0;
-byte protected_flags[32];
+  return false;
+}
+
+
+void mem_print_layout()
+{
+  for(uint32_t i=0; i<0x10000; i+=0x100)
+    {
+      if( (i&0x3FFF) == 0 )
+        {
+          Serial.println();
+          numsys_print_word(i);
+          Serial.print(F(": "));
+        }
+
+      if( MEM_IS_WRITABLE(i) ) 
+        Serial.print('.');
+      else if( i>=MEMSIZE )
+        Serial.print('#');
+      else if( mem_is_rom(i) )
+        Serial.print('P');
+      else if( i>mem_ram_limit )
+        Serial.print('-');
+      else
+        Serial.print('U');
+    }
+
+  Serial.println();
+}
+
+
+static void mem_protect_calc_limit()
+{
+  mem_protected_limit = mem_ram_limit;
+  for(byte i=0; i<32; i++)
+    if( mem_protected_flags[i] )
+      for(byte j=0; j<8; j++)
+        if( mem_protected_flags[i] & (1<<j) )
+          {
+            mem_protected_limit = min(mem_ram_limit, uint16_t(2048*i + 256*j));
+            return;
+          }
+}
+
+static void mem_protect_flag_set(uint16_t a, bool set)
+{
+  if( set )
+    mem_protected_flags[a>>11] |=  (1<<((a>>8)&0x07));
+  else
+    mem_protected_flags[a>>11] &= ~(1<<((a>>8)&0x07));
+}
+
+
+static void mem_protect_flags_set(uint16_t start, uint16_t length, bool v)
+{
+  for(uint32_t p = start; p < (uint32_t) start + length; p += 0x100 )
+    mem_protect_flag_set(p, v);
+  mem_protect_flag_set(start+length-1, v);
+}
+
+
 
 void mem_protect(uint16_t a)
 {
-  protected_flags[((a)>>8)/8] |= (1<<(((a)>>8)&0x07));
-  protected_flag = 1;
+  mem_protect_flag_set(a, true);
+  mem_protect_calc_limit();
 }
+
 
 void mem_unprotect(uint16_t a)
 {
-  byte i;
-  protected_flags[((a)>>8)/8] &= ~(1<<(((a)>>8)&0x07));
-  for(i=0; i<32 && protected_flags[i]==0; i++);
-  protected_flag = i<32;
+  if( !mem_is_rom(a) )
+    {
+      mem_protect_flag_set(a, false);
+      mem_protect_calc_limit();
+    }
 }
 
 
-#endif
-
-word        mem_ram_limit      = 0xFFFF;
-static word mem_ram_limit_user = 0xFFFF;
-static word mem_ram_limit_sys  = 0xFFFF;
-
-void mem_set_ram_limit_sys(uint16_t a)
+bool mem_is_protected(uint16_t a)
 {
-  if( a < MEMSIZE )
-    mem_ram_limit_sys = a;
-  else
-    mem_ram_limit_sys = MEMSIZE-1;
+  return !MEM_IS_WRITABLE(a) && a<=mem_ram_limit && !mem_is_rom(a);
+}
 
-  mem_ram_limit = min(mem_ram_limit_user, mem_ram_limit_sys);
+
+bool mem_is_writable(uint16_t from, uint16_t to)
+{
+  for(uint32_t p = (from & ~0xff); p <= (uint32_t) to; p += 0x100 ) 
+    if( !MEM_IS_WRITABLE(p) )
+      return false;
+
+  return true;
+}
+
+
+
+static void randomize(uint32_t from, uint32_t to)
+{
+  // note that if from/to are not on 4-byte boundaries
+  // then a few bytes remain unchanged
+  from = (from&3)==0 ? from/4 : from/4+1;
+  to   = to/4;
+  for(word i=from; i<to; i++)((uint32_t *) Mem)[i] = host_get_random();
+}
+
+
+static void mem_ram_init_section(uint16_t from, uint16_t to, bool clear)
+{
+  if( from>mem_ram_limit )
+    {
+      // "from" is before the RAM limit and "to" is after
+      // => initialize with 0xFF
+      memset(Mem+from, 0xFF, to-from+1);
+    }
+  else if( to<=mem_ram_limit )
+    {
+      // "to" is before the RAM limit
+      // => initialize RAM with either 0 or random
+      if( clear )
+        memset(Mem+from, 0x00, to-from+1);
+      else
+        randomize(from, to);
+    }
+  else
+    {
+      // "from" is before the RAM limit and "to" is after
+      // => initialize up to the limit with 0 or random...
+      if( clear )
+        memset(Mem+from, 0x00, mem_ram_limit-from+1);
+      else
+        randomize(from, mem_ram_limit);
+
+      // ...and memory after the limit with 0xFF
+      memset(Mem+mem_ram_limit+1, 0xFF, to-mem_ram_limit);
+    }
+}
+
+
+void mem_ram_init(uint16_t from, uint16_t to, bool force_clear)
+{
+  byte i;
+  uint32_t a = from;
+  uint16_t pa, pl;
+
+  // initialize RAM before and between ROMs
+  for(i=0; i<mem_get_num_roms() && a<=to; i++)
+    {
+      mem_get_rom_info(i, NULL, &pa, &pl);
+      if( (uint32_t) pa+pl>a )
+        {
+          if( pa>a ) mem_ram_init_section(a, min(pa-1, to), force_clear || config_clear_memory());
+          a = pa+pl;
+        }
+    }
+
+  // initialize RAM after last ROM
+  if( a<=to ) mem_ram_init_section(a, to, force_clear || config_clear_memory());
 }
 
 
 void mem_set_ram_limit_usr(uint16_t a)
 {
-  if( a < mem_ram_limit_user )
-    {
-      // areas without RAM read 0xFF
-      for(uint16_t i=a; i<MEMSIZE-1 && i<mem_ram_limit_sys-1; i++)
-        Mem[i+1] = 0xFF;
-    }
-  else if( a > mem_ram_limit_user )
-    {
-      // initialize newly "installed" RAM with 0
-      for(uint16_t i=mem_ram_limit_user+1; i<MEMSIZE-1 && i<a && i<mem_ram_limit_sys; i++)
-        Mem[i+1] = 0x00;
-    }
+  uint16_t prev_limit = mem_ram_limit;
+  mem_ram_limit = min(a, MEMSIZE-1);
 
-  if( a < MEMSIZE )
-    mem_ram_limit_user = a;
-  else
-    mem_ram_limit_user = MEMSIZE-1;
+  if( prev_limit < mem_ram_limit )
+    {
+      mem_ram_init(prev_limit+1, mem_ram_limit);
 
-  mem_ram_limit = min(mem_ram_limit_user, mem_ram_limit_sys);
+      // un-protect RAM below the new mem_ram_limit
+      for(uint32_t p = prev_limit+1; p < ((uint32_t) mem_ram_limit)+1; p += 0x100 )
+        mem_protect_flag_set(p, false);
+
+      // restore protection for ROMs
+      for(byte i=0; i<mem_get_num_roms(); i++)
+        {
+          uint16_t pa, pl;
+          mem_get_rom_info(i, NULL, &pa, &pl);
+          if( pa>mem_ram_limit ) 
+            break;
+          else if( pa+pl>prev_limit )
+            mem_protect_flags_set(pa, pl, true);
+        }
+    }
+  else if( mem_ram_limit < prev_limit )
+    {
+      mem_ram_init(mem_ram_limit+1, prev_limit);
+      
+      // write-protect RAM above the new mem_ram_limit
+      // it would be easier to have an additional condition (a<=mem_ram_limit) in the
+      // MEM_IS_WRITABLE macro but doing so would slow emulation as writing to memory
+      // is one of the most common operations.
+      for(uint32_t p = mem_ram_limit+1; p < ((uint32_t) prev_limit)+1; p += 0x100 )
+        mem_protect_flag_set(p, true);
+    }
+  
+  mem_protect_calc_limit();
 }
 
 
 uint16_t mem_get_ram_limit_usr()
 {
-  return mem_ram_limit_user;
-}
-
-
-void mem_clr_ram_limit()
-{
-  mem_ram_limit = mem_ram_limit_user;
+  return mem_ram_limit;
 }
 
 
 void mem_setup()
 {
-#if USE_PROTECT>0
-  for(int i=0; i<32; i++) protected_flags[i]=0x00;
-  protected_flag = 0;
-#endif
-
-  mem_ram_limit_user = MEMSIZE-1;
-  mem_ram_limit_sys  = 0xFFFF;
-  mem_clr_ram_limit();
+  memset(mem_protected_flags, 0, 32);
+  mem_ram_limit = MEMSIZE-1;
+  for(uint32_t p = MEMSIZE; p < 0x10000; p += 0x100 )
+    mem_protect_flag_set(p, true);
+  mem_protect_calc_limit();
 }
+
+
+// -------------------- ROM handling
+
+
+#if MAX_NUM_ROMS==0
+
+bool mem_add_rom(uint16_t start, uint16_t length, const char *name, uint16_t flags) { return false; }
+bool mem_remove_rom(byte i, bool clear) { return false; }
+byte mem_get_num_roms(bool includeTemp) { return 0; }
+void mem_set_rom_flags(byte i, uint16_t flags) {}
+bool mem_get_rom_info(byte i, char *name, uint16_t *start, uint16_t *length, uint16_t *flags) { return false; }
+uint16_t mem_get_rom_autostart_address() { return 0xFFFF; }
+void mem_clear_roms() {}
+void mem_reset_roms() {}
+
+#else
+
+byte     mem_roms_num = 0;
+uint16_t mem_roms_start[MAX_NUM_ROMS];
+uint16_t mem_roms_length[MAX_NUM_ROMS];
+uint16_t mem_roms_flags[MAX_NUM_ROMS];
+char     mem_roms_name[MAX_NUM_ROMS][9];
+
+
+bool mem_remove_rom(byte i, bool clear)
+{
+  if( i<mem_roms_num )
+    {
+      byte j;
+      uint16_t start  = mem_roms_start[i], length = mem_roms_length[i];
+
+      // remove ROM info
+      for(j=i+1; j<mem_roms_num; j++)
+        {
+          mem_roms_start[j-1] = mem_roms_start[j];
+          mem_roms_length[j-1] = mem_roms_length[j];
+          mem_roms_flags[j-1] = mem_roms_flags[j];
+          strcpy(mem_roms_name[j-1], mem_roms_name[j]);
+        }
+      mem_roms_num--;
+
+      // remove write protection for area occupied by ROM
+      mem_protect_flags_set(start, length, false);
+      mem_protect_calc_limit();
+
+      // initialize newly visible RAM 
+      mem_ram_init(start, start+length-1);
+      
+      return true;
+    }
+  else
+    return false;
+}
+
+
+bool mem_add_rom(uint16_t start, uint16_t length, const char *nameOpt, uint16_t flags)
+{
+  int i, j, conflict = -1;
+  const char *name = nameOpt == NULL ? "[?]" : nameOpt;
+
+  for(i=0; i<mem_roms_num; i++)
+    if( start <= mem_roms_start[i] )
+      break;
+  
+  while( i>0 && ((uint32_t) mem_roms_start[i-1]+mem_roms_length[i-1] > start) && conflict<0 )
+    {
+      if( mem_roms_flags[i-1] & MEM_ROM_FLAG_TEMP )
+        mem_remove_rom(i--, false);
+      else
+        conflict = i-1;
+    }
+
+  while( i<mem_roms_num && (uint32_t) start+length > mem_roms_start[i] && conflict<0 )
+    {
+      if( mem_roms_flags[i] & MEM_ROM_FLAG_TEMP )
+        mem_remove_rom(i, false);
+      else
+        conflict = i;
+    }
+
+  if( start+length>MEMSIZE || conflict>=0 || mem_roms_num >= MAX_NUM_ROMS )
+    {
+      Serial.print(F("Error: Can't install ROM '"));
+      Serial.print(name);
+      Serial.print(F("' at "));
+      numsys_print_word(start);
+      Serial.print('-');
+      numsys_print_word(start+length-1);
+      if( conflict>=0 )
+        {
+          Serial.print(F("\r\nbecause it conflicts with existing ROM '"));
+          Serial.print(mem_roms_name[conflict]);
+          Serial.print(F("' at "));
+          numsys_print_word(mem_roms_start[conflict]);
+          Serial.print('-');
+          numsys_print_word(mem_roms_start[conflict]+mem_roms_length[conflict]-1);
+          Serial.println();
+        }
+      else if( mem_roms_num >= MAX_NUM_ROMS )
+        Serial.println(F("\r\nbecause the maximum number of ROMs are already installed."));
+      else
+        Serial.println();
+
+      return false;
+    }
+
+  for(j=mem_roms_num; j>i; j--)
+    {
+      mem_roms_start[j]  = mem_roms_start[j-1];
+      mem_roms_length[j] = mem_roms_length[j-1];
+      mem_roms_flags[j]  = mem_roms_flags[j-1];
+      strcpy(mem_roms_name[j], mem_roms_name[j-1]);
+    }
+    
+  mem_roms_start[i]  = start;
+  mem_roms_length[i] = length;
+  mem_roms_flags[i]  = flags;
+  strncpy(mem_roms_name[i], name, 8);
+  mem_roms_name[i][8] = 0;
+  mem_roms_num++;
+
+  // write-protect area occupied by ROM
+  mem_protect_flags_set(start, length, true);
+  mem_protect_calc_limit();
+
+  return true;
+}
+
+
+byte mem_get_num_roms(bool includeTemp)
+{
+  if( includeTemp )
+    return mem_roms_num;
+  else
+    {
+      byte n = 0;
+      for(int i=0; i<mem_roms_num; i++)
+        if( !(mem_roms_flags[i] & MEM_ROM_FLAG_TEMP) )
+          n++;
+
+      return n;
+    }
+}
+
+
+uint16_t mem_get_rom_autostart_address()
+{
+  for(byte i=0; i<mem_roms_num; i++)
+    if( mem_roms_flags[i] & MEM_ROM_FLAG_AUTOSTART )
+      return mem_roms_start[i];
+
+  return 0xFFFF;
+}
+
+
+void mem_set_rom_flags(byte i, uint16_t flags)
+{
+  if( i<mem_roms_num )
+    mem_roms_flags[i] = flags;
+}
+
+
+bool mem_get_rom_info(byte i, char *name, uint16_t *start, uint16_t *length, uint16_t *flags)
+{
+  if( i<mem_roms_num )
+    {
+      if( name )   strcpy(name, mem_roms_name[i]);
+      if( start )  *start = mem_roms_start[i];
+      if( length ) *length = mem_roms_length[i];
+      if( flags )  *flags = mem_roms_flags[i];
+      return true;
+    }
+  else
+    return false;
+}
+
+
+void mem_clear_roms()
+{
+  while( mem_roms_num>0 ) mem_remove_rom(0);
+}
+
+
+void mem_reset_roms()
+{
+  byte i = 0;
+  while( i<mem_roms_num )
+    {
+      if( mem_roms_flags[i] & MEM_ROM_FLAG_TEMP )
+        mem_remove_rom(i, true);
+      else
+        i++;
+    }
+}
+
+#endif

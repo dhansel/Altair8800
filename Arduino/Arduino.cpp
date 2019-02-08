@@ -1,8 +1,29 @@
-#ifdef _WIN32
-#include <conio.h>
-#include <Windows.h>
-#include <Wincon.h>
-#define FixNewline(s) s
+// -----------------------------------------------------------------------------
+// Altair 8800 Simulator
+// Copyright (C) 2017-2019 David Hansel
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation; either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program; if not, write to the Free Software Foundation,
+// Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
+// -----------------------------------------------------------------------------
+
+
+// the "min" and "max" macros defined in Arduino.h cause conflicts when
+// including C++ libraries such as "string" or "iostream" so we need to
+// undefine them here (not used in here anyways)
+#include "Arduino.h"
+#undef min
+#undef max
 
 #include <stdio.h>
 #include <string>
@@ -10,7 +31,15 @@
 #include <sys/timeb.h>
 using namespace std;
 
-#include "Arduino.h"
+
+#ifdef _WIN32
+
+// ------------------------------- Windows-specific -------------------------------
+
+#include <conio.h>
+#include <Windows.h>
+#include <Wincon.h>
+#define FixNewline(s) s
 
 int EnableANSI()
 {
@@ -64,6 +93,8 @@ int EnableANSI()
 
 #else
 
+// ------------------------------- Linux-specific -------------------------------
+
 #include <ncurses.h>
 #include <termios.h>
 #include <unistd.h>
@@ -99,8 +130,10 @@ void ncurses_exit()
 
 #endif
 
-SerialClass Serial;
+// ------------------------------- Windows/Linux common -------------------------------
 
+
+SerialClass Serial;
 
 unsigned long millis()
 {
@@ -171,7 +204,7 @@ int main(int argc, char **argv)
   g_argv = argv;
 
 #ifdef _WIN32
-  // enable ANSI model in Windows
+  // enable ANSI mode in Windows
   EnableANSI();
 #else
   // initialize ncurses library

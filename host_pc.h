@@ -7,6 +7,7 @@
 #define HOST_PC_H
 
 #include "switch_serial.h"
+#include "Altair8800.h"
 
 #define MEMSIZE          0x10000 /* 64k */
 #define HOST_STORAGESIZE 0x80000 /* 512k */
@@ -49,7 +50,7 @@ extern byte stop_request;
 #define host_set_status_led_M1()      status_leds |= ST_M1
 #define host_set_status_led_INP()     status_leds |= ST_INP
 #define host_set_status_led_MEMR()    status_leds |= ST_MEMR
-#define host_set_status_led_INTE()    status_leds |= ST_INTE;
+#define host_set_status_led_INTE()    status_leds |= ST_INTE
 #define host_set_status_led_PROT()    status_leds |= ST_PROT
 #define host_set_status_led_WAIT()  { status_leds |= ST_WAIT; status_wait = true; }
 #define host_set_status_led_HLDA()    status_leds |= ST_HLDA
@@ -62,7 +63,7 @@ extern byte stop_request;
 #define host_clr_status_led_M1()      status_leds &= ~ST_M1
 #define host_clr_status_led_INP()     status_leds &= ~ST_INP
 #define host_clr_status_led_MEMR()    status_leds &= ~ST_MEMR
-#define host_clr_status_led_INTE()    status_leds &= ~ST_INTE;
+#define host_clr_status_led_INTE()    status_leds &= ~ST_INTE
 #define host_clr_status_led_PROT()    status_leds &= ~ST_PROT
 #define host_clr_status_led_WAIT()  { status_leds &= ~ST_WAIT; status_wait = false; }
 #define host_clr_status_led_HLDA()    status_leds &= ~ST_HLDA

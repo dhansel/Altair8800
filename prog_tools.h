@@ -8,17 +8,17 @@
 
 #include <Arduino.h>
 
-uint16_t prog_tools_copy_diag(byte *dst);
-uint16_t prog_tools_copy_exerciser(byte *dst);
-uint16_t prog_tools_copy_turnmon(byte *dst);
-uint16_t prog_tools_copy_multiboot(byte *dst);
-uint16_t prog_tools_copy_diskboot(byte *dst);
-uint16_t prog_tools_copy_hdbl(byte *dst);
-uint16_t prog_tools_copy_calc(byte *dst);
-uint16_t prog_tools_copy_statustest(byte *dst);
-uint16_t prog_tools_copy_serialirqtest(byte *dst);
-uint16_t prog_tools_copy_musicsys(byte *dst);
-uint16_t prog_tools_copy_adexer(byte *dst);
-uint16_t prog_tools_copy_vdmcuter(byte *dst);
+uint16_t prog_tools_copy_diag();
+uint16_t prog_tools_copy_exerciser();
+uint16_t prog_tools_copy_turnmon();
+uint16_t prog_tools_copy_multiboot();
+uint16_t prog_tools_copy_diskboot();
+uint16_t prog_tools_copy_hdbl();
+uint16_t prog_tools_copy_calc();
+uint16_t prog_tools_copy_statustest();
+uint16_t prog_tools_copy_serialirqtest();
+uint16_t prog_tools_copy_musicsys();
+uint16_t prog_tools_copy_adexer();
+uint16_t prog_tools_copy_vdmcuter();
 
 #endif

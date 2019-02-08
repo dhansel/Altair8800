@@ -8,9 +8,9 @@
 
 #include <Arduino.h>
 
-uint16_t prog_games_copy_killbits(byte *dst);
-uint16_t prog_games_copy_pong(byte *dst);
-uint16_t prog_games_copy_pongterm(byte *dst);
-uint16_t prog_games_copy_daisy(byte *dst);
+uint16_t prog_games_copy_killbits();
+uint16_t prog_games_copy_pong();
+uint16_t prog_games_copy_pongterm();
+uint16_t prog_games_copy_daisy();
 
 #endif

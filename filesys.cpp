@@ -628,11 +628,12 @@ void filesys_manage()
                     
                     addr += n;
                     Serial.println();
+
+                    while( !serial_available() ) delay(50);
+                    if( serial_read()== 27 ) break;
                   }
                 
                 filesys_close(fid);
-                while( !serial_available() );
-                serial_read();
               }
             break;
           }

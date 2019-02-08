@@ -534,10 +534,12 @@ const byte prog_dazzler_gotcha[] =
 
 
 #define PROG_DAZZLER_COPY(PROGNAME, ADDR) \
-uint16_t prog_dazzler_copy_##PROGNAME(byte *dst) \
+uint16_t prog_dazzler_copy_##PROGNAME() \
 { \
-  host_copy_flash_to_ram(dst+(ADDR), prog_dazzler_##PROGNAME, sizeof(prog_dazzler_##PROGNAME)); \
-  return ADDR; \
+  if( prog_copy_to_ram(ADDR, prog_dazzler_##PROGNAME, sizeof(prog_dazzler_##PROGNAME)) ) \
+    return ADDR; \
+  else \
+    return 0xFFFF; \
 }
 
 PROG_DAZZLER_COPY(kaleidoscope, 0x0000);
