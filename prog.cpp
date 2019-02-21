@@ -42,7 +42,10 @@ uint16_t prog_print_dir();
 
 struct prog_info_struct get_prog_info(byte i)
 {
-  struct prog_info_struct programs[] =
+  // To save global memory (mostly for the Mega) we build up this table on the
+  // stack and then pick the entry we need and return it. Note that this returns
+  // the whole entry, not just a pointer to it.
+  const struct prog_info_struct programs[] =
     {
       {PSTR("[print this directory]"),     prog_print_dir,                false},
       {PSTR("Calculator"),                 prog_tools_copy_calc,          true},

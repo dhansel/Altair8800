@@ -22,6 +22,236 @@
 #include "numsys.h"
 #include "serial.h"
 
+#define MAX_OPEN_FILES 3
+static byte num_open_files = 0;
+
+#ifndef HOST_BUFFERSIZE
+#define HOST_BUFFERSIZE 0
+#endif
+
+
+#if USE_HOST_FILESYS>0 && defined(HOST_HAS_FILESYS)
+
+
+// --------------------------- Host provides filesystem ---------------------------
+
+
+static byte file_open[MAX_OPEN_FILES];
+static HOST_FILESYS_FILE_TYPE file_info[MAX_OPEN_FILES];
+
+static byte alloc_file_id(bool write)
+{
+  for(byte i=0; i<MAX_OPEN_FILES; i++)
+    if( file_open[i]==0 )
+      {
+        file_open[i] = write ? 2 : 1;
+        num_open_files++;
+        return i+1;
+      }
+  
+  return 0;
+}
+
+
+static void free_file_id(byte fid)
+{
+  if( num_open_files>0 && fid>0 && fid<=MAX_OPEN_FILES && file_open[fid-1] != 0 )
+    {
+      file_open[fid-1] = 0;
+      num_open_files--;
+    }
+}
+
+
+static byte filesys_open_file(char nm1, char nm2, bool write)
+{
+  byte fid = alloc_file_id(write);
+
+  if( fid>0 )
+    {
+      char buf[10];
+      switch( nm1 )
+        {
+        case 'C': sprintf(buf, "%02X.CFG", (unsigned char) nm2); break;
+        case 'B': sprintf(buf, "%c.BAS", nm2); break;
+        case 'M': sprintf(buf, "%02X.MEM", (unsigned char) nm2); break;
+        case 'D': sprintf(buf, "%02X.DAT", (unsigned char) nm2); break;
+        default : sprintf(buf, "%02X.T%02X", (unsigned char) nm2, (unsigned char) nm1); break;
+        }
+
+      if( write && host_filesys_file_exists(buf) ) host_filesys_file_remove(buf);
+      HOST_FILESYS_FILE_TYPE f = host_filesys_file_open(buf, write);
+      if( f )
+        file_info[fid-1] = f;
+      else
+        { free_file_id(fid); fid = 0; }
+    }
+  
+  return fid;
+}
+
+
+byte filesys_open_read(char nm1, char nm2)
+{
+  return filesys_open_file(nm1, nm2, false);
+}
+
+byte filesys_open_write(char nm1, char nm2)
+{
+  return filesys_open_file(nm1, nm2, true);
+}
+
+bool filesys_write_data(byte fid, const void *data, uint16_t len)
+{
+  if( fid<=MAX_OPEN_FILES && file_open[fid-1]==2 )
+    return host_filesys_file_write(file_info[fid-1], len, data)==len;
+  else
+    return false;
+}
+
+bool filesys_write_char(byte fid, byte c)
+{
+  return filesys_write_data(fid, &c, 1);
+}
+
+bool filesys_eof(byte fid)
+{
+  if( fid<=MAX_OPEN_FILES && file_open[fid-1]>0 )
+    return host_filesys_file_eof(file_info[fid-1]);
+  else
+    return true;
+}
+
+bool filesys_is_read(byte fid)
+{
+  return fid<=MAX_OPEN_FILES && file_open[fid-1]==1;
+}
+
+bool filesys_is_write(byte fid)
+{
+  return fid<=MAX_OPEN_FILES && file_open[fid-1]==2;
+}
+
+uint16_t filesys_read_data(byte fid, void *data, uint16_t len)
+{
+  if( fid<=MAX_OPEN_FILES && file_open[fid-1]==1 )
+    return host_filesys_file_read(file_info[fid-1], len, data);
+  else
+    return 0;
+}
+
+bool filesys_read_char(byte fid, byte *c)
+{
+  return filesys_read_data(fid, c, 1)>0;
+}
+
+void filesys_close(byte fid)
+{
+  if( fid<=MAX_OPEN_FILES && file_open[fid-1]>0 )
+    {
+      host_filesys_file_close(file_info[fid-1]);
+      free_file_id(fid);
+    }
+}
+
+
+bool filesys_write_file(char nm1, char nm2, const void *data, uint16_t len)
+{
+  byte fid = filesys_open_write(nm1, nm2);
+  if( fid )
+    {
+      filesys_write_data(fid, data, len);
+      filesys_close(fid);
+      return true;
+    }
+  else
+    return false;
+}
+
+
+uint16_t filesys_read_file(char nm1, char nm2, void *data, uint16_t len)
+{
+  uint16_t res = 0;
+  byte fid = filesys_open_read(nm1, nm2);
+  if( fid )
+    {
+      res = filesys_read_data(fid, data, len);
+      filesys_close(fid);
+    }
+  return res;
+}
+
+
+void filesys_convert()
+{
+  struct DirEntryStruct
+  {
+    byte     name1, name2;
+    uint16_t len;
+    uint32_t pos;
+  } entry;
+
+  byte numEntries;
+  host_storage_read(&numEntries, HOST_STORAGESIZE-4, 1);
+
+  Serial.print(F("Converting file system..."));
+  uint16_t totalUsed = 4+numEntries*sizeof(struct DirEntryStruct);
+  for(byte i=0; i<numEntries; i++)
+    {
+      Serial.print('.');
+      uint32_t entrypos = HOST_STORAGESIZE-4-((i+1)*sizeof(struct DirEntryStruct));
+      host_storage_read(&entry, entrypos, sizeof(struct DirEntryStruct));
+
+      byte fid = filesys_open_write(entry.name1, entry.name2);
+      if( fid )
+        {
+          uint16_t bufsize = max(HOST_BUFFERSIZE, 1);
+          byte buf[max(HOST_BUFFERSIZE, 1)];
+          uint16_t pos = 0;
+
+          while( pos<entry.len )
+            {
+              uint16_t len = min(entry.len-pos, bufsize);
+              host_storage_read(buf, entry.pos+pos, len);
+              filesys_write_data(fid, buf, len);
+              pos += len;
+            }
+          filesys_close(fid);
+        }
+    }
+}
+
+
+void filesys_setup()
+{
+  for(byte i=0; i<MAX_OPEN_FILES; i++)
+    file_open[i] = 0;
+
+  // try to initialize host-specific data storage memory for reading
+  if( host_storage_init(false) )
+    {
+      // check whether we need to convert an old mini-filesystem 
+      // to the host filesystem
+      char buf[4];
+      host_storage_read(buf, HOST_STORAGESIZE-4, 4);
+      if( buf[1]=='A' && buf[2]=='F' && buf[3]=='S' )
+        {
+          filesys_convert();
+
+          // tell the host to invalidate the storage memory
+          // so we don't convert it again next time
+          host_storage_invalidate();
+        }
+      
+      // close storage memorg
+      host_storage_close();
+    }
+}
+
+#else
+
+// ----------------------------- Use own mini-filesystem -------------------------------
+
 
 struct DirEntryStruct
 {
@@ -30,15 +260,8 @@ struct DirEntryStruct
   uint32_t pos;
 };
 
-
-#define MAX_OPEN_FILES 3
-static byte num_open_files = 0;
 static uint32_t dir_start = 0;
 static struct DirEntryStruct file_data[MAX_OPEN_FILES];
-
-#ifndef HOST_BUFFERSIZE
-#define HOST_BUFFERSIZE 0
-#endif
 
 #if HOST_BUFFERSIZE>1
 static uint32_t write_buffer_len = 0;
@@ -49,26 +272,26 @@ static byte     write_buffer[HOST_BUFFERSIZE];
 static byte dir_get_num_entries()
 {
   byte n;
-  host_read_data(&n, HOST_STORAGESIZE-4, 1);
+  host_storage_read(&n, HOST_STORAGESIZE-4, 1);
   return n;
 }
 
 static void dir_set_num_entries(byte n)
 {
-  host_write_data(&n, HOST_STORAGESIZE-4, 1);
+  host_storage_write(&n, HOST_STORAGESIZE-4, 1);
   dir_start = HOST_STORAGESIZE-4-(n*sizeof(struct DirEntryStruct));
 }
 
 static void dir_write_entry(byte num, struct DirEntryStruct *entry)
 {
   uint32_t entrypos = HOST_STORAGESIZE-4-((num+1)*sizeof(struct DirEntryStruct));
-  host_write_data(entry, entrypos, sizeof(struct DirEntryStruct));
+  host_storage_write(entry, entrypos, sizeof(struct DirEntryStruct));
 }
 
 static void dir_read_entry(byte num, struct DirEntryStruct *entry)
 {
   uint32_t entrypos = HOST_STORAGESIZE-4-((num+1)*sizeof(struct DirEntryStruct));
-  host_read_data(entry, entrypos, sizeof(struct DirEntryStruct));
+  host_storage_read(entry, entrypos, sizeof(struct DirEntryStruct));
 }
 
 
@@ -140,7 +363,7 @@ static void filesys_delete(byte dirindex)
       dir_read_entry(dirindex, &entry);
       
       // move all other data up
-      host_move_data(entry.pos, entry.pos+entry.len, filespaceend-entry.len);
+      host_storage_move(entry.pos, entry.pos+entry.len, filespaceend-entry.len);
       
       // update directory entries for all files located past the deleted one
       filespaceend = 0;
@@ -159,9 +382,9 @@ static void filesys_delete(byte dirindex)
           }
       
       // move the directory entries
-      host_move_data(HOST_STORAGESIZE-4-((numentries-1)*sizeof(struct DirEntryStruct)),
-                     HOST_STORAGESIZE-4-(numentries*sizeof(struct DirEntryStruct)),
-                     (numentries-dirindex-1)*sizeof(struct DirEntryStruct));
+      host_storage_move(HOST_STORAGESIZE-4-((numentries-1)*sizeof(struct DirEntryStruct)),
+                        HOST_STORAGESIZE-4-(numentries*sizeof(struct DirEntryStruct)),
+                        (numentries-dirindex-1)*sizeof(struct DirEntryStruct));
       
       // set new number of directory entries
       dir_set_num_entries(numentries-1);
@@ -207,7 +430,7 @@ byte filesys_open_write(char nm1, char nm2)
       else
         {
           // file exists => move all other data up (i.e. delete file)
-          host_move_data(entry.pos, entry.pos+entry.len, filespaceend-entry.len);
+          host_storage_move(entry.pos, entry.pos+entry.len, filespaceend-entry.len);
           
           // update directory entries for all files located past the deleted one
           filespaceend = 0;
@@ -291,14 +514,14 @@ bool filesys_write_data(byte fid, const void *data, uint16_t len)
     {
       if( write_buffer_len + len > HOST_BUFFERSIZE || len > HOST_BUFFERSIZE/2 )
         {
-          host_write_data(write_buffer, entry->pos + entry->len, write_buffer_len);
+          host_storage_write(write_buffer, entry->pos + entry->len, write_buffer_len);
           entry->len += write_buffer_len;
           write_buffer_len = 0;
         }
       
       if( len > HOST_BUFFERSIZE/2 )
         {
-          host_write_data(data, entry->pos + entry->len, len);
+          host_storage_write(data, entry->pos + entry->len, len);
           entry->len += len;
         }
       else
@@ -313,7 +536,7 @@ bool filesys_write_data(byte fid, const void *data, uint16_t len)
 #else
   if( entry->pos + entry->len + len < dir_start )
     {
-      host_write_data(data, entry->pos + entry->len, len);
+      host_storage_write(data, entry->pos + entry->len, len);
       entry->len += len;
       return true;
     }
@@ -332,7 +555,7 @@ bool filesys_write_file(char nm1, char nm2, const void *data, uint16_t len)
   if( dirindex!=0xff && entry.len==len )
     {
       // file exists and has same length
-      host_write_data(data, entry.pos, entry.len);
+      host_storage_write(data, entry.pos, entry.len);
       res = true;
     }
   else
@@ -410,7 +633,7 @@ uint16_t filesys_read_data(byte fid, void *d, uint16_t len)
 
   if( len>0 )
     {
-      host_read_data(d, entry->pos, len);
+      host_storage_read(d, entry->pos, len);
       entry->pos += len;
       entry->len -= len;
     }
@@ -428,7 +651,7 @@ void filesys_close(byte fid)
 #if HOST_BUFFERSIZE>1
       if( write_buffer_len>0 )
         {
-          host_write_data(write_buffer, fileinfo->pos + fileinfo->len, write_buffer_len);
+          host_storage_write(write_buffer, fileinfo->pos + fileinfo->len, write_buffer_len);
           fileinfo->len += write_buffer_len;
           write_buffer_len = 0;
         }
@@ -457,6 +680,7 @@ void filesys_print_dir()
   Serial.println(F("\033[2J\033[0;0H"));
   Serial.println(F("ID Type            Name        Size"));
   Serial.println(F("-----------------------------------"));
+
   byte numEntries = dir_get_num_entries();
   struct DirEntryStruct entry;
   uint16_t totalUsed = 4+numEntries*sizeof(struct DirEntryStruct);
@@ -575,24 +799,28 @@ void filesys_manage()
 
         case 'd':
           {
+            byte i;
             Serial.println();
             Serial.print(F("\nDelete file with id: "));
-            byte i = (byte) numsys_read_word();
-            Serial.println();
-            Serial.print(F("Really delete file with id "));
-            numsys_print_byte(i);
-            Serial.print(F(" (y/n)? "));
-            while( !serial_available() );
-            if( serial_read()=='y' )
-              filesys_delete(i);
+            if( numsys_read_byte(&i) )
+              {
+                Serial.println();
+                Serial.print(F("Really delete file with id "));
+                numsys_print_byte(i);
+                Serial.print(F(" (y/n)? "));
+                while( !serial_available() );
+                if( serial_read()=='y' )
+                  filesys_delete(i);
+              }
             break;
           }
 
         case 'r':
           {
+            byte i;
             Serial.println();
             Serial.print(F("\nRead file with id: "));
-            byte i = (byte) numsys_read_word();
+            if( !numsys_read_byte(&i) ) break;
             Serial.println();
             
             struct DirEntryStruct entry;
@@ -655,12 +883,13 @@ void filesys_manage()
     }
 }
 
-
 void filesys_setup()
 {
-  // check id
+  // check file system id, must be either "AFS" (Altair File System) or "AFC"
+  // "AFC" means this is a valid file system that has already been converted 
+  // to use the host file system.
   char buf[4];
-  host_read_data(buf, HOST_STORAGESIZE-4, 4);
+  host_storage_read(buf, HOST_STORAGESIZE-4, 4);
   if( buf[1]!='A' || buf[2]!='F' || buf[3]!='S' )
     {
       buf[0] = 0;
@@ -669,7 +898,7 @@ void filesys_setup()
       buf[3] = 'S';
 
       // write id + zero directoty entries
-      host_write_data(buf, HOST_STORAGESIZE-4, 4);
+      host_storage_write(buf, HOST_STORAGESIZE-4, 4);
     }
   
   // set the current lower border of the directory
@@ -678,3 +907,6 @@ void filesys_setup()
   // zero out file_data structure
   memset(file_data, 0, MAX_OPEN_FILES*sizeof(struct DirEntryStruct));
 }
+
+
+#endif

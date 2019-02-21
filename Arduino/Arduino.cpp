@@ -204,8 +204,10 @@ int main(int argc, char **argv)
   g_argv = argv;
 
 #ifdef _WIN32
+#ifndef __MINGW32__
   // enable ANSI mode in Windows
   EnableANSI();
+#endif
 #else
   // initialize ncurses library
   initscr();

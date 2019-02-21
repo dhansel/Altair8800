@@ -42,7 +42,12 @@ byte hdsk_get_mounted_image(byte unit_num, byte platter_num) { return 0; }
 void hdsk_dir() {}
 void hdsk_set_realtime(bool b) {}
 
+#elif !defined(HOST_HAS_FILESYS)
+
+#error Hard drive emulation requires host filesystem.
+
 #else
+
 
 static byte pio_data[4];
 static byte pio_control[4];
@@ -201,7 +206,8 @@ static byte hdsk_ivbyte_B, hdsk_ivbyte_C, hdsk_ivbyte_E, hdsk_ivbyte_I;
 static word hdsk_cyl[4], hdsk_seek;
 static byte hdsk_buffer[4][256];
 static byte hdsk_mounted_image[NUM_HDSK_UNITS][4];
-static char hdsk_file_name[NUM_HDSK_UNITS][4][13];
+static HOST_FILESYS_FILE_TYPE hdsk_file[NUM_HDSK_UNITS][4];
+
 static uint32_t hdsk_current_sect_cycles;
 
 #define NUM_TRACKS           406
@@ -279,9 +285,9 @@ static const char *hdsk_cmd_str(byte cmd)
 }
 
 
-inline const char *mk_filename()
+inline HOST_FILESYS_FILE_TYPE &get_file()
 {
-  return hdsk_file_name[hdsk_unit][hdsk_head/2];
+  return hdsk_file[hdsk_unit][hdsk_head/2];
 }
 
 
@@ -372,7 +378,8 @@ void check_read_only()
   // if we can't write but we can read then the disk image is write-protected
   // otherwise there is some other serious error
   byte dummy;
-  if( host_read_file(mk_filename(), mk_offset(), 1, &dummy)>0 )
+  host_filesys_file_seek(get_file(), mk_offset());
+  if( host_filesys_file_read(get_file(), 1, &dummy)>0 )
     CSTAT |= ERR_WRITE_PROTECT;
   else
     CSTAT |= ERR_CRC_HEADER_READ;
@@ -398,7 +405,7 @@ void hdsk_timer()
                 hdsk_cyl[hdsk_unit] = hdsk_seek;
                 
                 // seek to the beginning of the new track in the file
-                host_set_file(NULL, mk_offset(), 0, 0, true);
+                host_filesys_file_seek(get_file(), mk_offset());
               }
 
 #if DEBUGLVL >= 2
@@ -406,20 +413,17 @@ void hdsk_timer()
                    hdsk_sect, hdsk_head, hdsk_cyl[hdsk_unit], hdsk_unit);
 #endif
 
-            // write two sectors at a time, keeping the file open
+            // write two sectors at a time
             uint32_t t = micros();
-            if( host_set_file(NULL, 0xffffffff, 2*NUM_BYTES_PER_SECTOR, 0, true)<2*NUM_BYTES_PER_SECTOR )
+            if( host_filesys_file_set(get_file(), 2*NUM_BYTES_PER_SECTOR, 0)<2*NUM_BYTES_PER_SECTOR )
               {
-                // error => close the file
-                host_set_file(NULL, 0xffffffff, 0, 0, false);
-
                 // could not write
                 check_read_only();
               }
             else if( hdsk_sect < NUM_SECTORS )
               {
                 // wait for the time it would take the real HDSK drive to format
-                // two sectors but subtract the time we have spent in host_set_file
+                // two sectors but subtract the time we have spent in host_filesys_file_write
                 // That way we come out approximately taking the same real time as the 
                 // original but also continue running the emulated program
                 // (i.e. flicker the lights while waiting for the FORMAT command to finish)
@@ -445,9 +449,9 @@ void hdsk_timer()
           }
         else
           {
-            // format is finished => close the file
+            // format is finished
             hdsk_seek = 405;
-            host_set_file(NULL, 0xffffffff, 0, 0, false);
+            host_filesys_file_flush(get_file());
           }
 
         break;
@@ -560,21 +564,25 @@ void hdsk_ACMD_strobe()
             hdsk_current_cmd = CMD_NONE;
             hdsk_4pio_CRDY_set(); // ready for next command
           }
-        else if( host_read_file(mk_filename(), mk_offset(), NUM_BYTES_PER_SECTOR, hdsk_buffer[hdsk_buffer_num]) < NUM_BYTES_PER_SECTOR )
+        else 
           {
-            // error while reading
-            CSTAT |= ERR_CRC_SECTOR_READ;
-            hdsk_current_cmd = CMD_NONE;
-            hdsk_4pio_CRDY_set(); // ready for next command
+            host_filesys_file_seek(get_file(), mk_offset());
+            if( host_filesys_file_read(get_file(), NUM_BYTES_PER_SECTOR, hdsk_buffer[hdsk_buffer_num]) < NUM_BYTES_PER_SECTOR )
+              {
+                // error while reading
+                CSTAT |= ERR_CRC_SECTOR_READ;
+                hdsk_current_cmd = CMD_NONE;
+                hdsk_4pio_CRDY_set(); // ready for next command
+              }
+            else if( hdsk_realtime || CRDY_INTERRUPT )
+              timer_start(TIMER_HDSK, hdsk_calc_time_to_sector(hdsk_sect));
+            else
+              {
+                hdsk_current_cmd = CMD_NONE;
+                hdsk_4pio_CRDY_set(); // ready for next command
+              }
           }
-        else if( hdsk_realtime || CRDY_INTERRUPT )
-          timer_start(TIMER_HDSK, hdsk_calc_time_to_sector(hdsk_sect));
-        else
-          {
-            hdsk_current_cmd = CMD_NONE;
-            hdsk_4pio_CRDY_set(); // ready for next command
-          }
-
+            
         break;
       }
 
@@ -593,19 +601,28 @@ void hdsk_ACMD_strobe()
             hdsk_current_cmd = CMD_NONE;
             hdsk_4pio_CRDY_set(); // ready for next command
           }
-        else if( host_write_file(mk_filename(), mk_offset(), NUM_BYTES_PER_SECTOR, hdsk_buffer[hdsk_buffer_num])<NUM_BYTES_PER_SECTOR )
+        else 
           {
-            // can't write
-            check_read_only();
-            hdsk_current_cmd = CMD_NONE;
-            hdsk_4pio_CRDY_set(); // ready for next command
-          }
-        else if( hdsk_realtime || CRDY_INTERRUPT )
-          timer_start(TIMER_HDSK, hdsk_calc_time_to_sector(hdsk_sect));
-        else
-          {
-            hdsk_current_cmd = CMD_NONE;
-            hdsk_4pio_CRDY_set(); // ready for next command
+            host_filesys_file_seek(get_file(), mk_offset());
+            if( host_filesys_file_write(get_file(), NUM_BYTES_PER_SECTOR, hdsk_buffer[hdsk_buffer_num])<NUM_BYTES_PER_SECTOR )
+              {
+                // can't write
+                check_read_only();
+                hdsk_current_cmd = CMD_NONE;
+                hdsk_4pio_CRDY_set(); // ready for next command
+              }
+            else 
+              {
+                // success
+                host_filesys_file_flush(get_file());
+                if( hdsk_realtime || CRDY_INTERRUPT )
+                  timer_start(TIMER_HDSK, hdsk_calc_time_to_sector(hdsk_sect));
+                else
+                  {
+                    hdsk_current_cmd = CMD_NONE;
+                    hdsk_4pio_CRDY_set(); // ready for next command
+                  }
+              }
           }
 
         break;
@@ -642,9 +659,6 @@ void hdsk_ACMD_strobe()
 
         if( hdsk_drive_ready(hdsk_unit, hdsk_head) )
           {
-            // open the disk image file
-            host_set_file(mk_filename(), 0, 0, 0, true);
-            
             if( hdsk_realtime || CRDY_INTERRUPT )
               {
                 // seek to track 0
@@ -657,14 +671,15 @@ void hdsk_ACMD_strobe()
                 // write sector data
                 hdsk_sect = 0;
                 for(hdsk_cyl[hdsk_unit]=0; hdsk_cyl[hdsk_unit]<NUM_TRACKS; hdsk_cyl[hdsk_unit]++)
-                  if( host_set_file(NULL, mk_offset(), NUM_BYTES_PER_SECTOR*NUM_SECTORS, 0)<NUM_BYTES_PER_SECTOR*NUM_SECTORS )
-                    {
-                      // could not write
-                      check_read_only();
-                      break;
-                    }
-                
-                host_set_file(NULL, 0xffffffff, 0, 0, false);
+                  {
+                    host_filesys_file_seek(get_file(), mk_offset());
+                    if( host_filesys_file_set(get_file(), NUM_BYTES_PER_SECTOR*NUM_SECTORS, 0)<NUM_BYTES_PER_SECTOR*NUM_SECTORS )
+                      {
+                        // could not write
+                        check_read_only();
+                        break;
+                      }
+                  }
                 
                 hdsk_current_cmd = CMD_NONE;
                 hdsk_4pio_CRDY_set(); // ready for next command
@@ -699,7 +714,7 @@ void hdsk_ACMD_strobe()
     default:
       {
 #if DEBUGLVL >= 1
-        printf("Unknoen command: %s (%02X%02X)\n", hdsk_cmd_str(hdsk_current_cmd), ACMD, ADATA);
+        printf("Unknown command: %s (%02X%02X)\n", hdsk_cmd_str(hdsk_current_cmd), ACMD, ADATA);
 #endif
         hdsk_current_cmd = CMD_NONE;
         break;
@@ -911,10 +926,7 @@ void hdsk_setup()
 
   for(i=0; i<NUM_HDSK_UNITS; i++)
     for(j=0; j<4; j++)
-      {
-        hdsk_mounted_image[i][j] = 0;
-        hdsk_file_name[i][j][0] = 0;
-      }
+      hdsk_mounted_image[i][j] = 0;
 
   hdsk_ivbyte_B = 0xff;
   hdsk_ivbyte_C = 0xff;
@@ -946,8 +958,15 @@ bool hdsk_mount(byte unit_num, byte platter_num, byte image_num)
 {
   if( unit_num < NUM_HDSK_UNITS && platter_num<4 )
     {
-      hdsk_mounted_image[unit_num][platter_num] = image_num;
-      image_get_filename(IMAGE_HDSK, image_num, hdsk_file_name[unit_num][platter_num], 13, false);
+      hdsk_unmount(unit_num, platter_num);
+      if( image_num>0 )
+        {
+          char filename[13];
+          hdsk_mounted_image[unit_num][platter_num] = image_num;
+          image_get_filename(IMAGE_HDSK, image_num, filename, 13, false);
+          hdsk_file[unit_num][platter_num] = host_filesys_file_open(filename, true);
+        }
+
       return true;
     }
   else
@@ -959,8 +978,11 @@ bool hdsk_unmount(byte unit_num, byte platter_num)
 {
   if( unit_num < NUM_HDSK_UNITS && platter_num<4 )
     {
-      hdsk_mounted_image[unit_num][platter_num] = 0;
-      hdsk_file_name[unit_num][platter_num][0] = 0;
+      if (hdsk_mounted_image[unit_num][platter_num] > 0)
+        {
+          hdsk_mounted_image[unit_num][platter_num] = 0;
+          host_filesys_file_close(hdsk_file[unit_num][platter_num]);
+        }
       return true;
     }
   else

@@ -24,6 +24,7 @@
 #include "Altair8800.h"
 #include "timer.h"
 #include "image.h"
+#include "host.h"
 
 #if NUM_DRIVES == 0
 
@@ -38,6 +39,10 @@ void drive_reset() {}
 void drive_set_realtime(bool b) {}
 byte drive_in(byte addr) { return 0; }
 void drive_out(byte addr, byte data) {}
+
+#elif !defined(HOST_HAS_FILESYS)
+
+#error Disk drive emulation requires host filesystem
 
 #else
 
@@ -54,7 +59,6 @@ void drive_out(byte addr, byte data) {}
 #define DRIVE_STATUS_REALTIME   16
 
 static byte drive_selected = 0xff;
-static char drive_file_name[NUM_DRIVES][13];
 static byte drive_mounted_disk[NUM_DRIVES];
 static byte drive_status[NUM_DRIVES];
 static byte drive_current_track[NUM_DRIVES];
@@ -63,6 +67,7 @@ static byte drive_current_byte[NUM_DRIVES];
 static byte drive_sector_buffer[NUM_DRIVES][DRIVE_SECTOR_LENGTH];
 static byte drive_num_sectors[NUM_DRIVES];
 static byte drive_num_tracks[NUM_DRIVES];
+static HOST_FILESYS_FILE_TYPE drive_file[NUM_DRIVES];
 
 #define DRIVE_SECTOR_TRUE_DELAY       5200
 #define DRIVE_SECTOR_NOT_TRUE_DELAY     30
@@ -82,9 +87,11 @@ static void drive_flush(byte drive_num)
       drive_sector_true = false;
 
       //Serial.print(F("Writing disk: ")); Serial.println(drive_get_file_pos(drive_selected));
-      host_write_file(drive_file_name[drive_num], drive_get_file_pos(drive_num), drive_current_byte[drive_num], drive_sector_buffer[drive_num]);
+      host_filesys_file_seek(drive_file[drive_num], drive_get_file_pos(drive_num));
+      host_filesys_file_write(drive_file[drive_num], drive_current_byte[drive_num], drive_sector_buffer[drive_num]);
       drive_status[drive_num] &= ~DRIVE_STATUS_WRITE;
       drive_current_byte[drive_num] = 0xff;
+      host_filesys_file_flush(drive_file[drive_num]);
     }
 }
 
@@ -156,6 +163,7 @@ bool drive_unmount(byte drive_num)
       drive_flush(drive_num);
       drive_status[drive_num] &= DRIVE_STATUS_REALTIME;
       drive_mounted_disk[drive_num] = 0;
+      host_filesys_file_close(drive_file[drive_num]);
       altair_interrupt(INT_DRIVE, false);
     }
 
@@ -188,12 +196,15 @@ bool drive_mount(byte drive_num, byte image_num)
       if( drive_status[drive_num] & DRIVE_STATUS_HAVEDISK ) drive_unmount(drive_num);
       if( image_num>0 )
         {
-          image_get_filename(IMAGE_FLOPPY, image_num, drive_file_name[drive_num], 13, false);
+          char filename[13];
+          image_get_filename(IMAGE_FLOPPY, image_num, filename, 13, false);
+          int32_t size = host_filesys_file_size(filename);
+
           drive_mounted_disk[drive_num] = image_num;
           drive_status[drive_num] |= DRIVE_STATUS_HAVEDISK;
+          drive_file[drive_num] = host_filesys_file_open(filename, true);
 
-          int32_t s = host_get_file_size(drive_file_name[drive_num]);
-          if( s>0 && s<100000 )
+          if( size>0 && size<100000 )
             {
               // minidisk
               drive_num_tracks[drive_num] = DRIVE_NUM_TRACKS_MD;
@@ -342,8 +353,8 @@ byte drive_in(byte addr)
               {
                 // read new sector from file
                 //Serial.print(F("Reading disk: ")); Serial.println(drive_get_file_pos(drive_selected));
-                byte n = host_read_file(drive_file_name[drive_selected], drive_get_file_pos(drive_selected), 
-                                        DRIVE_SECTOR_LENGTH, drive_sector_buffer[drive_selected]);
+                host_filesys_file_seek(drive_file[drive_selected], drive_get_file_pos(drive_selected));
+                byte n = host_filesys_file_read(drive_file[drive_selected], DRIVE_SECTOR_LENGTH, drive_sector_buffer[drive_selected]);
                 if( n<DRIVE_SECTOR_LENGTH ) memset(drive_sector_buffer[drive_selected]+n, 0, DRIVE_SECTOR_LENGTH-n);
                 drive_current_byte[drive_selected] = 0;
               }
@@ -483,6 +494,5 @@ void drive_out(byte addr, byte data)
       }
     }
 }
-
 
 #endif

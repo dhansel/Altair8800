@@ -140,15 +140,15 @@ void serial_replay_start(byte dev, bool example, byte filenum)
 
   switch( dev )
     {
-    case CSM_SIO:   DBG_FILEOPS(3, "replaying to 88-SIO");    break;
-    case CSM_2SIO1: DBG_FILEOPS(3, "replaying to 88-2SIO-1"); break;
-    case CSM_2SIO2: DBG_FILEOPS(3, "replaying to 88-2SIO-2"); break;
+    case CSM_SIO:   DBG_FILEOPS3(3, F("replaying file #"), filenum, F(" to 88-SIO"));    break;
+    case CSM_ACR:   DBG_FILEOPS3(3, F("replaying file #"), filenum, F(" to ACR"));       break;
+    case CSM_2SIO1: DBG_FILEOPS3(3, F("replaying file #"), filenum, F(" to 88-2SIO-1")); break;
+    case CSM_2SIO2: DBG_FILEOPS3(3, F("replaying file #"), filenum, F(" to 88-2SIO-2")); break;
 #if USE_SECOND_2SIO>0
-    case CSM_2SIO3: DBG_FILEOPS(3, "replaying to 2nd 88-2SIO-1"); break;
-    case CSM_2SIO4: DBG_FILEOPS(3, "replaying to 2nd 88-2SIO-2"); break;
+    case CSM_2SIO3: DBG_FILEOPS3(3, F("replaying file #"), filenum, F(" to 2nd 88-2SIO-1")); break;
+    case CSM_2SIO4: DBG_FILEOPS3(3, F("replaying file #"), filenum, F(" to 2nd 88-2SIO-2")); break;
 #endif
-    case CSM_ACR:   DBG_FILEOPS(3, "replaying to ACR");       break;
-    default:        DBG_FILEOPS(1, "invalid replay device");  break;
+    default:        DBG_FILEOPS(1, F("invalid replay device"));  break;
     }
   
   if( example )
@@ -157,19 +157,19 @@ void serial_replay_start(byte dev, bool example, byte filenum)
       if( prog_examples_read_start(filenum) )
         {
           serial_fid[dev] = 0xff;
-          DBG_FILEOPS2(3, "loading example ", int(filenum));
+          DBG_FILEOPS2(3, F("loading example "), int(filenum));
         }
       else
-        DBG_FILEOPS2(2, "example does not exist: ", int(filenum));
+        DBG_FILEOPS2(2, F("example does not exist: "), int(filenum));
     }
   else
     {
       // load from file
       serial_fid[dev] = filesys_open_read('D', filenum);
       if( serial_fid[dev]>0 )
-	DBG_FILEOPS2(3, "replaying data, file ", int(filenum));
+	DBG_FILEOPS2(3, F("replaying data, file "), int(filenum));
       else
-	DBG_FILEOPS2(2, "unable to replay data (file not found), file ", int(filenum));
+	DBG_FILEOPS2(2, F("unable to replay data (file not found), file "), int(filenum));
     }
 
   // either start interrupt timer or prepare first byte for replay
@@ -177,7 +177,7 @@ void serial_replay_start(byte dev, bool example, byte filenum)
     serial_timer_interrupt_check_enable(dev);
   else
     serial_replay(dev);
-
+  
   serial_update_hlda_led();
 }
 
@@ -191,19 +191,19 @@ void serial_capture_start(byte dev, byte filenum)
     {
       switch( dev )
 	{
-	case CSM_SIO:   DBG_FILEOPS(3, "capturing from 88-SIO");    break;
-	case CSM_2SIO1: DBG_FILEOPS(3, "capturing from 88-2SIO-1"); break;
-	case CSM_2SIO2: DBG_FILEOPS(3, "capturing from 88-2SIO-2"); break;
+	case CSM_SIO:   DBG_FILEOPS2(3, F("capturing from 88-SIO to file #"), filenum);    break;
+	case CSM_ACR:   DBG_FILEOPS2(3, F("capturing from ACR to file #"), filenum);       break;
+	case CSM_2SIO1: DBG_FILEOPS2(3, F("capturing from 88-2SIO-1 to file #"), filenum); break;
+	case CSM_2SIO2: DBG_FILEOPS2(3, F("capturing from 88-2SIO-2 to file #"), filenum); break;
 #if USE_SECOND_2SIO>0
-	case CSM_2SIO3: DBG_FILEOPS(3, "capturing from 2nd 88-2SIO-1"); break;
-	case CSM_2SIO4: DBG_FILEOPS(3, "capturing from 2nd 88-2SIO-2"); break;
+	case CSM_2SIO3: DBG_FILEOPS2(3, F("capturing from 2nd 88-2SIO-1 to file #"), filenum); break;
+	case CSM_2SIO4: DBG_FILEOPS2(3, F("capturing from 2nd 88-2SIO-2 to file #"), filenum); break;
 #endif
-	case CSM_ACR:   DBG_FILEOPS(3, "capturing from ACR");       break;
-	default:        DBG_FILEOPS(1, "invalid capture device");  break;
+	default:        DBG_FILEOPS(1, F("invalid capture device"));  break;
 	}
     }
   else
-    DBG_FILEOPS(1, "unable to start capturing (storage full?)");
+    DBG_FILEOPS(1, F("unable to start capturing (storage full?)"));
   
   serial_update_hlda_led();
 }
@@ -225,20 +225,20 @@ void serial_stop(byte dev)
 {
   if( serial_fid[dev]==0xfe )
     {
-      DBG_FILEOPS(3, "ejecting PS2 tape");
+      DBG_FILEOPS(3, F("ejecting PS2 tape"));
       serial_fid[dev] = 0;
     }
   else if( serial_fid[dev]==0xff )
     {
-      DBG_FILEOPS(3, "stopping example load");
+      DBG_FILEOPS(3, F("stopping example load"));
       serial_fid[dev] = 0;
    }
   else if( serial_fid[dev]>0 )
     {
       if( filesys_is_read(serial_fid[dev]) )
-	DBG_FILEOPS(3, "stopping data replay");
+	DBG_FILEOPS(3, F("stopping data replay"));
       else if( filesys_is_write(serial_fid[dev]) )
-	DBG_FILEOPS(3, "ending capture");
+	DBG_FILEOPS(3, F("ending capture"));
 
       filesys_close(serial_fid[dev]);
       serial_fid[dev] = 0;
@@ -272,7 +272,10 @@ void serial_set_config(byte dev)
     }
   else
     {
-      serial_ctrl[dev] = config_serial_realtime(dev) ? SSC_REALTIME : 0;
+      if( config_serial_realtime(dev) )
+        serial_ctrl[dev] |= SSC_REALTIME;
+      else
+        serial_ctrl[dev] &= ~SSC_REALTIME;
       if( dev==CSM_SIO ) serial_ctrl[dev] |= config_serial_siorev() & 3;
     }
 }
@@ -286,6 +289,7 @@ void serial_reset(byte dev)
     }
   else
     {
+      serial_ctrl[dev] = 0;
       serial_set_config(dev);
       set_serial_status(dev, SST_TDRE);
     }
@@ -363,7 +367,7 @@ static void serial_replay(byte dev)
             serial_receive_data(dev, data);
           else
             {
-              DBG_FILEOPS(4, "done loading");
+              DBG_FILEOPS(4, F("done loading"));
               serial_fid[dev] = 0;
               serial_update_hlda_led();
             }
@@ -373,12 +377,12 @@ static void serial_replay(byte dev)
           // play back captured data
           if( filesys_read_char(fid, &data) )
             {
-              DBG_FILEOPS2(5, "replay data: ", int(data));
+              DBG_FILEOPS2(5, F("replay data: "), int(data));
               serial_receive_data(dev, data);
             }
           else
             {
-              DBG_FILEOPS(4, "no more data for replay");
+              DBG_FILEOPS(4, F("no more data for replay"));
               filesys_close(fid);
               serial_fid[dev] = 0;
               serial_update_hlda_led();
@@ -448,7 +452,7 @@ static byte serial_read(byte dev)
       // has just been read => signal OVRN now
       status |= SST_OVRN;
       status &= ~SST_OVRN2;
-      //DBG_FILEOPS(1, "OVRN");
+      //DBG_FILEOPS(1, F("OVRN"));
     }
 
   set_serial_status(dev, status);
@@ -480,13 +484,13 @@ void serial_write(byte dev, byte data)
     {
       if( !filesys_write_char(serial_fid[dev], data) )
         {
-          DBG_FILEOPS(1, "capture storage exhausted");
+          DBG_FILEOPS(1, F("capture storage exhausted"));
           //filesys_close(capture_fid);
           //capture_fid  = 0;
           //serial_update_hlda_led();
         }
       else
-        DBG_FILEOPS2(5, "writing captured data: ", int(data));
+        DBG_FILEOPS2(5, F("writing captured data: "), int(data));
     }
 }
 
@@ -668,23 +672,23 @@ void serial_2sio_out_ctrl(byte dev, byte data)
   // write to control register of 88-2SIO1 device
   if( !(serial_ctrl[dev] & SSC_INTRX) && (data & 0x80) )
     {
-      DBG_FILEOPS2(4, "ENABLING receive interrupts on 2SIO-", dev==CSM_2SIO1 ? '1' : '2');
+      DBG_FILEOPS2(4, F("ENABLING receive interrupts on 2SIO-"), dev==CSM_2SIO1 ? '1' : '2');
       serial_ctrl[dev] |= SSC_INTRX;
     }
   else if( (serial_ctrl[dev] & SSC_INTRX) && !(data & 0x80) )
     {
-      DBG_FILEOPS2(4, "disabling receive interrupts on 2SIO-", dev==CSM_2SIO1 ? '1' : '2');
+      DBG_FILEOPS2(4, F("disabling receive interrupts on 2SIO-"), dev==CSM_2SIO1 ? '1' : '2');
       serial_ctrl[dev] &= ~SSC_INTRX;
     }
 
   if( !(serial_ctrl[dev] & SSC_INTTX) && (data & 0x60)==0x20 )
     {
-      DBG_FILEOPS2(4, "ENABLING transmit interrupts on 2SIO-", dev==CSM_2SIO1 ? '1' : '2');
+      DBG_FILEOPS2(4, F("ENABLING transmit interrupts on 2SIO-"), dev==CSM_2SIO1 ? '1' : '2');
       serial_ctrl[dev] |= SSC_INTTX;
     }
   else if( (serial_ctrl[dev] & SSC_INTTX) && (data & 0x60)!=0x20 )
     {
-      DBG_FILEOPS2(4, "disabling transmit interrupts on 2SIO-", dev==CSM_2SIO1 ? '1' : '2');
+      DBG_FILEOPS2(4, F("disabling transmit interrupts on 2SIO-"), dev==CSM_2SIO1 ? '1' : '2');
       serial_ctrl[dev] &= ~SSC_INTTX;
     }
 
@@ -806,23 +810,23 @@ void serial_sio_out_ctrl(byte data)
 
   if( !(serial_ctrl[CSM_SIO] & SSC_INTRX) && (data & 0x01) )
     {
-      DBG_FILEOPS(4, "ENABLING receive interrupts on SIO");
+      DBG_FILEOPS(4, F("ENABLING receive interrupts on SIO"));
       serial_ctrl[CSM_SIO] |= SSC_INTRX;
     }
   else if( (serial_ctrl[CSM_SIO] & SSC_INTRX) && !(data & 0x01) )
     {
-      DBG_FILEOPS(4, "disabling receive interrupts on SIO");
+      DBG_FILEOPS(4, F("disabling receive interrupts on SIO"));
       serial_ctrl[CSM_SIO] &= ~SSC_INTRX;
     }
 
   if( !(serial_ctrl[CSM_SIO] & SSC_INTTX) && (data & 0x02) )
     {
-      DBG_FILEOPS(4, "ENABLING transmit interrupts on SIO");
+      DBG_FILEOPS(4, F("ENABLING transmit interrupts on SIO"));
       serial_ctrl[CSM_SIO] |= SSC_INTTX;
     }
   else if( (serial_ctrl[CSM_SIO] & SSC_INTTX) && !(data & 0x02) )
     {
-      DBG_FILEOPS(4, "disabling transmit interrupts on SIO");
+      DBG_FILEOPS(4, F("disabling transmit interrupts on SIO"));
       serial_ctrl[CSM_SIO] &= ~SSC_INTTX;
     }
 
@@ -859,14 +863,14 @@ bool serial_acr_mount_ps2()
 {
   if( serial_fid[CSM_ACR] && serial_fid[CSM_ACR]!=0xfe )
     {
-      DBG_FILEOPS(2, "cannot mount PS2 tape (other operation in progress)");
+      DBG_FILEOPS(2, F("cannot mount PS2 tape (other operation in progress)"));
       return false;
     }
   else 
     {
       // (re-) mount the PS2 tape
       prog_ps2_read_start();
-      DBG_FILEOPS(3, "mounting PS2 tape");
+      DBG_FILEOPS(3, F("mounting PS2 tape"));
       serial_fid[CSM_ACR] = 0xfe;
       acr_read_next_byte();
       serial_update_hlda_led();
@@ -886,7 +890,7 @@ bool serial_acr_check_cload_timeout()
         {
           filesys_close(acr_cload_fid);
           acr_cload_fid = 0;
-          DBG_FILEOPS(4, "closing tape file due to timeout");
+          DBG_FILEOPS(4, F("closing tape file due to timeout"));
         }
 
       set_serial_status(CSM_ACR, 0);
@@ -942,7 +946,7 @@ static void acr_read_next_cload_byte()
           while( acr_cload_fid==0 && tape_fname<96 )
             {
               acr_cload_fid = filesys_open_read('B', 32+tape_fname);
-              if( acr_cload_fid ) DBG_FILEOPS2(4, "reading BASIC CSAVE file: ", char(32+tape_fname));
+              if( acr_cload_fid ) DBG_FILEOPS2(4, F("reading BASIC CSAVE file: "), char(32+tape_fname));
               tape_fname++;
             }
               
@@ -981,7 +985,7 @@ static void acr_write_next_csave_byte(byte data)
           if( leadcount>3 )
             {
               acr_cload_fid = filesys_open_write('B', data);
-              if( acr_cload_fid ) DBG_FILEOPS2(4, "writing BASIC CSAVE file: ", char(data));
+              if( acr_cload_fid ) DBG_FILEOPS2(4, F("writing BASIC CSAVE file: "), char(data));
               for(byte i=0; i<leadcount; i++) filesys_write_char(acr_cload_fid, 0xd3);
               filesys_write_char(acr_cload_fid, data);
             }
@@ -1047,7 +1051,7 @@ byte serial_acr_in_ctrl()
         { if( !host_serial_available_for_write(config_serial_map_sim_to_host(CSM_ACR)) ) data |= 0x80; }
     }
 
-  // do the following only if no regular file is currently open on fht ACR
+  // do the following only if no regular file is currently open on the ACR
   // that way we can override the automated mechanism with manual control
   if( serial_fid[CSM_ACR]==0 && (regPC==0xE299 || regPC==0xE2A7) && config_serial_trap_CLOAD() )
     {
@@ -1091,7 +1095,7 @@ byte serial_acr_in_data()
   if( !(serial_ctrl[CSM_ACR] & (SSC_INTRX|SSC_REALTIME)) )
     acr_read_next_byte();
 
-  DBG_FILEOPS2(5, "ACR reading data: ", int(data));
+  DBG_FILEOPS2(5, F("ACR reading data: "), int(data));
 
   return data;
 }
@@ -1102,23 +1106,23 @@ void serial_acr_out_ctrl(byte data)
   // write to control register of acr interface
   if( !(serial_ctrl[CSM_ACR] & SSC_INTRX) && (data & 0x01) )
     {
-      DBG_FILEOPS(4, "ENABLING interrupts on ACR");
+      DBG_FILEOPS(4, F("ENABLING interrupts on ACR"));
       serial_ctrl[CSM_ACR] |= SSC_INTRX;
     }
   else if( (serial_ctrl[CSM_ACR] & SSC_INTRX) && !(data & 0x01) )
     {
-      DBG_FILEOPS(4, "disabling interrupts on ACR");
+      DBG_FILEOPS(4, F("disabling interrupts on ACR"));
       serial_ctrl[CSM_ACR] &= ~SSC_INTRX;
     }
 
   if( !(serial_ctrl[CSM_ACR] & SSC_INTTX) && (data & 0x02) )
     {
-      DBG_FILEOPS(4, "ENABLING transmit interrupts on ACR");
+      DBG_FILEOPS(4, F("ENABLING transmit interrupts on ACR"));
       serial_ctrl[CSM_ACR] |= SSC_INTTX;
     }
   else if( (serial_ctrl[CSM_ACR] & SSC_INTTX) && !(data & 0x02) )
     {
-      DBG_FILEOPS(4, "disabling transmit interrupts on ACR");
+      DBG_FILEOPS(4, F("disabling transmit interrupts on ACR"));
       serial_ctrl[CSM_ACR] &= ~SSC_INTTX;
     }
 
@@ -1143,7 +1147,7 @@ void serial_acr_out_data(byte data)
   else
     serial_write(CSM_ACR, data);
 
-  DBG_FILEOPS2(5, "ACR writing captured data: ", int(data));
+  DBG_FILEOPS2(5, F("ACR writing captured data: "), int(data));
 
   if( serial_ctrl[CSM_ACR] & SSC_INTTX )
     {

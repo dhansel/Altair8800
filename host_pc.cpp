@@ -64,7 +64,6 @@ byte data_leds;
 uint16_t status_leds;
 uint16_t addr_leds;
 byte stop_request;
-static FILE *storagefile = NULL;
 
 //#define DEBUG
 
@@ -100,7 +99,46 @@ void host_reset_function_switch_state()
 // ----------------------------------------------------------------------------------
 
 
-void host_write_data(const void *data, uint32_t addr, uint32_t len)
+static FILE *storagefile = NULL;
+
+
+bool host_storage_init(bool write)
+{
+  host_storage_close();
+
+  if( write )
+    {
+      storagefile = fopen("AltairStorage.dat", "r+b");
+      if( storagefile==NULL ) 
+        {
+          void *chunk = calloc(1024, 1);
+          storagefile = fopen("AltairStorage.dat", "wb");
+          if( storagefile!=NULL )
+            {
+              uint32_t size;
+              for( size = 0; (size+1024) < HOST_STORAGESIZE; size+=1024 )
+                fwrite(chunk, 1024, 1, storagefile);
+              fwrite(chunk, HOST_STORAGESIZE-size, 1, storagefile);
+              fclose(storagefile);
+            }
+      
+          storagefile = fopen("AltairStorage.dat", "r+b");
+        }
+    }
+  else
+    storagefile = fopen("AltairStorage.dat", "rb");
+
+  return storagefile!=NULL;
+}
+
+
+void host_storage_close()
+{
+  if( storagefile ) fclose(storagefile);
+}
+
+
+void host_storage_write(const void *data, uint32_t addr, uint32_t len)
 {
 #ifdef DEBUG
   printf("Writing %i bytes to   0x%04x: ", len, addr);
@@ -117,7 +155,7 @@ void host_write_data(const void *data, uint32_t addr, uint32_t len)
 }
 
 
-void host_read_data(void *data, uint32_t addr, uint32_t len)
+void host_storage_read(void *data, uint32_t addr, uint32_t len)
 {
   if( storagefile )
     {
@@ -134,13 +172,21 @@ void host_read_data(void *data, uint32_t addr, uint32_t len)
 }
 
 
-void host_move_data(uint32_t to, uint32_t from, uint32_t len)
+void host_storage_move(uint32_t to, uint32_t from, uint32_t len)
 {
   void *buf = malloc(len);
-  host_read_data(buf, from, len);
-  host_write_data(buf, to, len);
+  host_storage_read(buf, from, len);
+  host_storage_write(buf, to, len);
   free(buf);
 }
+
+
+void host_storage_invalidate()
+{
+  if( storagefile ) { fclose(storagefile); storagefile = NULL; }
+  rename("AltairStorage.dat", "AltairStorage.bak");
+}
+
 
 
 void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
@@ -151,128 +197,182 @@ void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
 
 // ----------------------------------------------------------------------------------
 
+#ifdef _WIN32
+#define DIRSEP "\\"
+#include <dirent_win.h>
+#else
+#define DIRSEP "/"
+#include <dirent.h>
+#include <sys/stat.h>
+#endif
 
-static const char *get_full_path(char *fnamebuf, int fnamebuf_size, const char *filename)
+
+static bool isDir(const char *path)
 {
-  snprintf(fnamebuf, 30, "disks/%s", filename);
+  struct stat st;
+  stat(path, &st);
+  return S_ISDIR(st.st_mode);
+}
+
+
+static const char *get_full_path(const char *filename)
+{
+  static char fnamebuf[30];
+  snprintf(fnamebuf, 30, "disks" DIRSEP "%s", filename);
   return fnamebuf;
 }
 
 
-bool host_file_exists(const char *filename)
+FILE *host_filesys_file_open(const char *filename, bool write)
 {
-  char fnamebuf[30];
-  FILE *f = fopen(get_full_path(fnamebuf, 30, filename), "rb");
-  if( f )
+  FILE *f = NULL;
+  const char *fullname = get_full_path(filename);
+
+  if( write )
     {
-      fclose(f);
-      return true;
+      f = fopen(fullname, "r+b");
+      if( !f ) f = fopen(fullname, "w+b");
+      if( !f ) f = fopen(fullname, "rb");
     }
-
-  return false;
-}
-
-
-int32_t host_get_file_size(const char *filename)
-{
-  int32_t res = -1;
-
-  char fnamebuf[30];
-  FILE *f = fopen(get_full_path(fnamebuf, 30, filename), "rb");
-  if( f )
-    {
-      if( fseek(f, 0, SEEK_END)==0 )
-        res = ftell(f);
-      fclose(f);
-    }
-  
-  return res;
-}
-
-
-FILE *open_file(const char *filename)
-{
-  static char fnamebuf[30];
-  static FILE *f = NULL;
-  if( f==NULL || strcmp(filename, fnamebuf+6)!=0 )
-    {
-      if( f!=NULL ) fclose(f);
-      f = fopen(get_full_path(fnamebuf, 30, filename), "r+b");
-      if( !f ) f = fopen(fnamebuf, "w+b");
-      if( !f ) f = fopen(fnamebuf, "rb");
-    }
+  else
+    f = fopen(fullname, "rb");
 
   return f;
 }
 
 
-uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, void *buffer)
+uint32_t host_filesys_file_read(FILE *&f, uint32_t len, void *buffer)
+{
+  return fread(buffer, 1, len, f);
+}
+
+
+uint32_t host_filesys_file_write(FILE *&f, uint32_t len, const void *buffer)
+{
+  return fwrite(buffer, 1, len, f);
+}
+
+
+uint32_t host_filesys_file_set(FILE *&f, uint32_t len, byte b)
 {
   uint32_t res = 0;
-  FILE *f = open_file(filename);
-  if( f )
-    {
-      if( fseek(f, offset, SEEK_SET)==0 )
-        res = fread(buffer, 1, len, f);
-    }
 
-  //printf("host_read_file('%s', %04x, %04x, %p)=%04x\n", filename, offset, len, buffer, res);
+  // write data in 256-byte chunks
+  byte buf[256];
+  memset(buf, b, 256);
+  for(uint32_t i=0; i<len; i+=256) 
+    res += fwrite(buf, 1, i+256<len ? 256 : len-i, f);
+  
   return res;
 }
 
 
-uint32_t host_write_file(const char *filename, uint32_t offset, uint32_t len, void *buffer)
+void host_filesys_file_flush(FILE *&f)
 {
-  uint32_t res = 0;
-  FILE *f = open_file(filename);
-  if( f )
+  fflush(f);
+}
+
+
+bool host_filesys_file_seek(FILE *&f, uint32_t pos)
+{
+  return fseek(f, pos, SEEK_SET)==0;
+}
+
+
+uint32_t host_filesys_file_pos(FILE *&f)
+{
+  return ftell(f);
+}
+
+
+bool host_filesys_file_eof(FILE *&f)
+{
+  return feof(f)!=0;
+}
+
+
+void host_filesys_file_close(FILE *&f)
+{
+  fclose(f);
+}
+
+
+bool host_filesys_file_exists(const char *filename)
+{
+  struct stat st;   
+  return stat(get_full_path(filename), &st) == 0;
+}
+
+
+bool host_filesys_file_remove(const char *filename)
+{
+  return remove(get_full_path(filename))==0;
+}
+
+
+uint32_t host_filesys_file_size(const char *filename)
+{
+  struct stat st;
+  stat(get_full_path(filename), &st);
+  return st.st_size;
+}
+
+
+bool host_filesys_file_rename(const char *from, const char *to)
+{
+  char *fromfullname = strdup(get_full_path(from));
+  bool res = rename(fromfullname, get_full_path(to))==0;
+  free(fromfullname);
+  return res;
+}
+
+
+DIR *host_filesys_dir_open()
+{
+  return opendir("disks");  
+}
+
+
+void host_filesys_dir_close(DIR *&dir)
+{
+  if( dir ) closedir(dir);
+}
+
+
+void host_filesys_dir_rewind(DIR *&dir)
+{
+  if( dir!=NULL ) rewinddir(dir);
+}
+
+
+const char *host_filesys_dir_nextfile(DIR *&dir)
+{
+  while( true )
     {
-      if( fseek(f, offset, SEEK_SET)==0 )
+      struct dirent *dirent = (dir==NULL) ? NULL : readdir(dir);
+      if( dirent )
         {
-          res = fwrite(buffer, 1, len, f);
-          fflush(f);
+	  const char *fullname = get_full_path(dirent->d_name);
+          if( !isDir(fullname) )
+            {
+#ifdef _WIN32
+              static char buf[50];
+              ::GetShortPathNameA(fullname, buf, 50);
+              return strrchr(buf, DIRSEP[0])+1;
+#else
+              return dirent->d_name;
+#endif
+            }
         }
+      else
+        return NULL;
     }
-
-  //printf("host_write_file('%s', %04x, %04x, %p)=%04x\n", filename, offset, len, buffer, res);
-  return res;
 }
 
 
-uint32_t host_set_file(const char *filename, uint32_t offset, uint32_t len, byte b, bool keep_open)
+bool host_filesys_ok()
 {
-  uint32_t res = 0;
-  static FILE *f = NULL;
-
-  // if a filename is given then (re-)open the file
-  if( filename!=NULL )
-    {
-      char fnamebuf[30];
-      if( f!=NULL ) fclose(f);
-      f = fopen(get_full_path(fnamebuf, 30, filename), "r+b");
-      if( !f ) f = fopen(fnamebuf, "w+b");
-    }
-
-  // if a position is given then seek to that position
-  if( f && offset < 0xffffffff )
-    if( fseek(f, offset, SEEK_SET)!=0 )
-      { fclose(f); f = NULL; }
-
-  // if the file is open and length is >0 then write to the file
-  if( f && len>0 )
-    {
-      // write data in 256-byte chunks
-      byte buf[256];
-      memset(buf, b, 256);
-      for(uint32_t i=0; i<len; i+=256) 
-        res += fwrite(buf, i+256<len ? 256 : len-i, 1, f);
-    }
-
-  // if we're not supposed to keep the file open then close it
-  if( !keep_open )
-    { fclose(f); f=NULL; }
-
-  return res;
+  return true;
 }
 
 
@@ -601,6 +701,7 @@ void *host_input_thread(void *data)
 
 #endif
 
+bool serial_interrupts_paused = false;
 
 static void host_check_ctrlc(char c)
 {
@@ -670,6 +771,18 @@ void host_check_interrupts()
 }
 
 
+void host_serial_interrupts_pause()
+{
+  serial_interrupts_paused = true;
+}
+
+
+void host_serial_interrupts_resume()
+{
+  serial_interrupts_paused = false;
+}
+
+
 // ----------------------------------------------------------------------------------------------------
 
 
@@ -725,6 +838,7 @@ int host_serial_read(byte i)
     {
       int res = inp_serial[i];
       inp_serial[i] = -1;
+      if( res>=0 && serial_interrupts_paused ) SignalEvent(signalEvent);
       return res;
     }
   else
@@ -806,12 +920,6 @@ bool host_serial_port_has_configs(byte i)
 
 // ----------------------------------------------------------------------------------------------------
 
-bool host_have_sd_card()
-{
-  return false;
-}
-
-
 void host_system_info()
 {
 #if defined(_WIN32)
@@ -845,22 +953,7 @@ void host_setup()
   stop_request = 0;
   
   // open storage data file for mini file system
-  storagefile = fopen("AltairStorage.dat", "r+b");
-  if( storagefile==NULL ) 
-    {
-      void *chunk = calloc(1024, 1);
-      storagefile = fopen("AltairStorage.dat", "wb");
-      if( storagefile!=NULL )
-        {
-          uint32_t size;
-          for( size = 0; (size+1024) < HOST_STORAGESIZE; size+=1024 )
-            fwrite(chunk, 1024, 1, storagefile);
-          fwrite(chunk, HOST_STORAGESIZE-size, 1, storagefile);
-          fclose(storagefile);
-        }
-      
-      storagefile = fopen("AltairStorage.dat", "r+b");
-    }
+  host_storage_init(true);
 
   inp_serial[0] = -1;
   for(int i=0; i<HOSTPC_NUM_SOCKET_CONN; i++)

@@ -14,6 +14,12 @@
 #define USE_Z80 0
 
 
+// If this is set to 1 and the host provides a file system (e.g. SD card connected to the Due)
+// then store configurations and other data directly on the hosts' file system,
+// Otherwise those items are stored in a persistent memory block using our own mini-filesystem
+#define USE_HOST_FILESYS 0
+
+
 // Allowing breakpoints significantly reduces performance but is helpful
 // for debugging.  Also uses 2*MAX_BREAKPOINTS+1 bytes of RAM
 #define MAX_BREAKPOINTS 0
@@ -152,7 +158,7 @@ extern uint32_t config_serial_settings;
 extern uint32_t config_interrupt_mask;
 extern uint32_t config_interrupt_vi_mask[8];
 
-void config_setup(byte n = 0);
+void config_setup(int n = 0);
 void config_edit();
 void config_defaults(bool apply);
 

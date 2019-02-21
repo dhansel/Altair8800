@@ -165,11 +165,34 @@ uint16_t numsys_read_hex_word()
   return w;
 }
 
-
-uint16_t numsys_read_word(bool *ESC)
+bool numsys_read_byte(byte *b)
 {
-  byte b;
-  uint16_t w = 0;
+  bool ESC = false;
+  uint32_t w = numsys_read_dword(&ESC);
+  if( b!=NULL && !ESC ) *b = (byte) w;
+  return !ESC;
+}
+
+bool numsys_read_word(uint16_t *w)
+{
+  bool ESC = false;
+  uint32_t w2 = numsys_read_dword(&ESC);
+  if( w!=NULL && !ESC ) *w = (uint16_t) w2;
+  return !ESC;
+}
+
+bool numsys_read_dword(uint32_t *w)
+{
+  bool ESC = false;
+  uint32_t w2 = numsys_read_dword(&ESC);
+  if( w!=NULL && !ESC ) *w = w2;
+  return !ESC;
+}
+
+uint32_t numsys_read_dword(bool *ESC)
+{
+  byte b, d = 0;
+  uint32_t w = 0;
   int c = -1;
 
   if( ESC!=NULL ) *ESC = false;
@@ -178,20 +201,38 @@ uint16_t numsys_read_word(bool *ESC)
       c=-1;
       while(c<0) c = serial_read();
 
-      if( numsys==NUMSYS_HEX && (b=hexToDec(c))!=255 )
+      if( c==127 || c==8 )
+        {
+          if( d>0 )
+            {
+              if( numsys==NUMSYS_HEX )
+                w = w >> 4;
+              else if( numsys==NUMSYS_OCT )
+                w = w >> 3;
+              else
+                w = w / 10;
+
+              Serial.print(F("\010 \010"));
+              d--;
+            }
+        }
+      else if( numsys==NUMSYS_HEX && (b=hexToDec(c))!=255 )
         {
           Serial.write(c);
           w = w << 4 | b;
+          d++;
         }
       else if( numsys==NUMSYS_OCT && c>=48 && c<=55 )
         {
           Serial.write(c);
           w = w << 3 | (c-48);
+          d++;
         }
       else if( c>=48 && c<=57 )
         {
           Serial.write(c);
           w = w * 10 + (c-48);
+          d++;
         }
       else if( c==27 && ESC!=NULL )
         {

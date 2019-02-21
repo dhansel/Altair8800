@@ -17,6 +17,7 @@
 // Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 // -----------------------------------------------------------------------------
 
+
 #include "Altair8800.h"
 #include "config.h"
 #include "cpucore.h"
@@ -99,6 +100,8 @@ void altair_set_outputs(uint16_t a, byte v)
 
 void altair_wait_reset()
 {
+  // prevent printing processor status now (will print after reset)
+  p_regPC = regPC;
   // set bus/data LEDs on, status LEDs off
   altair_set_outputs(0xffff, 0xff);
   host_clr_status_led_INT();
@@ -184,22 +187,22 @@ void process_inputs()
             {
               // SW6 is up => save memory page
               if( filesys_write_file('M', filenum, Mem+page, 256) )
-                DBG_FILEOPS4(3, "saved memory page ", int(page>>8), F(" to file #"), int(filenum));
+                DBG_FILEOPS4(3, F("saved memory page "), int(page>>8), F(" to file #"), int(filenum));
               else
-                DBG_FILEOPS4(2, "unable to save memory page ", int(page>>8), F(" to file #"), int(filenum));
+                DBG_FILEOPS4(2, F("unable to save memory page "), int(page>>8), F(" to file #"), int(filenum));
             }
           else
             {
               // SW6 is down => load memory page
               if( !MEM_IS_WRITABLE(page) )
-                DBG_FILEOPS3(2, "memory page ", int(page>>8), F(" is not writable"));
+                DBG_FILEOPS3(2, F("memory page "), int(page>>8), F(" is not writable"));
               else if( filesys_read_file('M', filenum, Mem+page, 256)==256 )
                 {
-                  DBG_FILEOPS4(3, "loaded memory page ", int(page>>8), F(" from file #"), int(filenum));
+                  DBG_FILEOPS4(3, F("loaded memory page "), int(page>>8), F(" from file #"), int(filenum));
                   regPC = page;
                 }
               else
-                DBG_FILEOPS4(2, "file not found for memory page ", int(page>>8), F(" from file #"), int(filenum));
+                DBG_FILEOPS4(2, F("file not found for memory page "), int(page>>8), F(" from file #"), int(filenum));
                 
               altair_set_outputs(regPC, MREAD(regPC));
             }
@@ -301,12 +304,12 @@ void process_inputs()
 	    {
 	      const char *desc = drive_get_image_description(dswitch&0xff);
 	      if( desc==NULL )
-                DBG_FILEOPS4(2, "mounted new disk image ", drive_get_image_filename(dswitch&0xff, false), F(" in drive "), (dswitch>>8) & 0x0f);
+                DBG_FILEOPS4(2, F("mounted new disk image "), drive_get_image_filename(dswitch&0xff, false), F(" in drive "), (dswitch>>8) & 0x0f);
 	      else
-		DBG_FILEOPS4(2, "mounted disk image '", desc, F("' in drive "), (dswitch>>8) & 0x0f);
+		DBG_FILEOPS4(2, F("mounted disk image '"), desc, F("' in drive "), (dswitch>>8) & 0x0f);
 	    }
 	  else
-	    DBG_FILEOPS4(1, "error mounting disk image ", drive_get_image_filename(dswitch&0xff, false), F(" in drive "), (dswitch>>8) & 0x0f);
+	    DBG_FILEOPS4(1, F("error mounting disk image "), drive_get_image_filename(dswitch&0xff, false), F(" in drive "), (dswitch>>8) & 0x0f);
 	}
 #endif
 #if NUM_HDSK_UNITS>0
@@ -326,12 +329,12 @@ void process_inputs()
                   const char *desc = hdsk_get_image_description(dswitch&0xff);
 
                   if( desc==NULL )
-                    DBG_FILEOPS3(2, "mounted new hard disk image '", hdsk_get_image_filename(dswitch&0xff, false), buf);
+                    DBG_FILEOPS3(2, F("mounted new hard disk image '"), hdsk_get_image_filename(dswitch&0xff, false), buf);
                   else
-                    DBG_FILEOPS3(2, "mounted hard disk image '", desc, buf);
+                    DBG_FILEOPS3(2, F("mounted hard disk image '"), desc, buf);
                 }
               else
-                DBG_FILEOPS3(1, "error mounting hard disk image '", hdsk_get_image_filename(dswitch&0xff, false), buf);
+                DBG_FILEOPS3(1, F("error mounting hard disk image '"), hdsk_get_image_filename(dswitch&0xff, false), buf);
             }
 	}
 #endif
@@ -340,7 +343,7 @@ void process_inputs()
 	  print_panel_serial();
 	  byte dev = get_device(dswitch >> 8);
 	  if( serial_capture_running(dev) )
-	    DBG_FILEOPS(1, "unable to replay data (capture operation in progress)");
+	    DBG_FILEOPS(1, F("unable to replay data (capture operation in progress)"));
 	  else if( serial_replay_running(dev) )
 	    serial_stop(dev);
 	  else
@@ -355,9 +358,9 @@ void process_inputs()
       else if( (dswitch&0xF000)==0x1000 )
 	{
 	  if( drive_unmount((dswitch >> 8) & 0x0f) )
-	    DBG_FILEOPS2(2, "unmounted drive ", (dswitch>>8) & 0x0f);
+	    DBG_FILEOPS2(2, F("unmounted drive "), (dswitch>>8) & 0x0f);
 	  else
-	    DBG_FILEOPS2(1, "error unmounting drive ", (dswitch>>8) & 0x0f);
+	    DBG_FILEOPS2(1, F("error unmounting drive "), (dswitch>>8) & 0x0f);
 	}
 #endif
 #if NUM_HDSK_UNITS>0
@@ -369,9 +372,9 @@ void process_inputs()
           sprintf(buf, "platter %i of unit %i", platter, unit+1);
 
 	  if( hdsk_unmount(unit, platter) )
-	    DBG_FILEOPS2(1, "unmounted ", buf);
+	    DBG_FILEOPS2(1, F("unmounted "), buf);
 	  else
-	    DBG_FILEOPS2(1, "error unmounting ", buf);
+	    DBG_FILEOPS2(1, F("error unmounting "), buf);
         }
 #endif
       else
@@ -379,7 +382,7 @@ void process_inputs()
 	  print_panel_serial();
           byte dev = get_device(dswitch >> 8);
 	  if( serial_replay_running(dev) )
-	    DBG_FILEOPS(1, "cannot start capture (replay operation in progress)");
+	    DBG_FILEOPS(1, F("cannot start capture (replay operation in progress)"));
           else if( serial_capture_running(dev) )
             serial_stop(dev);
           else
@@ -595,18 +598,26 @@ bool altair_read_intel_hex(uint16_t *start, uint16_t *end)
 
 void read_data()
 {
+  uint16_t addr, len;
+  byte b;
   Serial.print(F("\r\n\nStart address: "));
-  uint16_t addr = numsys_read_word();
-  Serial.print(F("\r\nNumber of bytes: "));
-  uint16_t len  = numsys_read_word();
-  Serial.print(F("\r\nData: "));
-  while( len>0 )
+  if( numsys_read_word(&addr) )
     {
-      Serial.write(' ');
-      MWRITE(addr, (byte) numsys_read_word());
-      ++addr;
-      --len;
+      Serial.print(F("\r\nNumber of bytes: "));
+      if( numsys_read_word(&len) )
+        {
+          Serial.print(F("\r\nData: "));
+          while( len>0 )
+            {
+              Serial.write(' ');
+              if( !numsys_read_byte(&b) ) return;
+              MWRITE(addr, (byte) b);
+              ++addr;
+              --len;
+            }
+        }
     }
+
   Serial.println();
 }
 
@@ -633,7 +644,7 @@ void read_inputs_serial()
   else if( data == '/' )
     {
       Serial.print(F("\r\nSet Addr switches to: "));
-      dswitch = numsys_read_word();
+      numsys_read_word(&dswitch);
       Serial.println('\n');
     }
 #endif
@@ -662,13 +673,18 @@ void read_inputs_serial()
   else if( data == '>' )
     {
       Serial.print(F("\r\nRun from address: "));
-      regPC = numsys_read_word()-1;
-      p_regPC = ~regPC;
-      if( config_serial_debug_enabled() )
-        Serial.print(F("\r\n\n--- RUNNING (press ESC twice to stop) ---\r\n\n"));
-      Serial.println();
-      host_clr_status_led_WAIT();
-      host_clr_status_led_PROT();
+      if( numsys_read_word(&regPC) )
+        {
+          regPC--;
+          p_regPC = ~regPC;
+          if( config_serial_debug_enabled() )
+            Serial.print(F("\r\n\n--- RUNNING (press ESC twice to stop) ---\r\n\n"));
+          Serial.println();
+          host_clr_status_led_WAIT();
+          host_clr_status_led_PROT();
+        }
+      else
+        Serial.println();
     }
 #if STANDALONE>0
   else if( data == 's' )
@@ -682,7 +698,10 @@ void read_inputs_serial()
 	  if( !serial_capture_running(dev) )
 	    {
 	      Serial.print(F(" File #: "));
-	      dswitch |= numsys_read_word() & 0xff;
+              if( numsys_read_byte(&dev) ) 
+                dswitch |= dev;
+              else
+                cswitch = 0;
 	    }
 	}
       Serial.println();
@@ -710,7 +729,10 @@ void read_inputs_serial()
 	      if( c=='f' ) dswitch |= 0x100;
 	      Serial.print(c);
               Serial.print(c=='f' ? F(" File #: ") : F(" Example #: "));
-              dswitch |= numsys_read_word() & 0xff;
+              if( numsys_read_byte(&dev) ) 
+                dswitch |= dev;
+              else
+                cswitch = 0;
             }
         }
       Serial.println();
@@ -720,17 +742,19 @@ void read_inputs_serial()
       char c;
       Serial.print(F("\r\n(F)loppy or (H)ard disk? "));
       do { c=serial_read(); } while(c!='f' && c!='F' && c!='h' && c!='H' && c!=27);
-      if( c!=27 )
+      if( c==27 )
+        Serial.println();
+      else
         {
           bool ok = true;
           Serial.print(c);
           if( (c=='f' || c=='F') )
             {
+              byte b;
               dswitch = 0x1000;
               Serial.print(F(" Drive number (0-15): "));
-              word w = numsys_read_word();
-              if( w<16 )
-                dswitch |= w << 8;
+              if( numsys_read_byte(&b) && b<16 )
+                dswitch |= b << 8;
               else
                 ok = false;
             }
@@ -760,9 +784,13 @@ void read_inputs_serial()
           
           if( ok )
             {
+              byte b;
               Serial.print(F(" Image number: "));
-              dswitch |= numsys_read_word() & 0xff;
-              cswitch |= BIT(SW_AUX2DOWN);
+              if( numsys_read_byte(&b) )
+                {
+                  dswitch |= b;
+                  cswitch |= BIT(SW_AUX2DOWN);
+                }
             }
           else
             dswitch = 0;
@@ -777,10 +805,11 @@ void read_inputs_serial()
     cswitch |= BIT(SW_UNPROTECT);
   else if( data == 'D' )
     {
+      bool go;
+      uint16_t addr;
       Serial.print(F("Start address: "));
-      uint16_t addr = numsys_read_word();
+      go = numsys_read_word(&addr);
       Serial.println();
-      bool go = true;
       while( go )
         {
           numsys_print_word(addr); 
@@ -795,10 +824,11 @@ void read_inputs_serial()
     }
   else if( data == 'M' )
     {
+      bool go;
+      uint16_t addr;
       Serial.print(F("Start address: "));
-      uint16_t addr = numsys_read_word();
+      go = numsys_read_word(&addr);
       Serial.println();
-      bool go = true;
       while( go )
         {
           numsys_print_word(addr); 
@@ -827,22 +857,27 @@ void read_inputs_serial()
     }
   else if( data == 'h' )
     {
-      bool ESC = false;
+      uint16_t start, end;
       Serial.print(F("Start address: "));
-      uint16_t start = numsys_read_word(&ESC);
-      Serial.println();
-      if( !ESC)
+      if( numsys_read_word(&start) )
         {
-          Serial.print(F("End address: "));
-          uint16_t end = numsys_read_word(&ESC);
-          Serial.println();
-          if( !ESC ) altair_dump_intel_hex(start, end);
+          Serial.print(F("\r\nEnd address: "));
+          if( numsys_read_word(&end) )
+            {
+              Serial.println();
+              altair_dump_intel_hex(start, end);
+            }
         }
+      Serial.println();
+      p_regPC = ~regPC;
+      print_dbg_info();
     }
   else if( data == 'L' )
     {
       read_data();
       empty_input_buffer();
+      p_regPC = ~regPC;
+      print_dbg_info();
     }
   else if( data == 'n' )
     {
@@ -863,8 +898,9 @@ void read_inputs_serial()
         {
           if( numBreakpoints<MAX_BREAKPOINTS )
             {
+              uint16_t a;
               Serial.print(F("\r\nAdd breakpoint at: "));
-              breakpoint_add(numsys_read_word());
+              if( numsys_read_word(&a) ) breakpoint_add(a);
             }
           else
             Serial.print(F("\r\nToo many breakpoints!"));
@@ -1239,13 +1275,11 @@ void altair_hlt()
   host_set_status_led_HLTA();
 
 #if STANDALONE>0
-  Serial.print(F("HLT instruction encountered at "));
-  numsys_print_word(regPC-1);
-  Serial.println(F(" => stopping CPU"));
-  host_set_status_led_WAIT();
-  return;
-#endif
-
+  // in standalone mode it is hard to interact with the panel so for a HLT
+  // instruction we just stop the CPU to avoid confusion
+  regPC--;
+  altair_interrupt(INT_SW_STOP);
+#else
   if( !host_read_status_led_WAIT() )
     {
       host_set_addr_leds(0xffff);
@@ -1289,6 +1323,7 @@ void altair_hlt()
           TIMER_ADD_CYCLES(1);
         }
     }
+#endif
 }
 
 
@@ -1524,7 +1559,10 @@ void setup()
   filesys_setup();
   drive_setup();
   hdsk_setup();
-  config_setup(host_read_function_switch(SW_DEPOSIT) ? host_read_addr_switches() : 0);
+  if( host_read_function_switch(SW_DEPOSIT) )
+    config_setup(host_read_addr_switches());
+  else 
+    config_setup(host_read_function_switch(SW_RESET) ? -1 : 0);
   cpu_setup();
   serial_setup();
   profile_setup();
@@ -1696,7 +1734,8 @@ void loop()
 
   host_set_status_led_M1();
 
-  // only check for interrupts not related to front-panel switches (e.g. serial)
+  // check for events that can't be handled by real interrupts
+  // on the host (e.g. serial input on Mega)
   host_check_interrupts();
 
   if( altair_interrupts & INT_DEVICE )
@@ -1714,5 +1753,14 @@ void loop()
     {
       PROFILE_COUNT_OPCODE(opcode);
       CPU_EXEC(opcode);
+      
+      // if the PC has not changed (e.g. jump to the same address) then modify p_regPC 
+      // to force debugger display (otherwise there would be no feedback)
+      if( regPC == p_regPC ) p_regPC = ~regPC;
+
+#if STANDALONE>0
+      // handle STOP interrupts generated by HLT opcodes in standalone mode
+      if( altair_interrupts&INT_SW_STOP ) switch_interrupt_handler();
+#endif
     }
 }

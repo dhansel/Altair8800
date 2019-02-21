@@ -118,6 +118,7 @@
     <ClCompile Include="switch_serial.cpp" />
     <ClCompile Include="timer.cpp" />
     <ClCompile Include="vdm1.cpp" />
+    <ClCompile Include="XModem.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Altair8800.ino">

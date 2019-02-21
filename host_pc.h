@@ -8,6 +8,12 @@
 
 #include "switch_serial.h"
 #include "Altair8800.h"
+#ifdef _WIN32
+struct DIR;
+#else
+typedef struct __dirstream DIR;
+#endif
+
 
 #define MEMSIZE          0x10000 /* 64k */
 #define HOST_STORAGESIZE 0x80000 /* 512k */
@@ -23,6 +29,13 @@
 // PC host is always standalone
 #undef  STANDALONE
 #define STANDALONE 1
+
+
+// PC host provides a filesystem
+#define HOST_HAS_FILESYS
+#define HOST_FILESYS_FILE_TYPE FILE*
+#define HOST_FILESYS_DIR_TYPE  DIR*
+
 
 #ifdef _MSC_VER
 #define snprintf sprintf_s
@@ -93,7 +106,8 @@ extern byte stop_request;
 #define host_set_data_leds(v) data_leds = v
 #define host_read_data_leds() data_leds
 
-
 void host_check_interrupts();
+void host_serial_interrupts_pause();
+void host_serial_interrupts_resume();
 
 #endif

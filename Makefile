@@ -11,7 +11,7 @@ else
 endif
 
 
-OBJECTS=$(OBJ)/cpucore.o $(OBJ)/cpucore_z80.o $(OBJ)/cpucore_i8080.o $(OBJ)/mem.o $(OBJ)/serial.o $(OBJ)/profile.o $(OBJ)/breakpoint.o $(OBJ)/numsys.o $(OBJ)/filesys.o $(OBJ)/drive.o $(OBJ)/disassembler.o $(OBJ)/disassembler_z80.o $(OBJ)/disassembler_i8080.o $(OBJ)/prog_basic.o $(OBJ)/prog_ps2.o $(OBJ)/prog_examples.o $(OBJ)/prog_tools.o $(OBJ)/prog_games.o $(OBJ)/prog_dazzler.o $(OBJ)/host_pc.o $(OBJ)/config.o $(OBJ)/timer.o $(OBJ)/prog.o $(OBJ)/printer.o $(OBJ)/hdsk.o $(OBJ)/image.o $(OBJ)/switch_serial.o $(OBJ)/sdmanager.o $(OBJ)/dazzler.o $(OBJ)/vdm1.o
+OBJECTS=$(OBJ)/cpucore.o $(OBJ)/cpucore_z80.o $(OBJ)/cpucore_i8080.o $(OBJ)/mem.o $(OBJ)/serial.o $(OBJ)/profile.o $(OBJ)/breakpoint.o $(OBJ)/numsys.o $(OBJ)/filesys.o $(OBJ)/drive.o $(OBJ)/disassembler.o $(OBJ)/disassembler_z80.o $(OBJ)/disassembler_i8080.o $(OBJ)/prog_basic.o $(OBJ)/prog_ps2.o $(OBJ)/prog_examples.o $(OBJ)/prog_tools.o $(OBJ)/prog_games.o $(OBJ)/prog_dazzler.o $(OBJ)/host_pc.o $(OBJ)/config.o $(OBJ)/timer.o $(OBJ)/prog.o $(OBJ)/printer.o $(OBJ)/hdsk.o $(OBJ)/image.o $(OBJ)/switch_serial.o $(OBJ)/sdmanager.o $(OBJ)/dazzler.o $(OBJ)/vdm1.o $(OBJ)/XModem.o
 
 Altair8800$(EXT): $(OBJ) $(OBJECTS) $(OBJ)/Altair8800.o $(OBJ)/Arduino.o $(OBJ)/Print.o
 	g++ $(OBJECTS) $(OBJ)/Altair8800.o $(OBJ)/Arduino.o $(OBJ)/Print.o $(LFLAGS) -o Altair8800$(EXT)
@@ -95,7 +95,7 @@ $(OBJ)/host_mega.o: host_mega.cpp
 $(OBJ)/host_pc.o: host_pc.cpp Altair8800.h Arduino/Arduino.h Arduino/inttypes.h \
  Arduino/Print.h mem.h config.h host.h host_pc.h switch_serial.h \
  prog_basic.h breakpoint.h dazzler.h vdm1.h serial.h cpucore.h profile.h \
- timer.h
+ timer.h Arduino/dirent_win.h
 $(OBJ)/image.o: image.cpp host.h config.h Arduino/Arduino.h Arduino/inttypes.h \
  Arduino/Print.h host_pc.h switch_serial.h Altair8800.h image.h
 $(OBJ)/mem.o: mem.cpp Altair8800.h Arduino/Arduino.h Arduino/inttypes.h \
@@ -133,7 +133,8 @@ $(OBJ)/prog_tools.o: prog_tools.cpp Arduino/Arduino.h Arduino/inttypes.h \
  Arduino/Print.h prog_tools.h host.h config.h host_pc.h switch_serial.h \
  Altair8800.h mem.h prog_basic.h breakpoint.h dazzler.h vdm1.h prog.h
 $(OBJ)/sdmanager.o: sdmanager.cpp config.h Arduino/Arduino.h Arduino/inttypes.h \
- Arduino/Print.h
+ Arduino/Print.h sdmanager.h XModem.h host.h host_pc.h switch_serial.h \
+ Altair8800.h numsys.h serial.h
 $(OBJ)/serial.o: serial.cpp Altair8800.h Arduino/Arduino.h Arduino/inttypes.h \
  Arduino/Print.h config.h host.h host_pc.h switch_serial.h serial.h \
  filesys.h prog_examples.h cpucore.h prog_ps2.h timer.h
@@ -151,3 +152,4 @@ $(OBJ)/vdm1.o: vdm1.cpp vdm1.h Arduino/Arduino.h Arduino/inttypes.h \
  timer.h
 $(OBJ)/Arduino.o: Arduino/Arduino.cpp Arduino/Arduino.h Arduino/inttypes.h \
  Arduino/Print.h
+

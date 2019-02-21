@@ -29,9 +29,15 @@
 #include "serial.h"
 #include "timer.h"
 #include "dazzler.h"
+#include "soft_uart.h"
 
 #include <SPI.h>
-#include <SD.h>
+#include <SdFat.h>
+
+static SdFat SD;
+
+#define min(x, y) ((x)<(y) ? (x) : (y))
+#define max(x, y) ((x)>(y) ? (x) : (y))
 
 
 // The SerialUSB implementation (serial via native USB port) sends the data for
@@ -457,8 +463,16 @@ void host_interrupt_timer_setup(byte tid, uint32_t period_us, TimerFnTp f)
 
 //------------------------------------------------------------------------------------------------------
 
-static bool use_sd = false;
-uint32_t due_storagesize = 0x4000;
+
+class HLDAGuard
+{
+public:
+  HLDAGuard()  { m_hlda = (host_read_status_leds() & ST_HLDA)!=0; }
+  ~HLDAGuard() { if( m_hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA(); }
+  
+private:
+  bool m_hlda;
+};
 
 
 // The Due has 512k FLASH memory (addresses 0x00000-0x7ffff).
@@ -470,28 +484,45 @@ uint32_t due_storagesize = 0x4000;
 //    saving memory pages.
 #define FLASH_STORAGE_OFFSET 0x3C000
 DueFlashStorage dueFlashStorage;
+uint32_t due_storagesize = 0x4000;
 
 #define MOVE_BUFFER_SIZE 1024
 byte moveBuffer[MOVE_BUFFER_SIZE];
 
+static bool use_sd = false;
+static File storagefile;
 
-static bool host_seek_file_write(File f, uint32_t addr)
+bool host_storage_init(bool write)
 {
-  f.seek(addr);
-  if( f.position()<addr )
-    {
-      memset(moveBuffer, 0, MOVE_BUFFER_SIZE);
-      while( f.size()+MOVE_BUFFER_SIZE <= addr )
-        f.write(moveBuffer, MOVE_BUFFER_SIZE);
-      if( f.size() < addr )
-        f.write(moveBuffer, addr-f.size());
-    }
+  host_storage_close();
 
-  return f.position()==addr;
+  storagefile = SD.open("STORAGE.DAT", write ? FILE_WRITE : FILE_READ);
+  if( storagefile ) 
+    {
+      // when using the storage file we can provide more memory than with FLASH
+      due_storagesize = 512*1024;
+      return true;
+    }
+  else
+    return false;
 }
 
 
-static void host_write_data_flash(const void *data, uint32_t addr, uint32_t len)
+void host_storage_close()
+{
+  if( storagefile ) storagefile.close();
+}
+
+
+void host_storage_invalidate()
+{
+  host_storage_close();
+  SD.remove("STORAGE.BAK");
+  SD.rename("STORAGE.DAT", "STORAGE.BAK");
+}
+
+
+static void host_storage_write_flash(const void *data, uint32_t addr, uint32_t len)
 {
   uint32_t offset = addr & 3;
   if( offset != 0)
@@ -509,104 +540,250 @@ static void host_write_data_flash(const void *data, uint32_t addr, uint32_t len)
 }
 
 
-static void host_read_data_flash(void *data, uint32_t addr, uint32_t len)
+static void host_storage_read_flash(void *data, uint32_t addr, uint32_t len)
 {
   memcpy(data, dueFlashStorage.readAddress(FLASH_STORAGE_OFFSET + addr), len);
 }
 
 
-static File storagefile;
-
-static bool host_init_data_sd(const char *filename)
+static void host_storage_write_sd(const void *data, uint32_t addr, uint32_t len)
 {
-  storagefile = SD.open(filename, FILE_WRITE);
-  return storagefile ? true : false;
-}
-
-
-static void host_write_data_sd(const void *data, uint32_t addr, uint32_t len)
-{
-  if( storagefile )
+  HLDAGuard hlda;
+  if( host_filesys_file_seek(storagefile, addr) )
     {
-      bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
-      if( host_seek_file_write(storagefile, addr) )
-        {
-          storagefile.write((byte *) data, len);
-          storagefile.flush();
-        }
-      if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
+      storagefile.write((byte *) data, len);
+      storagefile.flush();
     }
 }
 
 
-static void host_read_data_sd(void *data, uint32_t addr, uint32_t len)
+static void host_storage_read_sd(void *data, uint32_t addr, uint32_t len)
+{
+  HLDAGuard hlda;
+  if( storagefile.seek(addr) )
+    storagefile.read((byte *) data, len);
+}
+
+
+void host_storage_write(const void *data, uint32_t addr, uint32_t len)
 {
   if( storagefile )
-    {
-      bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
-      if( storagefile.seek(addr) )
-        {
-          storagefile.read((byte *) data, len);
-          storagefile.flush();
-        }
-      if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
-    }
-}
-
-
-void host_write_data(const void *data, uint32_t addr, uint32_t len)
-{
-  if( use_sd )
-    host_write_data_sd(data, addr, len);
+    host_storage_write_sd(data, addr, len);
   else
-    host_write_data_flash(data, addr, len);
+    host_storage_write_flash(data, addr, len);
 }
 
-void host_read_data(void *data, uint32_t addr, uint32_t len)
+void host_storage_read(void *data, uint32_t addr, uint32_t len)
 {
-  if( use_sd )
-    host_read_data_sd(data, addr, len);
+  if( storagefile )
+    host_storage_read_sd(data, addr, len);
   else
-    host_read_data_flash(data, addr, len);
+    host_storage_read_flash(data, addr, len);
 }
 
 
-void host_move_data(uint32_t to, uint32_t from, uint32_t len)
+void host_storage_move(uint32_t to, uint32_t from, uint32_t len)
 {
   uint32_t i;
   if( from < to )
     {
       for(i=0; i+MOVE_BUFFER_SIZE<len; i+=MOVE_BUFFER_SIZE)
         {
-          host_read_data(moveBuffer, from+len-i-MOVE_BUFFER_SIZE, MOVE_BUFFER_SIZE);
-          host_write_data(moveBuffer, to+len-i-MOVE_BUFFER_SIZE, MOVE_BUFFER_SIZE);
+          host_storage_read(moveBuffer, from+len-i-MOVE_BUFFER_SIZE, MOVE_BUFFER_SIZE);
+          host_storage_write(moveBuffer, to+len-i-MOVE_BUFFER_SIZE, MOVE_BUFFER_SIZE);
         }
 
       if( i<len )
         {
-          host_read_data(moveBuffer, from, len-i);
-          host_write_data(moveBuffer, to, len-i);
+          host_storage_read(moveBuffer, from, len-i);
+          host_storage_write(moveBuffer, to, len-i);
         }
     }
   else
     {
       for(i=0; i+MOVE_BUFFER_SIZE<len; i+=MOVE_BUFFER_SIZE)
         {
-          host_read_data(moveBuffer, from+i, MOVE_BUFFER_SIZE);
-          host_write_data(moveBuffer, to+i, MOVE_BUFFER_SIZE);
+          host_storage_read(moveBuffer, from+i, MOVE_BUFFER_SIZE);
+          host_storage_write(moveBuffer, to+i, MOVE_BUFFER_SIZE);
         }
 
       if( i<len )
         {
-          host_read_data(moveBuffer, from+i, len-i);
-          host_write_data(moveBuffer, to+i, len-i);
+          host_storage_read(moveBuffer, from+i, len-i);
+          host_storage_write(moveBuffer, to+i, len-i);
         }
     }
 }
 
-void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
+
+//------------------------------------------------------------------------------------------------------
+
+
+File host_filesys_file_open(const char *filename, bool write)
 {
-  memcpy(dst, src, len);
+  HLDAGuard hlda;
+  return SD.open(filename, write ? FILE_WRITE : FILE_READ);
+}
+
+
+uint32_t host_filesys_file_read(File &f, uint32_t len, void *buffer)
+{
+  HLDAGuard hlda;
+  return f.read((uint8_t *) buffer, len);
+}
+
+
+uint32_t host_filesys_file_write(File &f, uint32_t len, const void *buffer)
+{
+  HLDAGuard hlda;
+  return f.write((const uint8_t *) buffer, len);
+}
+
+
+uint32_t host_filesys_file_set(File &f, uint32_t len, byte b)
+{
+  HLDAGuard hlda;
+  uint32_t res = 0;
+
+  // write data in MOVE_BUFFER_SIZE chunks
+  memset(moveBuffer, b, min(len, MOVE_BUFFER_SIZE));
+  for(uint32_t i=0; i<len; i+=MOVE_BUFFER_SIZE)
+    res += f.write(moveBuffer, min(len-i, MOVE_BUFFER_SIZE));
+
+  return res;
+}
+
+
+void host_filesys_file_flush(File &f)
+{
+  HLDAGuard hlda;
+  f.flush();
+}
+
+
+bool host_filesys_file_seek(File &f, uint32_t pos)
+{
+  HLDAGuard hlda;
+
+  f.seek(pos);
+  if( f.position()<pos && !f.isReadOnly() )
+    {
+      // if we are seeking past the end of a writable
+      // file then expand its size accordingly
+      host_filesys_file_set(f, pos-f.position(), 0);
+    }
+
+  return f.position()==pos;
+}
+
+
+uint32_t host_filesys_file_pos(File &f)
+{
+  HLDAGuard hlda;
+  return f.position();
+}
+
+
+bool host_filesys_file_eof(File &f)
+{
+  HLDAGuard hlda;
+  return f.isReadOnly() ? f.available()==0 : false;
+}
+
+
+void host_filesys_file_close(File &f)
+{
+  HLDAGuard hlda;
+  f.close();
+}
+
+
+uint32_t host_filesys_file_size(const char *filename)
+{
+  HLDAGuard hlda;
+  int res = -1;
+      
+  File f = SD.open(filename, FILE_READ);
+  if( f )
+    {
+      res = f.size();
+      f.close();
+    }
+      
+  return res;
+}
+
+
+bool host_filesys_file_exists(const char *filename)
+{
+  HLDAGuard hlda;
+  return SD.exists(filename);
+}
+
+
+bool host_filesys_file_remove(const char *filename)
+{
+  HLDAGuard hlda;
+  return SD.remove(filename);
+}
+
+
+bool host_filesys_file_rename(const char *from, const char *to)
+{
+  HLDAGuard hlda;
+  return SD.rename(from, to);
+}
+
+
+File host_filesys_dir_open()
+{
+  HLDAGuard hlda;
+  return SD.open("/");
+}
+
+
+const char *host_filesys_dir_nextfile(File &d)
+{
+  HLDAGuard hlda;
+  static char buffer[15];
+
+  while( true )
+    {
+      File entry = d.openNextFile();
+      if( entry )
+        {
+          if( entry.isFile() )
+            {
+              entry.getSFN(buffer);
+              entry.close();
+              return buffer;
+            }
+
+          entry.close();
+        }
+      else
+        return NULL;
+    }
+}
+
+
+void host_filesys_dir_rewind(File &d)
+{
+  HLDAGuard hlda;
+  d.rewindDirectory();
+}
+
+
+void host_filesys_dir_close(File &d)
+{
+  HLDAGuard hlda;
+  d.close();
+}
+
+
+bool host_filesys_ok()
+{
+  return use_sd;
 }
 
 
@@ -769,18 +946,26 @@ host_serial_receive_callback_tp host_serial_set_receive_callback(byte iface, hos
 
 static void host_serial_receive_finished_interrupt_if0()
 {
-  // a complete character should have been received
+  // a complete character should have been received on pin 0/1 (USB programming port)
+  // forward it to the emulated serial card. If no data is available then wait one more
+  // timer interval to see if something arrives.
+  static bool oneMore = false;
   if( Serial.available() )
-    serial_receive_callback[0](0, Serial.read());
-  else 
+    { 
+      serial_receive_callback[0](0, Serial.read()); 
+      oneMore = true; 
+    }
+  else if( !oneMore )
     host_interrupt_timer_stop(8);
+  else
+    oneMore = false;
 }
 
 
 static void host_serial_receive_start_interrupt_if0()
 {
-  // we have seen a signal change on the RX serial line so
-  // a serial character is being received => wait until it is finished
+  // we have seen a signal change on the RX serial line of pin 0/1 (USB programming port)
+  // so a serial character is being received => wait until it is finished
   if( !host_interrupt_timer_running(8) )
     host_interrupt_timer_start(8);
 }
@@ -788,18 +973,26 @@ static void host_serial_receive_start_interrupt_if0()
 
 static void host_serial_receive_finished_interrupt_if1()
 {
-  // a complete character should have been received
+  // a complete character should have been received on pin 18/19 serial port
+  // forward it to the emulated serial card. If no data is available then wait one more
+  // timer interval to see if something arrives.
+  static bool oneMore = false;
   if( Serial1.available() )
-    serial_receive_callback[1](1, Serial1.read());
-  else 
+    {
+      serial_receive_callback[1](1, Serial1.read());
+      oneMore = true; 
+    }
+  else if( !oneMore )
     host_interrupt_timer_stop(7);
+  else
+    oneMore = false;
 }
 
 
 static void host_serial_receive_start_interrupt_if1()
 {
-  // we have seen a signal change on the RX serial line so
-  // a serial character is being received => wait until it is finished
+  // we have seen a signal change on the RX serial line on pin 18/19 serial port
+  // so a serial character is being received => wait until it is finished
   if( !host_interrupt_timer_running(7) )
     host_interrupt_timer_start(7);
 }
@@ -807,7 +1000,9 @@ static void host_serial_receive_start_interrupt_if1()
 
 static void host_serial_receive_finished_interrupt_if2()
 {
-  // a complete character should have been received
+  // keep forwarding data received on Native USB 
+  // (one character at a time according to baud rate) 
+  // to emulated serial card until no more data
   if( SerialUSB.available() )
     serial_receive_callback[2](2, SerialUSB.read());
   else 
@@ -817,13 +1012,14 @@ static void host_serial_receive_finished_interrupt_if2()
 
 void host_serial_receive_start_interrupt_if2()
 {
-  // receive data
+  // received data on Native USB port
   if( !host_interrupt_timer_running(6) )
     {
+      // forward first byte to emulated serial card
       if( SerialUSB.available() )
         serial_receive_callback[2](2, SerialUSB.read());
       
-      // if more to receive then schedule timer
+      // if there is more to forward then schedule timer (according to baud rate)
       if( SerialUSB.available() )
         host_interrupt_timer_start(6);
     }
@@ -833,11 +1029,11 @@ void host_serial_receive_start_interrupt_if2()
 #if USE_SERIAL_ON_A6A7>0
 // define a software UART on interrupt 5 with 16 byte
 // transmit and receive buffers
-#include "soft_uart.h"
 serial_tc5_declaration(16,16);
 
 void CAN1_Handler()
 {
+  // forward received data to the emulated serial card
   while( serial_tc5.available() )
     {
       int d = serial_tc5.read();
@@ -865,11 +1061,11 @@ static void host_serial_receive_finished_interrupt_if3()
 #if USE_SERIAL_ON_RXLTXL>0
 // define a software UART on interrupt 4 with 16 byte
 // transmit and receive buffers
-#include "soft_uart.h"
 serial_tc4_declaration(16,16);
 
 void CAN0_Handler()
 {
+  // forward received data to the emulated serial card
   while( serial_tc4.available() )
     {
       int d = serial_tc4.read();
@@ -972,9 +1168,27 @@ void host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_prim
       // stop timer interrupt (if running)
       if( host_interrupt_timer_running(timer) ) host_interrupt_timer_stop(timer);
       
-      // set up timer such that we produce an interrupt after 1 byte
-      // has been received at the given baud rate.
-      host_interrupt_timer_setup(timer, ((num_bits(config)*1000000)/baud)+20, fnFinished);
+      // When receiving data via UART or USART we would LIKE to receive an
+      // interrupt when a character was received, so it can be forwarded to
+      // the emulated serial card.  The SAM3X processor does of course provide
+      // such an interrupt BUT the Arduino library consumes that interrupt
+      // without providing a means to hook into the handler or a way to override
+      // it. So it seems there is no way for our code to receive an interrupt
+      // when a character was received. So we need a workaround:
+      // Trigger an interrupt on he falling edge of the RX line (start bit) and
+      // within that interrupt, start a timer that (based on the baud rate) produces 
+      // another interrupt after the byte has been received. 
+
+      int stopBitStart = ((num_bits(config)-1)*1000000)/baud;
+      int stopBitEnd   = ((num_bits(config))*1000000)/baud;
+
+      // Set the timeout such that the timer interrupt occurs NO EARLIER than
+      // 20us after the beginning of the (second) stop bit. That timing ensures that
+      // the byte has been properly received before our interrupt. If the bits 
+      // are long enough then schedule it 25us before the end of the stop bit.
+      // That leaves enough time to process the received byte before the next
+      // one starts. For reference, at 9600 baud one bit is ~104us long.
+      host_interrupt_timer_setup(timer, max(stopBitStart+20, stopBitEnd-25), fnFinished);
     }
 
   // switch the primary serial interface (if requested)
@@ -1495,6 +1709,12 @@ signed char isinput[] =
   };
 
 
+void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
+{
+  memcpy(dst, src, len);
+}
+
+
 uint32_t host_get_random()
 {
   delayMicroseconds(1);
@@ -1505,12 +1725,6 @@ uint32_t host_get_random()
 bool host_is_reset()
 {
   return host_read_function_switch(SW_RESET);
-}
-
-
-bool host_have_sd_card()
-{
-  return use_sd;
 }
 
 
@@ -1528,14 +1742,6 @@ void host_system_info()
   char *heapend=sbrk(0);
   register char * stack_ptr asm("sp");
 
-  /*
-  SwitchSerial.print("    arena="); SwitchSerial.println(mi.arena);
-  SwitchSerial.print("  ordblks="); SwitchSerial.println(mi.ordblks);
-  SwitchSerial.print(" uordblks="); SwitchSerial.println(mi.uordblks);
-  SwitchSerial.print(" fordblks="); SwitchSerial.println(mi.fordblks);
-  SwitchSerial.print(" keepcost="); SwitchSerial.println(mi.keepcost);
-  */
-
   SwitchSerial.print("RAM Start        : 0x"); SwitchSerial.println((unsigned long)ramstart, HEX);
   SwitchSerial.print("Data/Bss end     : 0x"); SwitchSerial.println((unsigned long)&_end, HEX);
   SwitchSerial.print("Heap End         : 0x"); SwitchSerial.println((unsigned long)heapend, HEX);
@@ -1545,6 +1751,15 @@ void host_system_info()
   SwitchSerial.print("Program RAM Used : "); SwitchSerial.println(&_end - ramstart);
   SwitchSerial.print("Stack RAM Used   : "); SwitchSerial.println(ramend - stack_ptr);
   SwitchSerial.print("Free RAM         : "); SwitchSerial.println(stack_ptr - heapend + mi.fordblks);
+  SwitchSerial.print("Data storage     : ");
+
+#if USE_HOST_FILESYS>0
+  SwitchSerial.print("SD card file system");
+  SwitchSerial.print(" ("); SwitchSerial.print(SD.card()->cardSize() / (2*1024)); SwitchSerial.println("M)");
+#else
+  SwitchSerial.print(storagefile ? "STORAGE.DAT file on SD card" : "flash memory");
+  SwitchSerial.print(" ("); SwitchSerial.print(due_storagesize / 1024); SwitchSerial.println("K)");
+#endif
 }
 
 
@@ -1579,17 +1794,19 @@ void host_setup()
   trng_enable(TRNG);
   trng_read_output_data(TRNG);
 
-#if NUM_DRIVES>0 || NUM_HDSK_UNITS>0
+#if NUM_DRIVES>0 || NUM_HDSK_UNITS>0 || USE_HOST_FILESYS>0
   // check if SD card available (send "chip select" signal to HLDA status light)
-  bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
-  if( SD.begin(22) && host_init_data_sd("STORAGE.DAT") )
+  HLDAGuard hlda;
+  if( SD.begin(22) )
     {
+#if USE_HOST_FILESYS>0
+      // storing configurations etc directly on SD card
       use_sd = true;
-      due_storagesize = 512*1024;
+#else
+      // not using host file system => open storage (file) for writing
+      use_sd = host_storage_init(true);
+#endif
     }
-
-  // restore HLDA status light to what it was before
-  if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
 #endif
 
   // set serial receive callbacks to default
@@ -1597,131 +1814,5 @@ void host_setup()
     host_serial_set_receive_callback(i, serial_receive_host_data);
 }
 
-
-int32_t host_get_file_size(const char *filename)
-{
-  int res = -1;
-
-  if( use_sd )
-    {
-      bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
-      
-      File f = SD.open(filename, FILE_READ);
-      if( f )
-        {
-          res = f.size();
-          f.close();
-        }
-      
-      if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
-    }
-
-  return res;
-}
-
-
-bool host_file_exists(const char *filename)
-{
-  bool res = false;
-
-  if( use_sd )
-    {
-      bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
-      
-      File f = SD.open(filename, FILE_READ);
-      if( f )
-        {
-          f.close();
-          res = true;
-        }
-      if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
-    }
-
-  return res;
-}
-
-
-uint32_t host_read_file(const char *filename, uint32_t offset, uint32_t len, void *buffer)
-{
-  uint32_t res = 0;
-
-  if( use_sd )
-    {
-      bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
-      File f = SD.open(filename, FILE_READ);
-      if( f )
-        {
-          if( f.seek(offset) && f.position()==offset )
-            res = f.read((uint8_t *) buffer, len);
-          f.close();
-        }
-      if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
-    }
-
-  return res;
-}
-
-
-uint32_t host_write_file(const char *filename, uint32_t offset, uint32_t len, void *buffer)
-{
-  uint32_t res = 0;
-
-  if( use_sd )
-    {
-      bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
-      File f = SD.open(filename, FILE_WRITE);
-      if( f )
-        {
-          if( host_seek_file_write(f, offset) )
-            res = f.write((uint8_t *) buffer, len);
-          f.close();
-        }
-      if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
-    }
-
-  return res;
-}
-
-
-uint32_t host_set_file(const char *filename, uint32_t offset, uint32_t len, byte b, bool keep_open)
-{
-  uint32_t res = 0;
-  static File f;
-
-  if( use_sd )
-    {
-      bool hlda = (host_read_status_leds() & ST_HLDA)!=0;
-      host_set_status_led_HLDA(); 
-
-      // if a filename is given then (re-)open the file
-      if( filename!=NULL )
-        {
-          if( f ) f.close();
-          f = SD.open(filename, FILE_WRITE);
-        }
-
-      // if a position is given then seek to that position
-      if( f && offset < 0xffffffff )
-        if( !host_seek_file_write(f, offset) )
-          f.close();
-
-      // if the file is open and length is >0 then write to the file
-      if( f && len>0 )
-        {
-          // write data in MOVE_BUFFER_SIZE chunks
-          memset(moveBuffer, b, len < MOVE_BUFFER_SIZE ? len : MOVE_BUFFER_SIZE);
-          for(uint32_t i=0; i<len; i+=MOVE_BUFFER_SIZE) 
-            res += f.write(moveBuffer, i+MOVE_BUFFER_SIZE<=len ? MOVE_BUFFER_SIZE : len-i);
-        }
-
-      // if we're not supposed to keep the file open then close it
-      if( !keep_open )
-        f.close();
-
-      if( hlda ) host_set_status_led_HLDA(); else host_clr_status_led_HLDA();
-    }
-
-  return res;
-}
 
 #endif

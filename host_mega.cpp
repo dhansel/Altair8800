@@ -38,6 +38,10 @@
 #error Throttling neither supported nor necessary for Arduino MEGA. Set USE_THROTTLE to 0 in config.h
 #endif
 
+#if USE_HOST_FILESYS>0
+#error Arduino MEGA does not supply a filesystem. Set USE_HOST_FILESYS to 0 in config.h
+#endif
+
 #if USE_PRINTER>0 && MEMSIZE>(4096+1024)
 #error Either set USE_PRINTER to 0 in config.h or reduce MEMSIZE in host_mega.h to 4096+1024, otherwise stability problems may occur
 #endif
@@ -116,28 +120,35 @@ uint16_t host_read_status_leds()
 //------------------------------------------------------------------------------------------------------
 
 
-void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
+bool host_storage_init(bool write)
 {
-  for(uint32_t i=0; i<len; i++) 
-    ((byte *) dst)[i] = pgm_read_byte(((byte *) src)+i);
+  return true;
 }
 
 
-void host_write_data(const void *data, uint32_t addr, uint32_t len)
+void host_storage_close()
+{}
+
+
+void host_storage_invalidate()
+{}
+
+
+void host_storage_write(const void *data, uint32_t addr, uint32_t len)
 {
   byte *b = (byte *) data;
   for(uint32_t i=0; i<len; i++) EEPROM.write(addr+i, b[i]);
 }
 
 
-void host_read_data(void *data, uint32_t addr, uint32_t len)
+void host_storage_read(void *data, uint32_t addr, uint32_t len)
 {
   byte *b = (byte *) data;
   for(uint32_t i=0; i<len; i++) b[i] = EEPROM.read(addr+i);
 }
 
 
-void host_move_data(uint32_t to, uint32_t from, uint32_t len)
+void host_storage_move(uint32_t to, uint32_t from, uint32_t len)
 {
   uint32_t i;
   if( from<to )
@@ -157,6 +168,19 @@ void host_move_data(uint32_t to, uint32_t from, uint32_t len)
 uint32_t host_get_random()
 {
   return (((uint32_t) random(0,65535)) * 65536l | random(0,65535));
+}
+
+
+bool host_is_reset()
+{
+  return host_read_function_switch(SW_RESET);
+}
+
+
+void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
+{
+  for(uint32_t i=0; i<len; i++) 
+    ((byte *) dst)[i] = pgm_read_byte(((byte *) src)+i);
 }
 
 
@@ -318,18 +342,6 @@ bool host_serial_port_has_configs(byte i)
 #else
   return false;
 #endif
-}
-
-
-bool host_is_reset()
-{
-  return host_read_function_switch(SW_RESET);
-}
-
-
-bool host_have_sd_card()
-{
-  return false;
 }
 
 

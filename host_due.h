@@ -8,6 +8,7 @@
 
 #include "config.h"
 #include "switch_serial.h"
+#include <SdFat.h>
 
 
 // The (rarely used) PROTECT switch can be sacrificed to enable an additional
@@ -27,6 +28,12 @@
 // any other purpose on the Due so we can use them for an additional serial port.
 // See the documentation for where exactly to solder the wires onto the Due.
 #define USE_SERIAL_ON_RXLTXL 0
+
+
+// Arduino Due provides a file system (via SD card)
+#define HOST_HAS_FILESYS
+#define HOST_FILESYS_FILE_TYPE File
+#define HOST_FILESYS_DIR_TYPE  File
 
 
 #define MEMSIZE 0x10000

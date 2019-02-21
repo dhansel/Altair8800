@@ -20,6 +20,8 @@
 #include "host.h"
 #include "image.h"
 
+#ifdef HOST_HAS_FILESYS
+
 static const char *fname_template[2] = {"DISK%02X.DSK", "HDSK%02X.DSK"};
 static const char *dirfilename[2]    = {"DISKDIR.TXT",  "HDSKDIR.TXT"};
 
@@ -37,14 +39,18 @@ const char *image_get_dir_content(byte image_type)
   
   if( contentcache==NULL )
     {
-      int dirlen = host_get_file_size(dirfilename[image_type]);
+      int dirlen = host_filesys_file_size(dirfilename[image_type]);
       if( dirlen>0 )
         {
           contentcache = (char *) malloc(dirlen+1);
           if( contentcache!=NULL )
             {
-              if( host_read_file(dirfilename[image_type], 0, dirlen, contentcache) )
-                contentcache[dirlen] = 0;
+              HOST_FILESYS_FILE_TYPE f = host_filesys_file_open(dirfilename[image_type], false);
+              if( f && host_filesys_file_read(f, dirlen, contentcache) )
+                {
+                  contentcache[dirlen] = 0;
+                  host_filesys_file_close(f);
+                }
               else
                 {
                   free(contentcache);
@@ -68,7 +74,7 @@ const char *image_get_dir_content(byte image_type)
 bool image_get_filename(byte image_type, byte image_num, char *filename, int buf_len, bool check_exist)
 {
   snprintf(filename, buf_len, fname_template[image_type], image_num);
-  return check_exist ? host_file_exists(filename) : true;
+  return check_exist ? host_filesys_file_exists(filename) : true;
 }
 
 
@@ -112,3 +118,4 @@ const char *image_get_description(byte image_type, byte image_num)
 }
 
 
+#endif

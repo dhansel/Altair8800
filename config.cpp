@@ -1193,55 +1193,142 @@ static void toggle_flag2(uint32_t value, byte row, byte col)
 }
 
 
+static bool check_video_interface_settings()
+{
+  bool ok;
+  uint32_t old_config_serial_settings = config_serial_settings;
+  byte pi = config_printer_type()==0 ? 0xff : config_printer_map_to_host_serial();
+  byte di = config_dazzler_interface();
+  byte vi = config_vdm1_interface();
+
+#if USE_DAZZLER>0
+  config_serial_settings = new_config_serial_settings;
+  ok = (di!=pi) && (di!=vi);
+  for(byte i=0; ok && i<NUM_SERIAL_DEVICES; i++) 
+    ok = config_serial_map_sim_to_host(i)!=di;
+  config_serial_settings = old_config_serial_settings;
+  
+  if( di<255 && !ok )
+    {
+      char c;
+      Serial.print(F("\r\nDazzler can not use the same serial port as any other device.\nDisable Dazzler and continue (y/n)? "));
+      do { delay(50); c = serial_read(); } while( c!='y' && c!='n' );
+      if( c=='y' )
+        config_flags2 = set_bits(config_flags2, 0, 3, 0);
+      else
+        return false;
+    }
+#endif
+
+#if USE_VDM1>0            
+  config_serial_settings = new_config_serial_settings;
+  ok = (vi!=pi) && (vi!=di);
+  for(byte i=0; ok && i<NUM_SERIAL_DEVICES; i++) 
+    ok = config_serial_map_sim_to_host(i)!=vi;
+  config_serial_settings = old_config_serial_settings;
+      
+  if( vi<255 && !ok )
+    {
+      char c;
+      Serial.print(F("\r\nVDM-1 can not use the same serial port as any other device.\nDisable VDM-1 and continue (y/n)? "));
+      do { delay(50); c = serial_read(); } while( c!='y' && c!='n' );
+      if( c=='y' )
+        config_flags2 = set_bits(config_flags2, 3, 3, 0);
+      else
+        return false;
+    }
+#endif
+
+  return true;
+}
+
+
+static bool check_primary_interface_serial_change()
+{
+  byte newprimary = get_bits(new_config_serial_settings, 8, 3);
+
+#if HOST_NUM_SERIAL_PORTS>1
+  if( config_host_serial_primary() != newprimary )
+    return true;
+#endif
+  
+  if( config_host_serial_baud_rate(new_config_serial_settings, newprimary) 
+      !=
+      config_host_serial_baud_rate(config_serial_settings, newprimary) )
+    return true;
+
+  if( config_host_serial_config(new_config_serial_settings2, newprimary) 
+      !=
+      config_host_serial_config(config_serial_settings2, newprimary) )
+    return true;
+
+  return false;
+}
+
+
 static bool apply_host_serial_settings()
 {
   char c;
+  byte old_dazzler_interface = dazzler_get_iface();
+  byte old_vdm1_interface = vdm1_get_iface();
   uint32_t old_config_serial_settings = config_serial_settings;
   uint32_t old_config_serial_settings2 = config_serial_settings2;
 
+  // if the primary interface has changed or the baud rate or serial paramters
+  // of the primary interface have changed then require a confirmation, otherwis
+  // revert to the current settings. This prevents the user from locking themselves
+  // out by choosing incorrect settings.
+  bool must_confirm = check_primary_interface_serial_change();
+  if( must_confirm )
+    {
 #if HOST_NUM_SERIAL_PORTS>1
-  if( config_host_serial_primary() != get_bits(new_config_serial_settings, 8, 3) )
-    Serial.println("\r\nChange must be confirmed by answering 'y' through new primary interface.\r\n"
-                   "[will revert back to this interface if new interface is not confirmed within 30 seconds]");
-  else
+      if( config_host_serial_primary() != get_bits(new_config_serial_settings, 8, 3) )
+        Serial.println(F("\r\nChange must be confirmed by answering 'y' through new primary interface.\r\n"
+                         "[will revert back to this interface if new interface is not confirmed within 30 seconds]"));
+      else
 #endif
-  Serial.println(F("\r\n[will revert to old settings if new settings not confirmed within 30 seconds]\r\n"));
-  Serial.flush();
+        Serial.println(F("\r\n[will revert to old settings if new settings not confirmed within 30 seconds]\r\n"));
+      Serial.flush();
+    }
 
+  dazzler_set_iface(config_dazzler_interface());
+  vdm1_set_iface(config_vdm1_interface());
   apply_host_serial_settings(new_config_serial_settings, new_config_serial_settings2);
 
-  uint32_t timeout = millis() + 30000, timeout2 = 0;
-  c = 0;
-
-#if USE_DAZZLER>0
-  dazzler_set_iface(config_dazzler_interface());
-#endif
-  do
+  if( must_confirm ) 
     {
-      if( millis()>timeout2 )
+      uint32_t timeout = millis() + 30000, timeout2 = 0;
+      c = 0;
+      
+      do
         {
-          Serial.print(F("\r\nKeep new host interface settings (y/n)? "));
-          timeout2 = millis() + 2000;
-        }
+          if( millis()>timeout2 )
+            {
+              Serial.print(F("\r\nKeep new host interface settings (y/n)? "));
+              timeout2 = millis() + 2000;
+            }
 
-      delay(50);
-      c = serial_read();
-    }
-  while( c!='y' && c!='n' && millis()<timeout );
-  Serial.println(c);
-  if( c!='y' )
-    { 
-      apply_host_serial_settings(old_config_serial_settings, old_config_serial_settings2);
-      if( c!='n' ) 
-        {
-          delay(100);
-          Serial.println(F("\r\nSettings were not confirmed within 30 seconds."));
-          delay(3000);
-
-          // flush serial input that may have accumulated while waiting
-          while( serial_read()>=0 );
+          delay(50);
+          c = serial_read();
         }
-      return false;
+      while( c!='y' && c!='n' && millis()<timeout );
+      Serial.println(c);
+      if( c!='y' )
+        { 
+          dazzler_set_iface(old_dazzler_interface);
+          vdm1_set_iface(old_vdm1_interface);
+          apply_host_serial_settings(old_config_serial_settings, old_config_serial_settings2);
+          if( c!='n' ) 
+            {
+              delay(100);
+              Serial.println(F("\r\nSettings were not confirmed within 30 seconds."));
+              delay(3000);
+
+              // flush serial input that may have accumulated while waiting
+              while( serial_read()>=0 );
+            }
+          return false;
+        }
     }
 
   return true;
@@ -2311,7 +2398,12 @@ void config_host_serial()
         case 'P': toggle_host_primary_interface(r_primary, 25); Serial.print(F("\033[K")); break;
 #endif
 
-        case 'A': apply_host_serial_settings(); redraw = true; break;
+        case 'A': 
+          {
+            if( check_video_interface_settings() ) apply_host_serial_settings(); 
+            redraw = true; 
+            break;
+          }
 
         case 27:
         case 'x': 
@@ -2473,13 +2565,12 @@ void config_memory()
           {
             if( mem_get_num_roms()>0 )
               {
-                bool ESC = false;
+                byte i;
                 redraw = true;
                 Serial.print(F("Remove ROM number: "));
-                byte i = (byte) numsys_read_word(&ESC);
-                if( ESC ) break;
-                if( i>0 && i<=mem_get_num_roms() )
-                  mem_remove_rom(i-1);
+                if( numsys_read_byte(&i) )
+                  if( i>0 && i<=mem_get_num_roms() )
+                    mem_remove_rom(i-1);
               }
             break;
           }
@@ -2488,17 +2579,16 @@ void config_memory()
           {
             if( mem_get_num_roms()>0 )
               {
-                bool ESC = false;
+                byte i;
                 redraw = true;
                 Serial.print(F("ROM to auto-start (0 for none): "));
-                byte i = (byte) numsys_read_word(&ESC);
-                if( ESC ) break;
-                for(byte j=0; j<mem_get_num_roms(); j++) 
-                  {
-                    uint16_t flags;
-                    mem_get_rom_info(j, NULL, NULL, NULL, &flags);
-                    mem_set_rom_flags(j, j==(i-1) ? (flags | MEM_ROM_FLAG_AUTOSTART) : (flags & ~MEM_ROM_FLAG_AUTOSTART));
-                  }
+                if( numsys_read_byte(&i) )
+                  for(byte j=0; j<mem_get_num_roms(); j++) 
+                    {
+                      uint16_t flags;
+                      mem_get_rom_info(j, NULL, NULL, NULL, &flags);
+                      mem_set_rom_flags(j, j==(i-1) ? (flags | MEM_ROM_FLAG_AUTOSTART) : (flags & ~MEM_ROM_FLAG_AUTOSTART));
+                    }
               }
             break;
           }
@@ -2623,9 +2713,11 @@ void config_edit()
           row += 1;
 
           Serial.println();
+#if USE_HOST_FILESYS==0
           Serial.print(F("(M)anage Filesystem     "));
-#if NUM_DRIVES>0 || NUM_HDSK_UNITS>0
-          if( host_have_sd_card() ) Serial.print(F("(F)ile manager for SD card")); 
+#endif
+#if (NUM_DRIVES>0 || NUM_HDSK_UNITS>0 || USE_HOST_FILESYS>0) && defined(HOST_HAS_FILESYS)
+          if( host_filesys_ok() ) Serial.print(F("(F)ile manager for SD card")); 
 #endif
           Serial.println(); row++;
           Serial.println(F("(S)ave configuration    (L)oad configuration"));
@@ -2706,36 +2798,43 @@ void config_edit()
             break;
           }
           
+#if USE_HOST_FILESYS==0
         case 'M': filesys_manage(); break;
+#endif
 
-#if NUM_DRIVES>0 || NUM_HDSK_UNITS>0
-        case 'F': if( host_have_sd_card() ) sd_manager(); break;
+#if (NUM_DRIVES>0 || NUM_HDSK_UNITS>0 || USE_HOST_FILESYS>0) && defined(HOST_HAS_FILESYS)
+        case 'F': if( host_filesys_ok() ) sd_manager(); break;
 #endif
 
         case 'S': 
           {
-            Serial.print(F("\r\nSave as config # (0=default): "));
-            bool esc = false;
-            byte i = (byte) numsys_read_word(&esc);
-            Serial.println();
-            if( !esc )
-              if( !save_config(i & 0xff) )
-                Serial.println(F("Saving failed. Capture/replay in progress?"));
+            if( check_video_interface_settings() )
+              {
+                byte i;
+                Serial.print(F("\r\nSave as config # (0=default): "));
+                if( numsys_read_byte(&i) )
+                  {
+                    Serial.println();
+                    if( !save_config(i & 0xff) )
+                      Serial.println(F("Saving failed. Capture/replay in progress?"));
+                  }
+              }
 
             break;
           }
         case 'L':
           {
+            byte i;
             Serial.print(F("\r\nLoad config #: "));
-            bool esc = false;
-            byte i = (byte) numsys_read_word(&esc);
-            Serial.println();
-            if( !esc )
-              if( !load_config(i & 0xff) )
-                {
-                  Serial.println(F("Load failed. File does not exist?"));
-                  delay(2000);
-                }
+            if( numsys_read_byte(&i) )
+              {
+                Serial.println();
+                if( !load_config(i & 0xff) )
+                  {
+                    Serial.println(F("Load failed. File does not exist?"));
+                    delay(2000);
+                  }
+              }
             break;
           }
         case 'R': config_defaults(false); break;
@@ -2749,68 +2848,25 @@ void config_edit()
           {
             bool exit = false;
 
-#if USE_DAZZLER>0            
-            byte di = config_dazzler_interface();
-            if( di<255 )
+            if( check_video_interface_settings() )
               {
-                bool ok = config_printer_map_to_host_serial()!=di;
-
-                for(byte i=0; ok && i<NUM_SERIAL_DEVICES; i++) 
-                  ok = config_serial_map_sim_to_host(i)!=di;
-
-                if( !ok )
+                if( (config_serial_settings&0xFFF7FF) != (new_config_serial_settings&0xFFF7FF) ||
+                    (config_serial_settings2) != (new_config_serial_settings2) )
                   {
-                    Serial.print("\r\nDazzler can not use the same host interface as any other serial device.\nDisable Dazzler and continue (y/n/ESC)? ");
+                    Serial.print(F("\r\nApply new host serial settings (y/n/ESC)? "));
                     do { delay(50); c = serial_read(); } while( c!='y' && c!='n' && c!=27 );
-                    if( c=='y' )
-                      config_flags2 = set_bits(config_flags2, 0, 3, 0);
-                    else
-                      break;
+                    Serial.println(c);
+                    if( c=='n' || (c=='y' && apply_host_serial_settings()) )
+                      exit = true;
                   }
-              }
-#endif
-#if USE_VDM1>0            
-            byte vi = config_vdm1_interface();
-            if( vi<255 )
-              {
-                bool ok = config_printer_map_to_host_serial()!=vi;
-#if USE_DAZZLER>0
-                ok &= config_dazzler_interface()!=vi;
-#endif
-                for(byte i=0; ok && i<NUM_SERIAL_DEVICES; i++) 
-                  ok = config_serial_map_sim_to_host(i)!=vi;
-
-                if( !ok )
-                  {
-                    Serial.print("\r\nVDM-1 can not use the same host interface as any other serial device.\nVisable VDM-1 and continue (y/n/ESC)? ");
-                    do { delay(50); c = serial_read(); } while( c!='y' && c!='n' && c!=27 );
-                    if( c=='y' )
-                      config_flags2 = set_bits(config_flags2, 3, 3, 0);
-                    else
-                      break;
-                  }
-              }
-#endif
-                
-            if( (config_serial_settings&0xFFF7FF) != (new_config_serial_settings&0xFFF7FF) ||
-                (config_serial_settings2) != (new_config_serial_settings2) )
-              {
-                Serial.print(F("\r\nApply new host serial settings (y/n/ESC)? "));
-                do { delay(50); c = serial_read(); } while( c!='y' && c!='n' && c!=27 );
-                Serial.println(c);
-                if( c=='n' || (c=='y' && apply_host_serial_settings()) )
+                else 
                   exit = true;
               }
-            else 
-              exit = true;
 
             if( exit )
               {
                 mem_set_ram_limit_usr(config_mem_size-1);
                 serial_set_config();
-                if( vdm1_get_iface()==config_dazzler_interface() ) vdm1_set_iface(0xff);
-                dazzler_set_iface(config_dazzler_interface());
-                vdm1_set_iface(config_vdm1_interface());
 #if USE_Z80==2
                 cpu_set_processor(config_use_z80() ? PROC_Z80 : PROC_I8080);
 #endif
@@ -2917,10 +2973,10 @@ void config_defaults(bool apply)
 }
 
 
-void config_setup(byte n)
+void config_setup(int n)
 {
   config_defaults(true);
-  if( load_config(n) )
+  if( n<0 || load_config(n) )
     {
       apply_host_serial_settings(new_config_serial_settings, new_config_serial_settings2);
       mem_set_ram_limit_usr(config_mem_size-1);

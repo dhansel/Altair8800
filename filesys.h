@@ -23,8 +23,6 @@ uint16_t filesys_read_data(byte fid, void *data, uint16_t len);
 
 void filesys_close(byte fid);
 
-void filesys_delete(char nm1, char nm2);
-
 bool     filesys_write_file(char nm1, char nm2, const void *data, uint16_t len);
 uint16_t filesys_read_file(char nm1, char nm2, void *data, uint16_t len);
 
