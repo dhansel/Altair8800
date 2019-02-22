@@ -1755,10 +1755,18 @@ void host_system_info()
 
 #if USE_HOST_FILESYS>0
   SwitchSerial.print("SD card file system");
-  SwitchSerial.print(" ("); SwitchSerial.print(SD.card()->cardSize() / (2*1024)); SwitchSerial.println("M)");
+  if( SD.card()->errorCode()==SD_CARD_ERROR_NONE )
+    { SwitchSerial.print(" ("); SwitchSerial.print(SD.card()->cardSize() / (2*1024)); SwitchSerial.println("M)"); }
+  else
+    { SwitchSerial.print(" (card error: 0x"); SwitchSerial.print(SD.card()->errorCode(), HEX); SwitchSerial.println(")"); }
 #else
   SwitchSerial.print(storagefile ? "STORAGE.DAT file on SD card" : "flash memory");
-  SwitchSerial.print(" ("); SwitchSerial.print(due_storagesize / 1024); SwitchSerial.println("K)");
+  SwitchSerial.print(" ("); SwitchSerial.print(due_storagesize / 1024); SwitchSerial.print("K)");
+#if NUM_DRIVES>0 || NUM_HDSK_UNITS>0
+  if( SD.card()->errorCode()!=SD_CARD_ERROR_NONE )
+    { SwitchSerial.print(" (SD card error: 0x"); SwitchSerial.print(SD.card()->errorCode(), HEX); SwitchSerial.print(")"); }
+  SwitchSerial.println();
+#endif
 #endif
 }
 
@@ -1797,7 +1805,10 @@ void host_setup()
 #if NUM_DRIVES>0 || NUM_HDSK_UNITS>0 || USE_HOST_FILESYS>0
   // check if SD card available (send "chip select" signal to HLDA status light)
   HLDAGuard hlda;
-  if( SD.begin(22, SD_SCK_MHZ(25)) )
+  // SdInfo.h in the SdFat library says: Set SCK rate to F_CPU/3 (SPI_DIV3_SPEED) for Due
+  // (84MHZ/3 = 28MHz). If that fails try 4MHz and if that fails too then fall back to 250Khz.
+  // If neither of those work then something is seriously wrong.
+  if( SD.begin(22, SPI_DIV3_SPEED) || SD.begin(22, SD_SCK_MHZ(4)) || SD.begin(22, SD_SCK_HZ(250000)) )
     {
 #if USE_HOST_FILESYS>0
       // storing configurations etc directly on SD card
