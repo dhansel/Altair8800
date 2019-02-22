@@ -1797,7 +1797,7 @@ void host_setup()
 #if NUM_DRIVES>0 || NUM_HDSK_UNITS>0 || USE_HOST_FILESYS>0
   // check if SD card available (send "chip select" signal to HLDA status light)
   HLDAGuard hlda;
-  if( SD.begin(22) )
+  if( SD.begin(22, SD_SCK_MHZ(25)) )
     {
 #if USE_HOST_FILESYS>0
       // storing configurations etc directly on SD card
