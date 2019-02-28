@@ -2816,7 +2816,10 @@ void config_edit()
                   {
                     Serial.println();
                     if( !save_config(i & 0xff) )
-                      Serial.println(F("Saving failed. Capture/replay in progress?"));
+                      {
+                        Serial.println(F("Saving failed. Capture/replay in progress?"));
+                        delay(2000);
+                      }
                   }
               }
 
