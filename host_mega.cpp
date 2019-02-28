@@ -189,33 +189,44 @@ void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
 
 volatile static uint16_t switches_pulse = 0;
 volatile static uint16_t switches_debounced = 0;
-static uint32_t debounceTime[16];
-static const byte function_switch_pin[16] = {20, 21, 4, 5, 6, 7, 8, 9, 18, 19, 16, 17, 14, 15, 3, 2};
-static const uint8_t function_switch_irq[16] = {0, INT_SW_STOP>>24, 0, 0, 0, 0, 0, 0, 
-                                                INT_SW_RESET>>24, INT_SW_CLR>>24, 0, 0, 0, 0, 
-                                                INT_SW_AUX2UP>>24, INT_SW_AUX2DOWN>>24};
+static uint32_t debounceTime[8];
+const PROGMEM uint8_t function_switch_pins[16] = {20, 21, 4, 5, 6, 7, 8, 9, 18, 19, 16, 17, 14, 15, 3, 2};
+const PROGMEM uint8_t function_switch_irqs[16] = {0, INT_SW_STOP>>24, 0, 0, 0, 0, 0, 0, 
+                                                  INT_SW_RESET>>24, INT_SW_CLR>>24, 0, 0, 0, 0, 
+                                                  INT_SW_AUX2UP>>24, INT_SW_AUX2DOWN>>24};
+
+byte function_switch_pin(byte i)
+{
+  return pgm_read_byte_near(function_switch_pins + i);
+}
+
+
+byte function_switch_irq(byte i)
+{
+  return pgm_read_byte_near(function_switch_irqs + i);
+}
 
 
 static void switch_check(byte i)
 {
-  if( millis()>debounceTime[i] )
+  if( millis()>debounceTime[i/2] )
     {
       uint16_t bitval = 1<<i;
-      bool d1 = !digitalRead(function_switch_pin[i]);
+      bool d1 = !digitalRead(function_switch_pin(i));
       bool d2 = (switches_debounced & bitval) ? true : false;
 
       if( d1 && !d2 ) 
         {
           switches_debounced |= bitval;
           switches_pulse     |= bitval;
-          if( function_switch_irq[i] ) altair_interrupt(((uint32_t) function_switch_irq[i])<<24);
-          debounceTime[i] = millis() + 100;
+          if( function_switch_irq(i) ) altair_interrupt(((uint32_t) function_switch_irq(i))<<24);
+          debounceTime[i/2] = millis() + 100;
         }
       else if( !d1 && d2 ) 
         {
           switches_debounced &= ~bitval;
           switches_pulse     &= ~bitval;
-          debounceTime[i] = millis() + 100;
+          debounceTime[i/2] = millis() + 100;
         }
     }
 }
@@ -223,20 +234,20 @@ static void switch_check(byte i)
 
 bool host_read_function_switch(byte i)
 {
-  return !digitalRead(function_switch_pin[i]);
+  return !digitalRead(function_switch_pin(i));
 }
 
 
 bool host_read_function_switch_debounced(byte i)
 {
-  if( function_switch_irq[i]==0 ) switch_check(i);
+  if( function_switch_irq(i)==0 ) switch_check(i);
   return (switches_debounced & (1<<i)) ? true : false;
 }
 
 
 bool host_read_function_switch_edge(byte i)
 {
-  if( function_switch_irq[i]==0 ) switch_check(i);
+  if( function_switch_irq(i)==0 ) switch_check(i);
   uint16_t bitval = 1<<i;
   bool b = switches_pulse & bitval ? true : false;
   if( b ) switches_pulse &= ~bitval;
@@ -247,7 +258,7 @@ bool host_read_function_switch_edge(byte i)
 uint16_t host_read_function_switches_edge()
 {
   for(byte i=0; i<16; i++) 
-    if( function_switch_irq[i]==0 ) 
+    if( function_switch_irq(i)==0 ) 
       switch_check(i);
 
   uint16_t res = switches_pulse;
@@ -258,7 +269,7 @@ uint16_t host_read_function_switches_edge()
 
 void host_reset_function_switch_state()
 {
-  for(byte i=0; i<16; i++) debounceTime[i]=0;
+  for(byte i=0; i<8; i++) debounceTime[i]=0;
   switches_debounced = 0;
   switches_pulse     = 0;
 }
@@ -279,11 +290,11 @@ static void switch_interrupt5() { switch_interrupt(SW_AUX2DOWN); }
 
 static void switches_setup()
 {
-  attachInterrupt(digitalPinToInterrupt(function_switch_pin[SW_STOP]),     switch_interrupt1, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(function_switch_pin[SW_RESET]),    switch_interrupt2, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(function_switch_pin[SW_CLR]),      switch_interrupt3, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(function_switch_pin[SW_AUX2UP]),   switch_interrupt4, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(function_switch_pin[SW_AUX2DOWN]), switch_interrupt5, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(function_switch_pin(SW_STOP)),     switch_interrupt1, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(function_switch_pin(SW_RESET)),    switch_interrupt2, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(function_switch_pin(SW_CLR)),      switch_interrupt3, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(function_switch_pin(SW_AUX2UP)),   switch_interrupt4, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(function_switch_pin(SW_AUX2DOWN)), switch_interrupt5, CHANGE);
 
   delay(1);
   host_reset_function_switch_state();
