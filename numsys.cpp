@@ -255,3 +255,23 @@ byte numsys_get_byte_length()
 {
   return numsys==NUMSYS_HEX ? 2 : 3;
 }
+
+
+#ifndef __AVR_ATmega2560__
+// see comment in numsys.h
+String numsys_byte2string(byte b)
+{
+  unsigned int l = 0;
+  String s;
+
+  switch( numsys )
+    {
+    case NUMSYS_OCT: s = String(b, OCT); l = 3; break;
+    case NUMSYS_DEC: s = String(b, DEC); l = 0; break;
+    case NUMSYS_HEX: s = String(b, HEX); l = 2; break;
+    }
+
+  while( s.length()<l ) s = String('0') + s;
+  return s;
+}
+#endif

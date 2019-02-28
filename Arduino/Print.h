@@ -34,6 +34,35 @@
 #endif
 #define BIN 2
 
+
+class String : public std::string
+{
+ public:
+  String() : std::string() {}
+  String(const char *s) : std::string(s) {}
+  String(char c) : std::string(1, c) {}
+  String(byte n, int base = 10) { fromNumber(n, base); }
+  String(uint16_t n, int base = 10) { fromNumber(n, base); }
+  String(uint32_t n, int base = 10) { fromNumber(n, base); }
+
+  String operator+(const String &s) const
+  { return String((std::string(c_str()) + std::string(s.c_str())).c_str()); }
+
+ private:
+  void fromNumber(unsigned int n, int base)
+    {
+      char buf[20];
+      switch( base )
+        {
+        case  8: sprintf(buf, "%o", n); break;
+        case 16: sprintf(buf, "%X", n); break;
+        default: sprintf(buf, "%u", n); break;
+        }
+      *this = String(buf);
+    }
+};
+
+
 class Print
 {
   private:
@@ -63,7 +92,7 @@ class Print
     virtual int availableForWrite() { return 0; }
 
     //size_t print(const __FlashStringHelper *);
-    //size_t print(const String &);
+    size_t print(const String &);
     size_t print(const char[]);
     size_t print(char);
     size_t print(unsigned char, int = DEC);
@@ -75,7 +104,7 @@ class Print
     //size_t print(const Printable&);
 
     //size_t println(const __FlashStringHelper *);
-    //size_t println(const String &s);
+    size_t println(const String &s);
     size_t println(const char[]);
     size_t println(char);
     size_t println(unsigned char, int = DEC);

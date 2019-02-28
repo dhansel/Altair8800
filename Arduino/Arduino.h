@@ -14,11 +14,15 @@
 #define isnan    _isnan
 #define isinf(x) (!_finite(x))
 #pragma warning(disable:4996)
+#else
+#define stricmp  strcasecmp
+#define strnicmp strncasecmp
 #endif
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <string>
 #include <inttypes.h>
 #include <Print.h>
 
@@ -28,6 +32,10 @@
 #ifndef max
 #define max(x, y) ((x)>(y)?(x):(y))
 #endif
+
+#undef CPU_XOR
+#undef CPU_AND
+#undef CPU_OR
 
 unsigned long millis();
 unsigned long micros();
@@ -63,6 +71,7 @@ extern SerialClass  Serial;
 #define pgm_read_byte(p) *(p)
 #define pgm_read_word(p) *(p)
 #define strcmp_P strcmp
+#define __FlashStringHelper char
 
 #define B00000000 0
 #define B00000001 1

@@ -28,4 +28,14 @@ uint32_t numsys_read_dword(bool *ESC = NULL);
 byte     numsys_read_hex_byte();
 uint16_t numsys_read_hex_word();
 
+#ifdef __AVR_ATmega2560__
+// on Arduino Mega do not use String as it requires heap space
+// and RAM is in short supply. This function is used exclusively for
+// logging via Serial.print, so returning the number directly will still
+// work, it just will always be printed as decimal
+#define  numsys_byte2string(i) i
+#else
+String   numsys_byte2string(byte b);
+#endif
+
 #endif

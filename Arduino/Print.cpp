@@ -55,12 +55,10 @@ size_t Print::write(const uint8_t *buffer, size_t size)
 }
 */
 
-/*
 size_t Print::print(const String &s)
 {
   return write(s.c_str(), s.length());
 }
-*/
 
 size_t Print::print(const char str[])
 {
@@ -135,14 +133,12 @@ size_t Print::println(void)
   return write("\r\n");
 }
 
-/*
 size_t Print::println(const String &s)
 {
   size_t n = print(s);
   n += println();
   return n;
 }
-*/
 
 size_t Print::println(const char c[])
 {

@@ -38,6 +38,7 @@
 #include "vdm1.h"
 
 #define BIT(n) (1<<(n))
+#define b2s numsys_byte2string
 
 uint16_t cswitch = 0;
 uint16_t dswitch = 0;
@@ -187,22 +188,22 @@ void process_inputs()
             {
               // SW6 is up => save memory page
               if( filesys_write_file('M', filenum, Mem+page, 256) )
-                DBG_FILEOPS4(3, F("saved memory page "), int(page>>8), F(" to file #"), int(filenum));
+                DBG_FILEOPS4(3, F("saved memory page "), b2s(page>>8), F(" to file #"), b2s(filenum));
               else
-                DBG_FILEOPS4(2, F("unable to save memory page "), int(page>>8), F(" to file #"), int(filenum));
+                DBG_FILEOPS4(2, F("unable to save memory page "), b2s(page>>8), F(" to file #"), b2s(filenum));
             }
           else
             {
               // SW6 is down => load memory page
               if( !MEM_IS_WRITABLE(page) )
-                DBG_FILEOPS3(2, F("memory page "), int(page>>8), F(" is not writable"));
+                DBG_FILEOPS3(2, F("memory page "), b2s(page>>8), F(" is not writable"));
               else if( filesys_read_file('M', filenum, Mem+page, 256)==256 )
                 {
-                  DBG_FILEOPS4(3, F("loaded memory page "), int(page>>8), F(" from file #"), int(filenum));
+                  DBG_FILEOPS4(3, F("loaded memory page "), b2s(page>>8), F(" from file #"), b2s(filenum));
                   regPC = page;
                 }
               else
-                DBG_FILEOPS4(2, F("file not found for memory page "), int(page>>8), F(" from file #"), int(filenum));
+                DBG_FILEOPS4(2, F("file not found loading memory page "), b2s(page>>8), F(" from file #"), b2s(filenum));
                 
               altair_set_outputs(regPC, MREAD(regPC));
             }
@@ -686,7 +687,6 @@ void read_inputs_serial()
       else
         Serial.println();
     }
-#if STANDALONE>0
   else if( data == 's' )
     {
       Serial.print(F("\r\nCapture from "));
@@ -798,7 +798,6 @@ void read_inputs_serial()
           Serial.println();
         }
     }
-#endif
   else if( data == 'Q' )
     cswitch |= BIT(SW_PROTECT);
   else if( data == 'q' )

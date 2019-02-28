@@ -26,6 +26,7 @@
 #include "cpucore.h"
 #include "prog_ps2.h"
 #include "timer.h"
+#include "numsys.h"
 
 #define SST_RDRF     0x01 // receive register full (character received)
 #define SST_TDRE     0x02 // send register empty (ready for next byte)
@@ -39,6 +40,8 @@
 #define SSC_INTTX    0x20 // transmit interrupt enabled
 #define SSC_REALTIME 0x40 // force real-(simulation-)time operation (always use baud rate)
 #define SSC_INTRX    0x80 // receive  interrupt enabled
+
+#define b2s numsys_byte2string
 
 byte     acr_cload_fid     = 0;
 uint32_t acr_cload_timeout = 0;
@@ -60,6 +63,24 @@ static byte last_active_primary_device = CSM_SIO;
 static void serial_replay(byte dev);
 static void acr_read_next_byte();
 static void serial_timer_interrupt_check_enable(byte dev = 0xff);
+
+
+static const __FlashStringHelper *devname(byte dev)
+{
+  switch( dev )
+    {
+    case CSM_SIO:   return F("88-SIO");
+    case CSM_ACR:   return F("ACR");
+    case CSM_2SIO1: return F("88-2SIO-1"); 
+    case CSM_2SIO2: return F("88-2SIO-2");
+#if USE_SECOND_2SIO>0
+    case CSM_2SIO3: return F("2nd 88-2SIO-1");
+    case CSM_2SIO4: return F("2nd 88-2SIO-2");
+#endif
+    }
+  
+  return F("[invalid device]");
+}
 
 
 byte serial_last_active_primary_device()
@@ -138,38 +159,25 @@ void serial_replay_start(byte dev, bool example, byte filenum)
 {
   serial_acr_check_cload_timeout();
 
-  switch( dev )
-    {
-    case CSM_SIO:   DBG_FILEOPS3(3, F("replaying file #"), filenum, F(" to 88-SIO"));    break;
-    case CSM_ACR:   DBG_FILEOPS3(3, F("replaying file #"), filenum, F(" to ACR"));       break;
-    case CSM_2SIO1: DBG_FILEOPS3(3, F("replaying file #"), filenum, F(" to 88-2SIO-1")); break;
-    case CSM_2SIO2: DBG_FILEOPS3(3, F("replaying file #"), filenum, F(" to 88-2SIO-2")); break;
-#if USE_SECOND_2SIO>0
-    case CSM_2SIO3: DBG_FILEOPS3(3, F("replaying file #"), filenum, F(" to 2nd 88-2SIO-1")); break;
-    case CSM_2SIO4: DBG_FILEOPS3(3, F("replaying file #"), filenum, F(" to 2nd 88-2SIO-2")); break;
-#endif
-    default:        DBG_FILEOPS(1, F("invalid replay device"));  break;
-    }
-  
   if( example )
     {
       // load example
       if( prog_examples_read_start(filenum) )
         {
           serial_fid[dev] = 0xff;
-          DBG_FILEOPS2(3, F("loading example "), int(filenum));
+          DBG_FILEOPS4(3, F("loading example #"), b2s(filenum), F(" via "), devname(dev));
         }
       else
-        DBG_FILEOPS2(2, F("example does not exist: "), int(filenum));
+        DBG_FILEOPS3(2, F("example #"), b2s(filenum), F(" does not exist"));
     }
   else
     {
       // load from file
       serial_fid[dev] = filesys_open_read('D', filenum);
       if( serial_fid[dev]>0 )
-	DBG_FILEOPS2(3, F("replaying data, file "), int(filenum));
+	DBG_FILEOPS4(3, F("loading data file #"), b2s(filenum), F(" via "), devname(dev));
       else
-	DBG_FILEOPS2(2, F("unable to replay data (file not found), file "), int(filenum));
+	DBG_FILEOPS3(2, F("data file #"), b2s(filenum), F(" not found"));
     }
 
   // either start interrupt timer or prepare first byte for replay
@@ -188,20 +196,7 @@ void serial_capture_start(byte dev, byte filenum)
 
   serial_fid[dev] = filesys_open_write('D', filenum);
   if( serial_fid[dev] )
-    {
-      switch( dev )
-	{
-	case CSM_SIO:   DBG_FILEOPS2(3, F("capturing from 88-SIO to file #"), filenum);    break;
-	case CSM_ACR:   DBG_FILEOPS2(3, F("capturing from ACR to file #"), filenum);       break;
-	case CSM_2SIO1: DBG_FILEOPS2(3, F("capturing from 88-2SIO-1 to file #"), filenum); break;
-	case CSM_2SIO2: DBG_FILEOPS2(3, F("capturing from 88-2SIO-2 to file #"), filenum); break;
-#if USE_SECOND_2SIO>0
-	case CSM_2SIO3: DBG_FILEOPS2(3, F("capturing from 2nd 88-2SIO-1 to file #"), filenum); break;
-	case CSM_2SIO4: DBG_FILEOPS2(3, F("capturing from 2nd 88-2SIO-2 to file #"), filenum); break;
-#endif
-	default:        DBG_FILEOPS(1, F("invalid capture device"));  break;
-	}
-    }
+    DBG_FILEOPS4(3, F("capturing from "), devname(dev), F(" to data file #"), b2s(filenum));
   else
     DBG_FILEOPS(1, F("unable to start capturing (storage full?)"));
   
@@ -490,7 +485,7 @@ void serial_write(byte dev, byte data)
           //serial_update_hlda_led();
         }
       else
-        DBG_FILEOPS2(5, F("writing captured data: "), int(data));
+        DBG_FILEOPS2(5, F("writing captured data: "), b2s(data));
     }
 }
 
