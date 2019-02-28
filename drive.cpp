@@ -69,10 +69,13 @@ static byte drive_num_sectors[NUM_DRIVES];
 static byte drive_num_tracks[NUM_DRIVES];
 static HOST_FILESYS_FILE_TYPE drive_file[NUM_DRIVES];
 
-#define DRIVE_SECTOR_TRUE_DELAY       5200
+#define DRIVE_SECTOR_TRUE_DELAY       5170
 #define DRIVE_SECTOR_NOT_TRUE_DELAY     30
-#define DRIVE_HEAD_STEP_DELAY        40000
+#define DRIVE_HEAD_STEP_DELAY1       10000
+#define DRIVE_HEAD_STEP_DELAY2        1000
+#define DRIVE_HEAD_STEP_DELAY3       20000
 static bool drive_sector_true = false;
+static byte drive_head_moving = 0;
 
 static uint32_t drive_get_file_pos(byte drive_num)
 {
@@ -100,31 +103,43 @@ static void drive_sector_interrupt()
 {
   uint32_t d;
 
-  if( drive_sector_true )
+  if( drive_head_moving>0 )
     {
-      // sector was true => reset to not true
-      drive_sector_true = false;
-      d = DRIVE_SECTOR_TRUE_DELAY;
+      if( drive_head_moving==1 )
+        { drive_head_moving = 2; d = DRIVE_HEAD_STEP_DELAY2; }
+      else if( drive_head_moving==2 )
+        { drive_head_moving = 3; d = DRIVE_HEAD_STEP_DELAY3; }
+      else
+        { drive_head_moving = 0; d = DRIVE_SECTOR_NOT_TRUE_DELAY; }
     }
-  else
+  else 
     {
-      // flush write buffer and end write mode (if enabled)
-      if( drive_status[drive_selected] & DRIVE_STATUS_WRITE )
-        drive_flush(drive_selected);
-
-      // advance current sector
-      drive_current_sector[drive_selected]++;
-      if( drive_current_sector[drive_selected] >= drive_num_sectors[drive_selected] )
-        drive_current_sector[drive_selected] = 0;
+      if( drive_sector_true )
+        {
+          // sector was true => reset to not true
+          drive_sector_true = false;
+          d = DRIVE_SECTOR_TRUE_DELAY;
+        }
+      else
+        {
+          // flush write buffer and end write mode (if enabled)
+          if( drive_status[drive_selected] & DRIVE_STATUS_WRITE )
+            drive_flush(drive_selected);
+          
+          // advance current sector
+          drive_current_sector[drive_selected]++;
+          if( drive_current_sector[drive_selected] >= drive_num_sectors[drive_selected] )
+            drive_current_sector[drive_selected] = 0;
+          
+          drive_current_byte[drive_selected] = 0xff;
+          drive_sector_true = true;
+          d = DRIVE_SECTOR_NOT_TRUE_DELAY;
+        }
       
-      drive_current_byte[drive_selected] = 0xff;
-      drive_sector_true = true;
-      d = DRIVE_SECTOR_NOT_TRUE_DELAY;
+      // update Altair interrupt line
+      if( drive_status[drive_selected] & DRIVE_STATUS_INT_EN )
+        altair_interrupt(INT_DRIVE, drive_sector_true);
     }
-  
-  // update Altair interrupt line
-  if( drive_status[drive_selected] & DRIVE_STATUS_INT_EN )
-    altair_interrupt(INT_DRIVE, drive_sector_true);
 
   // start timer again with new delay
   timer_start(TIMER_DRIVE, d);
@@ -236,6 +251,7 @@ void drive_set_realtime(bool b)
     {
       // drive has no interrupts enabled => stop timer
       timer_stop(TIMER_DRIVE);
+      drive_head_moving = 0;
     }
 
   for(byte i=0; i<NUM_DRIVES; i++)
@@ -248,6 +264,7 @@ void drive_set_realtime(bool b)
 
 void drive_reset()
 {
+  drive_head_moving = 0;
   for(byte i=0; i<NUM_DRIVES; i++)
     drive_unmount(i);
 }
@@ -276,7 +293,9 @@ byte drive_in(byte addr)
         data = 0;
         if( drive_selected<NUM_DRIVES && (drive_status[drive_selected] & DRIVE_STATUS_HAVEDISK) )
           {
-            data |= 0x02; // always ready to move head
+            // head movement allowed if not currently moving
+            if( drive_head_moving==0 || drive_head_moving==2 )
+              data |= 0x02;
 
             if( drive_status[drive_selected] & DRIVE_STATUS_HEADLOAD )
               {
@@ -398,6 +417,7 @@ void drive_out(byte addr, byte data)
           {
             // stop timer interrupts
             timer_stop(TIMER_DRIVE);
+            drive_head_moving = 0;
 
             if( data & 0x80 )
               {
@@ -434,25 +454,29 @@ void drive_out(byte addr, byte data)
 
         if( drive_selected < NUM_DRIVES )
           {
-            if( (data & 0x01) && drive_current_track[drive_selected]<drive_num_tracks[drive_selected]-1 ) 
+            if( (data & 0x01) && drive_current_track[drive_selected]<drive_num_tracks[drive_selected]-1 &&
+                (drive_head_moving==0 || drive_head_moving==2) )
               {
                 drive_current_track[drive_selected]++;
                 drive_current_byte[drive_selected] = 0xff;
                 if( timer_running(TIMER_DRIVE) )
                   {
                     drive_sector_true = false;
-                    timer_start(TIMER_DRIVE, DRIVE_HEAD_STEP_DELAY);
+                    drive_head_moving = 1;
+                    timer_start(TIMER_DRIVE, DRIVE_HEAD_STEP_DELAY1);
                   }
               }
             
-            if( (data & 0x02) && drive_current_track[drive_selected]>0 ) 
+            if( (data & 0x02) && drive_current_track[drive_selected]>0 && 
+                (drive_head_moving==0 || drive_head_moving==2) )
               {
                 drive_current_track[drive_selected]--;
                 drive_current_byte[drive_selected] = 0xff;
                 if( timer_running(TIMER_DRIVE) )
                   {
                     drive_sector_true = false;
-                    timer_start(TIMER_DRIVE, DRIVE_HEAD_STEP_DELAY);
+                    drive_head_moving = 1;
+                    timer_start(TIMER_DRIVE, DRIVE_HEAD_STEP_DELAY1);
                   }
               }
             
@@ -470,7 +494,7 @@ void drive_out(byte addr, byte data)
             if( !timer_running(TIMER_DRIVE) && (drive_status[drive_selected]&(DRIVE_STATUS_INT_EN|DRIVE_STATUS_REALTIME)) )
               timer_start(TIMER_DRIVE, DRIVE_SECTOR_TRUE_DELAY);
             else if( timer_running(TIMER_DRIVE) && !(drive_status[drive_selected]&(DRIVE_STATUS_INT_EN|DRIVE_STATUS_REALTIME)) )
-              timer_stop(TIMER_DRIVE); altair_interrupt(INT_DRIVE, false); 
+              { timer_stop(TIMER_DRIVE); drive_head_moving = 0; altair_interrupt(INT_DRIVE, false); }
           }
 
         break;
