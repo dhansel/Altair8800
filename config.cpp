@@ -2863,7 +2863,11 @@ void config_edit()
                       exit = true;
                   }
                 else 
-                  exit = true;
+                  {
+                    dazzler_set_iface(config_dazzler_interface());
+                    vdm1_set_iface(config_vdm1_interface());
+                    exit = true;
+                  }
               }
 
             if( exit )
