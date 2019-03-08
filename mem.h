@@ -39,15 +39,15 @@ void mem_print_layout();
 #include "dazzler.h"
 #if USE_VDM1>0
 #include "vdm1.h"
-#define MWRITE(a,v) {if( MEM_IS_WRITABLE(a) ) Mem[a]=v; dazzler_write_mem(a, v); vdm1_write_mem(a, v); }
+#define MWRITE(a,v) { dazzler_write_mem(a, v); vdm1_write_mem(a, v); if( MEM_IS_WRITABLE(a) ) Mem[a]=v; }
 #else
-#define MWRITE(a,v) {if( MEM_IS_WRITABLE(a) ) Mem[a]=v; dazzler_write_mem(a, v); }
+#define MWRITE(a,v) { dazzler_write_mem(a, v); if( MEM_IS_WRITABLE(a) ) Mem[a]=v; }
 #endif
 #elif USE_VDM1>0
 #include "vdm1.h"
-#define MWRITE(a,v) {if( MEM_IS_WRITABLE(a) ) Mem[a]=v; vdm1_write_mem(a, v); }
+#define MWRITE(a,v) { vdm1_write_mem(a, v); if( MEM_IS_WRITABLE(a) ) Mem[a]=v; }
 #else
-#define MWRITE(a,v) {if( MEM_IS_WRITABLE(a) ) Mem[a]=v; }
+#define MWRITE(a,v) { if( MEM_IS_WRITABLE(a) ) Mem[a]=v; }
 #endif
 
 #endif

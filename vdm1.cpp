@@ -129,12 +129,15 @@ void vdm1_write_mem_(uint16_t a, byte v)
   printf("vdm1_write_mem(%04x, %02x)\n", a, v);
 #endif
 
-  a -= vdm1_mem_start;
-  byte b[3];
-  b[0] = VDM_MEMBYTE | ((a & 0x0300)/256) ;
-  b[1] = a & 255;
-  b[2] = v;
-  vdm1_send(b, 3);
+  if( Mem[a] != v )
+    {
+      a -= vdm1_mem_start;
+      byte b[3];
+      b[0] = VDM_MEMBYTE | ((a & 0x0300)/256) ;
+      b[1] = a & 255;
+      b[2] = v;
+      vdm1_send(b, 3);
+    }
 }
 
 

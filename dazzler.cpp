@@ -85,12 +85,15 @@ void dazzler_write_mem_(uint16_t a, byte v)
   printf("dazzler_write_mem(%04x, %02x)\n", a, v);
 #endif
 
-  a -= dazzler_mem_start;
-  byte b[3];
-  b[0] = DAZ_MEMBYTE | ((a & 0x0700)/256) ;
-  b[1] = a & 255;
-  b[2] = v;
-  dazzler_send(b, 3);
+  if( Mem[a]!=v )
+    {
+      a -= dazzler_mem_start;
+      byte b[3];
+      b[0] = DAZ_MEMBYTE | ((a & 0x0700)/256) ;
+      b[1] = a & 255;
+      b[2] = v;
+      dazzler_send(b, 3);
+    }
 }
 
 
