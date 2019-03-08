@@ -187,10 +187,15 @@ bool prog_create_temporary_rom(uint16_t ramdst, const void *src, uint32_t length
 #if MAX_NUM_ROMS==0
   return prog_copy_to_ram(ramdst, src, length);
 #else
-  if( ramdst+length <= MEMSIZE && mem_add_rom(ramdst, length, name, MEM_ROM_FLAG_TEMP) )
+  if( ramdst+length <= MEMSIZE )
     {
-      host_copy_flash_to_ram(Mem+ramdst, src, length);
-      return true;
+      if( memcmp(Mem+ramdst, src, length)==0 )
+        return true;
+      else if( mem_add_rom(ramdst, length, name, MEM_ROM_FLAG_TEMP) )
+        {
+          host_copy_flash_to_ram(Mem+ramdst, src, length);
+          return true;
+        }
     }
   else
     return false;

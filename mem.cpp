@@ -338,7 +338,7 @@ bool mem_remove_rom(byte i, bool clear)
       mem_protect_calc_limit();
 
       // initialize newly visible RAM 
-      mem_ram_init(start, start+length-1);
+      if( clear ) mem_ram_init(start, start+length-1);
       
       return true;
     }
