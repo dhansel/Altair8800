@@ -204,8 +204,8 @@ bool prog_create_temporary_rom(uint16_t ramdst, const void *src, uint32_t length
           return true;
         }
     }
-  else
-    return false;
+
+  return false;
 #endif
 }
 
