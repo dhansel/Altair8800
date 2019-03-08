@@ -10,6 +10,7 @@
 
 byte filesys_open_write(char nm1, char nm2);
 byte filesys_open_read(char nm1, char nm2);
+bool filesys_exists(char nm1, char nm2);
 
 bool filesys_write_char(byte fid, byte c);
 bool filesys_write_data(byte fid, const void *data, uint16_t len);

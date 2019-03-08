@@ -2814,10 +2814,24 @@ void config_edit()
                 Serial.print(F("\r\nSave as config # (0=default): "));
                 if( numsys_read_byte(&i) )
                   {
+                    bool ok = true;
                     Serial.println();
-                    if( !save_config(i & 0xff) )
+                    if( filesys_exists('C', i) )
                       {
+                        char c;
+                        Serial.print(F("Configuration #")); numsys_print_byte(i);
+                        Serial.print(F(" exists. Overwrite (y/n)? "));
+                        do { delay(50); c = serial_read(); } while( c!='y' && c!='n' );
+                        ok = (c=='y');
+                      }
+
+                    if( ok && !save_config(i) )
+                      {
+#if USE_HOST_FILESYS>0
+                        Serial.println(F("Saving failed.?"));
+#else
                         Serial.println(F("Saving failed. Capture/replay in progress?"));
+#endif
                         delay(2000);
                       }
                   }

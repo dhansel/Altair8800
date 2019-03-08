@@ -63,24 +63,33 @@ static void free_file_id(byte fid)
 }
 
 
+static const char* filesys_get_fname(char nm1, char nm2)
+{
+  static char buf[10];
+
+  switch( nm1 )
+    {
+    case 'C': sprintf(buf, "%02X.CFG", (unsigned char) nm2); break;
+    case 'B': sprintf(buf, "%c.BAS", nm2); break;
+    case 'M': sprintf(buf, "%02X.MEM", (unsigned char) nm2); break;
+    case 'D': sprintf(buf, "%02X.DAT", (unsigned char) nm2); break;
+    default : sprintf(buf, "%02X.T%02X", (unsigned char) nm2, (unsigned char) nm1); break;
+    }
+  
+  return buf;
+}
+
+
 static byte filesys_open_file(char nm1, char nm2, bool write)
 {
   byte fid = alloc_file_id(write);
 
   if( fid>0 )
     {
-      char buf[10];
-      switch( nm1 )
-        {
-        case 'C': sprintf(buf, "%02X.CFG", (unsigned char) nm2); break;
-        case 'B': sprintf(buf, "%c.BAS", nm2); break;
-        case 'M': sprintf(buf, "%02X.MEM", (unsigned char) nm2); break;
-        case 'D': sprintf(buf, "%02X.DAT", (unsigned char) nm2); break;
-        default : sprintf(buf, "%02X.T%02X", (unsigned char) nm2, (unsigned char) nm1); break;
-        }
+      const char *fname = filesys_get_fname(nm1, nm2);
 
-      if( write && host_filesys_file_exists(buf) ) host_filesys_file_remove(buf);
-      HOST_FILESYS_FILE_TYPE f = host_filesys_file_open(buf, write);
+      if( write && host_filesys_file_exists(fname) ) host_filesys_file_remove(fname);
+      HOST_FILESYS_FILE_TYPE f = host_filesys_file_open(fname, write);
       if( f )
         file_info[fid-1] = f;
       else
@@ -99,6 +108,11 @@ byte filesys_open_read(char nm1, char nm2)
 byte filesys_open_write(char nm1, char nm2)
 {
   return filesys_open_file(nm1, nm2, true);
+}
+
+bool filesys_exists(char nm1, char nm2)
+{
+  return host_filesys_file_exists(filesys_get_fname(nm1, nm2));
 }
 
 bool filesys_write_data(byte fid, const void *data, uint16_t len)
@@ -492,6 +506,17 @@ byte filesys_open_read(char nm1, char nm2)
 
   //printf("filesys_open_read(%c, %c) = %i\n", nm1, nm2, fid);
   return fid;
+}
+
+
+bool filesys_exists(char nm1, char nm2)
+{
+  struct DirEntryStruct entry;
+  if( num_open_files < MAX_OPEN_FILES )
+    if( dir_find_file(nm1, nm2, &entry)!=0xff && entry.len>0 )
+      return true;
+
+  return false;
 }
 
 
