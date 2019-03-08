@@ -116,6 +116,7 @@
     <ClCompile Include="sdmanager.cpp" />
     <ClCompile Include="serial.cpp" />
     <ClCompile Include="switch_serial.cpp" />
+    <ClCompile Include="tdrive.cpp" />
     <ClCompile Include="timer.cpp" />
     <ClCompile Include="vdm1.cpp" />
     <ClCompile Include="XModem.cpp" />
@@ -162,6 +163,7 @@
     <ClInclude Include="sdmanager.h" />
     <ClInclude Include="serial.h" />
     <ClInclude Include="switch_serial.h" />
+    <ClInclude Include="tdrive.h" />
     <ClInclude Include="timer.h" />
     <ClInclude Include="vdm1.h" />
   </ItemGroup>
