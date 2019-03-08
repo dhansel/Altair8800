@@ -56,7 +56,9 @@ struct prog_info_struct get_prog_info(byte i)
       {PSTR("16k ROM Basic"),              prog_basic_copy_16k,           true},
 #if !defined(__AVR_ATmega2560__)
       {PSTR("MITS Programming System II"), prog_ps2_copy_monitor,         true},
+#if NUM_DRIVES>0
       {PSTR("Disk boot ROM"),              prog_tools_copy_diskboot,      true},
+#endif
       {PSTR("ALTAIR Turnkey Monitor"),     prog_tools_copy_turnmon,       true},
       {PSTR("Music ('Daisy')"),            prog_games_copy_daisy,         true},
 #endif
@@ -64,8 +66,13 @@ struct prog_info_struct get_prog_info(byte i)
       {PSTR("CPU Exerciser"),              prog_tools_copy_exerciser,     true},
 #if !defined(__AVR_ATmega2560__)
       {PSTR("Music system"),               prog_tools_copy_musicsys,      true},
+#if NUM_HDSK_UNITS>0
       {PSTR("Hard disk boot ROM"),         prog_tools_copy_hdbl,          true},
+#endif
       {PSTR("Multi-boot loader ROM"),      prog_tools_copy_multiboot,     true},
+#if NUM_TDRIVES>0
+      {PSTR("Tarbell disk boot ROM"),      prog_tools_copy_tdiskboot,     true},
+#endif
 #endif
 #if USE_DAZZLER>0
       {PSTR("Dazzler Kaleidoscope"),       prog_dazzler_copy_kaleidoscope,true},

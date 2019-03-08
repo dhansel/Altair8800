@@ -8,8 +8,9 @@
 
 #include <Arduino.h>
 
-#define IMAGE_FLOPPY 0
-#define IMAGE_HDSK   1
+#define IMAGE_FLOPPY  0
+#define IMAGE_HDSK    1
+#define IMAGE_TARBELL 2
 
 const char *image_get_dir_content(byte image_type);
 bool        image_get_filename(byte image_type, byte image_num, char *filename, int buf_len, bool check_exist = true);

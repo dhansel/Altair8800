@@ -31,6 +31,7 @@
 #include "numsys.h"
 #include "filesys.h"
 #include "drive.h"
+#include "tdrive.h"
 #include "hdsk.h"
 #include "timer.h"
 #include "prog.h"
@@ -259,35 +260,46 @@ void process_inputs()
         {
           // program shortcut
           byte p = config_aux1_program();
-          if( p & 0x80 )
+          if( p < 0x40 )
             {
-              if( p & 0x40 )
+              if( prog_get_name(p)!=NULL )
                 {
-                  // run hard disk (first mount disk then install and run hard disk boot ROM)
-                  if( hdsk_mount(0, 0, p & 0x3f) )
-                    {
-                      dswitch = (dswitch & 0xff00) | 14;
-                      cswitch = BIT(SW_AUX1DOWN);
-                      process_inputs();
-                    }
-                }
-              else
-                {
-                  // run disk (first mount disk then install and run disk boot ROM)
-                  if( drive_mount(0, p & 0x3f) )
-                    {
-                      dswitch = (dswitch & 0xff00) | 8;
-                      cswitch = BIT(SW_AUX1DOWN);
-                      process_inputs();
-                    }
+                  // run program
+                  dswitch = (dswitch & 0xff00) | p;
+                  cswitch = BIT(SW_AUX1DOWN);
+                  process_inputs();
                 }
             }
-          else if( p>0 && prog_get_name(p)!=NULL )
+          else if( p < 0x80 )
             {
-              // run program
-              dswitch = (dswitch & 0xff00) | p;
-              cswitch = BIT(SW_AUX1DOWN);
-              process_inputs();
+              // run tarbell disk (first mount disk then install and run tarbell disk boot ROM)
+              tdrive_reset();
+              if( tdrive_mount(0, p & 0x3f) )
+                {
+                  dswitch = (dswitch & 0xff00) | 16;
+                  cswitch = BIT(SW_AUX1DOWN);
+                  process_inputs();
+                }
+            }
+          else if( p < 0xC0 )
+            {
+              // run disk (first mount disk then install and run disk boot ROM)
+              if( drive_mount(0, p & 0x3f) )
+                {
+                  dswitch = (dswitch & 0xff00) | 8;
+                  cswitch = BIT(SW_AUX1DOWN);
+                  process_inputs();
+                }
+            }
+          else
+            {
+              // run hard disk (first mount disk then install and run hard disk boot ROM)
+              if( hdsk_mount(0, 0, p & 0x3f) )
+                {
+                  dswitch = (dswitch & 0xff00) | 14;
+                  cswitch = BIT(SW_AUX1DOWN);
+                  process_inputs();
+                }
             }
         }
     }
@@ -301,16 +313,39 @@ void process_inputs()
 	{
 	  if( (dswitch & 0xff)==0 )
 	    drive_dir();
-	  else if( drive_mount((dswitch >> 8) & 0x0f, dswitch & 0xff) )
-	    {
-	      const char *desc = drive_get_image_description(dswitch&0xff);
-	      if( desc==NULL )
-                DBG_FILEOPS4(2, F("mounted new disk image "), drive_get_image_filename(dswitch&0xff, false), F(" in drive "), (dswitch>>8) & 0x0f);
-	      else
-		DBG_FILEOPS4(2, F("mounted disk image '"), desc, F("' in drive "), (dswitch>>8) & 0x0f);
-	    }
-	  else
-	    DBG_FILEOPS4(1, F("error mounting disk image "), drive_get_image_filename(dswitch&0xff, false), F(" in drive "), (dswitch>>8) & 0x0f);
+	  else 
+            {
+              const char *desc = drive_get_image_description(dswitch&0xff);
+              if( drive_mount((dswitch >> 8) & 0x0f, dswitch & 0xff) )
+                {
+                  if( desc==NULL )
+                    DBG_FILEOPS4(2, F("mounted new disk image "), drive_get_image_filename(dswitch&0xff, false), F(" in drive "), (dswitch>>8) & 0x0f);
+                  else
+                    DBG_FILEOPS4(2, F("mounted disk image '"), desc, F("' in drive "), (dswitch>>8) & 0x0f);
+                }
+              else
+                DBG_FILEOPS4(1, F("error mounting disk image "), drive_get_image_filename(dswitch&0xff, false), F(" in drive "), (dswitch>>8) & 0x0f);
+            }
+	}
+#endif
+#if NUM_TDRIVES>0
+      else if( (dswitch&0xF000)==0x5000 )
+	{
+	  if( (dswitch & 0xff)==0 )
+	    tdrive_dir();
+	  else 
+            {
+	      const char *desc = tdrive_get_image_description(dswitch&0xff);
+              if( tdrive_mount((dswitch >> 8) & 0x03, dswitch & 0xff) )
+                {
+                  if( desc==NULL )
+                    DBG_FILEOPS4(2, F("mounted new disk image "), drive_get_image_filename(dswitch&0xff, false), F(" in tarbell drive "), (dswitch>>8) & 0x0f);
+                  else
+                    DBG_FILEOPS4(2, F("mounted disk image '"), desc, F("' in tarbell drive "), (dswitch>>8) & 0x0f);
+                }
+              else
+                DBG_FILEOPS4(1, F("error mounting disk image "), drive_get_image_filename(dswitch&0xff, false), F(" in tarbell drive "), (dswitch>>8) & 0x0f);
+            }
 	}
 #endif
 #if NUM_HDSK_UNITS>0
@@ -325,10 +360,9 @@ void process_inputs()
               byte platter = (dswitch >>  8) & 0x03;
               sprintf(buf, "' in platter %i of unit %i", platter, unit+1);
 
+              const char *desc = hdsk_get_image_description(dswitch&0xff);
               if( hdsk_mount(unit, platter, dswitch & 0xff) )
                 {
-                  const char *desc = hdsk_get_image_description(dswitch&0xff);
-
                   if( desc==NULL )
                     DBG_FILEOPS3(2, F("mounted new hard disk image '"), hdsk_get_image_filename(dswitch&0xff, false), buf);
                   else
@@ -362,6 +396,15 @@ void process_inputs()
 	    DBG_FILEOPS2(2, F("unmounted drive "), (dswitch>>8) & 0x0f);
 	  else
 	    DBG_FILEOPS2(1, F("error unmounting drive "), (dswitch>>8) & 0x0f);
+	}
+#endif
+#if NUM_TDRIVES>0
+      else if( (dswitch&0xF000)==0x5000 )
+	{
+	  if( tdrive_unmount((dswitch >> 8) & 0x03) )
+	    DBG_FILEOPS2(2, F("unmounted tarbell drive "), (dswitch>>8) & 0x0f);
+	  else
+	    DBG_FILEOPS2(1, F("error unmounting tarbell drive "), (dswitch>>8) & 0x0f);
 	}
 #endif
 #if NUM_HDSK_UNITS>0
@@ -740,8 +783,8 @@ void read_inputs_serial()
   else if( data == 'm' )
     {
       char c;
-      Serial.print(F("\r\n(F)loppy or (H)ard disk? "));
-      do { c=serial_read(); } while(c!='f' && c!='F' && c!='h' && c!='H' && c!=27);
+      Serial.print(F("\r\nMount (f)loppy, (t)arbell floppy or (h)ard disk? "));
+      do { c=serial_read(); } while(c!='f' && c!='F' && c!='h' && c!='H' && c!='t' && c!='T' && c!=27);
       if( c==27 )
         Serial.println();
       else
@@ -754,6 +797,16 @@ void read_inputs_serial()
               dswitch = 0x1000;
               Serial.print(F(" Drive number (0-15): "));
               if( numsys_read_byte(&b) && b<16 )
+                dswitch |= b << 8;
+              else
+                ok = false;
+            }
+          else if( (c=='t' || c=='T') )
+            {
+              byte b;
+              dswitch = 0x5000;
+              Serial.print(F(" Drive number (0-3): "));
+              if( numsys_read_byte(&b) && b<4 )
                 dswitch |= b << 8;
               else
                 ok = false;
@@ -1057,6 +1110,7 @@ void reset(bool resetPC)
 
   altair_interrupts     = 0;
   altair_interrupts_buf = 0;
+  tdrive_reset();
 }
 
 
@@ -1425,6 +1479,10 @@ void altair_out(byte port, byte data)
   else if( port==0x03 )
     printer_out_data(data);
 #endif
+#if NUM_TDRIVES>0
+  else if( port>=0xf8 && port<=0xfc )
+    tdrive_out(port, data);
+#endif
   
   if( host_read_status_led_WAIT() )
     {
@@ -1493,6 +1551,10 @@ inline byte exec_input(byte port)
   else if( port==0x03 )
     return printer_in_data();
 #endif
+#if NUM_TDRIVES>0
+  else if( port>=0xf8 && port<=0xfc )
+    return tdrive_in(port);
+#endif
 #if USE_DAZZLER>0      
   else if( port==0x0e || (port>=0x18 && port<=0x1c) )
     return dazzler_in(port);
@@ -1550,6 +1612,8 @@ void setup()
   cswitch = 0;
   dswitch = 0;
 
+  drive_get_image_filename(0x99, true);
+
   Serial.begin(115200);
 
   timer_setup();
@@ -1557,6 +1621,7 @@ void setup()
   host_setup();
   filesys_setup();
   drive_setup();
+  tdrive_setup();
   hdsk_setup();
   if( host_read_function_switch(SW_DEPOSIT) )
     config_setup(host_read_addr_switches());

@@ -635,6 +635,12 @@ static const byte prog_hdbl[] = {
 */
 
 
+// Tarbell disk boot loader
+static const byte prog_tboot[] = {
+  0xDB, 0xFC, 0xAF, 0x6F, 0x67, 0x3C, 0xD3, 0xFA, 0x3E, 0x8C, 0xD3, 0xF8, 0xDB, 0xFC, 0xB7, 0xF2,
+  0x19, 0xFF, 0xDB, 0xFB, 0x77, 0x23, 0xC3, 0x0C, 0xFF, 0xDB, 0xF8, 0xB7, 0xCA, 0x7D, 0x00, 0x76
+};
+
 
 // ACUTER monitor (necessary for the Processor Technology Music System), ported to the
 // Altair and amended (HGET/HSAVE) by Mike Douglas.
@@ -1866,6 +1872,15 @@ uint16_t prog_tools_copy_multiboot()
 uint16_t prog_tools_copy_diskboot()
 {
   if( prog_create_temporary_rom(0xFF00, prog_cdbl, sizeof(prog_cdbl), "CDBL") )
+    return 0xFF00;
+  else
+    return 0xFFFF;
+}
+
+
+uint16_t prog_tools_copy_tdiskboot()
+{
+  if( prog_create_temporary_rom(0xFF00, prog_tboot, sizeof(prog_tboot), "TDBL") )
     return 0xFF00;
   else
     return 0xFFFF;

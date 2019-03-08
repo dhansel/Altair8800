@@ -14,7 +14,7 @@
 #define USE_Z80 0
 
 
-// If this is set to 1 and the host provides a file system (e.g. SD card connected to the Due)
+// If this is set to 1 and the host provides a file system (i.e. an SD card is connected)
 // then store configurations and other data directly on the hosts' file system,
 // Otherwise those items are stored in a persistent memory block using our own mini-filesystem
 #define USE_HOST_FILESYS 0
@@ -44,9 +44,14 @@
 #define MAX_NUM_ROMS 8
 
 
-// Enables support for disk drives. Each drive uses about 160 bytes
-// of RAM. Set to 0 to completely disable drive support.
+// Enables support for MITS disk drives (maximum 16). Each drive uses about
+// 160 bytes of RAM. Set to 0 to completely disable drive support.
 #define NUM_DRIVES 4
+
+
+// Enables support for Tarbell disk drives (maximum 4).
+// Set to 0 to completely disable Tarbell drive support.
+#define NUM_TDRIVES 0
 
 
 // Enables support for hard disk (88-HDSK). Hard disk support uses

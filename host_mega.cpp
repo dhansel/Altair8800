@@ -30,6 +30,10 @@
 #error Arduino MEGA port does not support disk drives. Set NUM_DRIVES to 0 in config.h
 #endif
 
+#if NUM_TDRIVES>0
+#error Arduino MEGA port does not support disk drives. Set NUM_TDRIVES to 0 in config.h
+#endif
+
 #if NUM_HDSK_UNITS>0
 #error Arduino MEGA port does not support hard disks. Set NUM_HDSK_UNITS to 0 in config.h
 #endif

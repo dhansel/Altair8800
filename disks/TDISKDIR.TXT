@@ -1,0 +1,10 @@
+
+---------------------------------------------
+Available Tarbell disks images:
+---------------------------------------------
+0001) TDISK01.DSK: CP/M 1.3
+0010) TDISK02.DSK: CP/M 2.2
+---------------------------------------------
+
+These images were put together by Udo Munk.
+See README.TXT for more information.

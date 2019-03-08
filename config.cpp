@@ -24,6 +24,7 @@
 #include "filesys.h"
 #include "numsys.h"
 #include "drive.h"
+#include "tdrive.h"
 #include "hdsk.h"
 #include "prog.h"
 #include "dazzler.h"
@@ -31,7 +32,7 @@
 #include "vdm1.h"
 #include "cpucore.h"
 
-#define CONFIG_FILE_VERSION 7
+#define CONFIG_FILE_VERSION 8
 
 #define BAUD_110     0
 #define BAUD_150     1
@@ -821,24 +822,25 @@ static void print_aux1_program(byte row=0, byte col=0)
   if( row!=0 || col!=0 ) set_cursor(row, col);
 
   byte b = config_aux1_program();
-  if( b & 0x80 )
+
+  if( b < 0x40 )
+    Serial.print(FP(prog_get_name(b)));
+  else
     {
       const char *image;
 
-      if( b & 0x40 )
-        image = hdsk_get_image_description(b&0x3f);
-      else
+      if( b < 0x80 )
+        image = tdrive_get_image_description(b&0x3f);
+      else if( b < 0xC0 )
         image = drive_get_image_description(b&0x3f);
+      else
+        image = hdsk_get_image_description(b&0x3f);
 
       if( image==NULL )
         Serial.print(F("none"));
       else
         Serial.print(image);
     }
-  else if( b > 0 && prog_get_name(b)!=NULL )
-    Serial.print(FP(prog_get_name(b)));
-  else
-    Serial.print(F("none"));
 }
 
 
@@ -852,6 +854,16 @@ static void print_drive_mounted()
 }
 
 
+static void print_tdrive_mounted()
+{
+  byte n = 0;
+  for(byte i=0; i<NUM_TDRIVES; i++)
+    if( tdrive_get_mounted_image(i)>0 ) n++;
+
+  Serial.print(n); Serial.print(F(" mounted"));
+}
+
+
 static void print_drive_mounted_image(byte d)
 {
   if( d==0 )
@@ -860,6 +872,17 @@ static void print_drive_mounted_image(byte d)
     { Serial.print(F("empty disk #")); numsys_print_byte(d); }
   else
     Serial.print(drive_get_image_description(d));
+}
+
+
+static void print_tdrive_mounted_image(byte d)
+{
+  if( d==0 )
+    Serial.print(F("none"));
+  else if( tdrive_get_image_filename(d)==NULL )
+    { Serial.print(F("empty disk #")); numsys_print_byte(d); }
+  else
+    Serial.print(tdrive_get_image_description(d));
 }
 
 
@@ -1076,6 +1099,20 @@ static byte find_floppy_image(byte n, bool up)
 }
 
 
+static byte find_tfloppy_image(byte n, bool up)
+{
+  byte i=n;
+  do
+    {
+      if( tdrive_get_image_filename(i)!=NULL ) return i;
+      if( up ) i++; else i--;
+    }
+  while( up && i>0 || !up && i<0xff );
+
+  return 0;
+}
+
+
 static byte find_hdsk_image(byte n, bool up)
 {
   byte i=n;
@@ -1104,19 +1141,33 @@ static void toggle_aux1_program_up(byte row, byte col)
           if( prog_get_name(b) )
             found = true;
           else
+            b = 0x40;
+        }
+
+      if( !found && (b & 0xC0)==0x40 )
+        {
+#if NUM_TDRIVES>0
+          // look for next tarbell floppy image
+          b = find_tfloppy_image((b & 0x3f)+1, true) | 0x40;
+          if( b>0x40 ) 
+            found = true;
+          else
+#endif
             b = 0x80;
         }
 
       if( !found && (b & 0xC0)==0x80 )
         {
+#if NUM_DRIVES>0
           // look for next floppy disk image
           b = find_floppy_image((b & 0x3f)+1, true) | 0x80;
           if( b>0x80 ) 
             found = true;
           else
+#endif
             b = 0xC0;
         }
-
+      
       if( !found && (b & 0xC0)==0xC0 )
         {
           // look for next hard disk image
@@ -1155,6 +1206,16 @@ static void toggle_aux1_program_down(byte row, byte col)
           // look for previous floppy disk image
           b = find_floppy_image((b & 0x3f)-1, false) | 0x80;
           if( b>0x80 ) 
+            found = true;
+          else
+            b = 0x7F;
+        }
+
+      if( !found && (b & 0xC0)==0x40 )
+        {
+          // look for previous floppy disk image
+          b = find_tfloppy_image((b & 0x3f)-1, false) | 0x40;
+          if( b>0x40 ) 
             found = true;
           else
             b = 0x3F;
@@ -1342,7 +1403,7 @@ static bool save_config(byte fileno)
 {
   bool res = false;
   byte s = sizeof(uint32_t);
-  byte data[4*4+(1+NUM_SERIAL_DEVICES*4)+9*4+1+(1+NUM_DRIVES)+(1+NUM_HDSK_UNITS*4)+1+1];
+  byte data[4*4+(1+NUM_SERIAL_DEVICES*4)+9*4+1+(1+NUM_DRIVES)+(1+NUM_TDRIVES)+(1+NUM_HDSK_UNITS*4)+1+1];
 
   // merge version number into config_flags
   config_flags = (config_flags & 0x00ffffff) | (((uint32_t) CONFIG_FILE_VERSION) << 24);
@@ -1361,6 +1422,9 @@ static bool save_config(byte fileno)
   
   data[n++] = NUM_DRIVES;
   for(byte i=0; i<NUM_DRIVES; i++) data[n++] = drive_get_mounted_image(i);
+
+  data[n++] = NUM_TDRIVES;
+  for(byte i=0; i<NUM_TDRIVES; i++) data[n++] = tdrive_get_mounted_image(i);
 
   data[n++] = NUM_HDSK_UNITS;
   for(byte i=0; i<NUM_HDSK_UNITS; i++) 
@@ -1498,6 +1562,21 @@ static bool load_config(byte fileno)
               drive_unmount(i);
           }
       drive_set_realtime((config_flags & CF_DRIVE_RT)!=0);
+
+      if( v >= 8 )
+        {
+          // tarbell disk drive settings (version 8 and up)
+          if( filesys_read_data(fid, &n, 1)!=1 ) n = 0;
+          for(i=0; i<n; i++) 
+            if( filesys_read_data(fid, &d, 1)==1 && i<NUM_TDRIVES )
+              {
+                if( d>0 )
+                  tdrive_mount(i, d);
+                else
+                  tdrive_unmount(i);
+              }
+          drive_set_realtime((config_flags & CF_DRIVE_RT)!=0);
+        }
 
       // hard disk settings
       if( filesys_read_data(fid, &n, 1)!=1 ) n = 0;
@@ -1721,6 +1800,82 @@ void config_edit_drives()
   for(i=0; i<NUM_DRIVES; i++) 
     if( mounted[i] != drive_get_mounted_image(i) )
       drive_mount(i, mounted[i]);
+}
+#endif
+
+
+#if NUM_TDRIVES>0
+void config_edit_tdrives()
+{
+  bool go = true;
+  byte i, mounted[NUM_TDRIVES];
+
+  for(i=0; i<NUM_TDRIVES; i++) mounted[i] = tdrive_get_mounted_image(i);
+
+  byte row, col, r_realtime, r_drives[NUM_TDRIVES], r_cmd;
+  row = 4;
+  col = 32;
+  Serial.print(F("\033[2J\033[0;0H\n"));
+
+  Serial.println(F("Configure Tarbell disk drive settings"));
+
+  //Serial.print(F("\n(F)orce real-time mode : ")); print_flag(CF_DRIVE_RT); Serial.println(); r_realtime = row++;
+  Serial.print(F("\n"));
+  for(i=0; i<NUM_TDRIVES; i++)
+    {
+      Serial.print(F("Drive (")); 
+      if( i<10 ) Serial.write(48+i); else Serial.write(87+i);
+      Serial.print(F(") mounted disk image : "));
+      print_tdrive_mounted_image(mounted[i]);
+      Serial.println();
+      r_drives[i] = row++;
+    }
+
+  Serial.println(F("\nE(x)it to main menu")); row+=4;
+  Serial.print(F("\n\nCommand: ")); r_cmd = row++;
+
+  while( go )
+    {
+      set_cursor(r_cmd, 10);
+      while( !serial_available() ) delay(50);
+      char c = serial_read();
+      if( c>31 && c<127 ) Serial.println(c);
+
+      switch( c )
+        {
+          //case 'F': toggle_flag(CF_DRIVE_RT, r_realtime, 26); break;
+        case 27:
+        case 'x': go = false; break;
+
+        default:
+          {
+            int d = -1;
+            if( c>='0' && c<='9' ) 
+              d = c-48;
+            else if( c>='a' && c<='f' )
+              d = c-87;
+
+            if( d>=0 && d<=NUM_TDRIVES )
+              {
+                byte next = find_tfloppy_image(mounted[d]+1, true);
+                if( tdrive_get_mounted_image(d)>0 && 
+                    tdrive_get_image_filename(drive_get_mounted_image(d))==NULL &&
+                    mounted[d] < tdrive_get_mounted_image(d) &&
+                    (next      > tdrive_get_mounted_image(d) || next<mounted[d]) )
+                  next = tdrive_get_mounted_image(d);
+
+                mounted[d] = next;
+                set_cursor(r_drives[d], col);
+                print_tdrive_mounted_image(mounted[d]);
+              }
+          }
+        }
+    }
+
+  //drive_set_realtime((config_flags & CF_DRIVE_RT)!=0);
+  for(i=0; i<NUM_TDRIVES; i++) 
+    if( mounted[i] != drive_get_mounted_image(i) )
+      tdrive_mount(i, mounted[i]);
 }
 #endif
 
@@ -2700,6 +2855,9 @@ void config_edit()
 #if NUM_DRIVES>0
           Serial.print(F("(D) Configure disk drives   : ")); print_drive_mounted(); Serial.println(); row++;
 #endif
+#if NUM_TDRIVES>0
+          Serial.print(F("(B) Configure tarbell drive : ")); print_tdrive_mounted(); Serial.println(); row++;
+#endif
 #if NUM_HDSK_UNITS>0
           Serial.print(F("(H) Configure hard disks    : ")); print_hdsk_mounted(); Serial.println(); row++;
 #endif
@@ -2768,6 +2926,9 @@ void config_edit()
         case 'I': config_edit_interrupts(); break;
 #if NUM_DRIVES>0
         case 'D': config_edit_drives(); break;
+#endif
+#if NUM_TDRIVES>0
+        case 'B': config_edit_tdrives(); break;
 #endif
 #if NUM_HDSK_UNITS>0
         case 'H': config_edit_hdsk(); break;
@@ -2978,6 +3139,7 @@ void config_defaults(bool apply)
   drive_set_realtime((config_flags & CF_DRIVE_RT)!=0);
   hdsk_set_realtime((config_flags & CF_DRIVE_RT)!=0);
   for(i=0; i<NUM_DRIVES; i++) drive_unmount(i);
+  for(i=0; i<NUM_TDRIVES; i++) tdrive_unmount(i);
   for(i=0; i<NUM_HDSK_UNITS; i++) 
     for(j=0; j<4; j++)
       hdsk_unmount(i, j);

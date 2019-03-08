@@ -40,6 +40,10 @@ void drive_set_realtime(bool b) {}
 byte drive_in(byte addr) { return 0; }
 void drive_out(byte addr, byte data) {}
 
+#elif NUM_DRIVES>16
+
+#error MITS disk controller can only address 16 drives. Set NUM_DRIVES<=16 in config.h
+
 #elif !defined(HOST_HAS_FILESYS)
 
 #error Disk drive emulation requires host filesystem

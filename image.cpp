@@ -22,8 +22,8 @@
 
 #ifdef HOST_HAS_FILESYS
 
-static const char *fname_template[2] = {"DISK%02X.DSK", "HDSK%02X.DSK"};
-static const char *dirfilename[2]    = {"DISKDIR.TXT",  "HDSKDIR.TXT"};
+static const char *fname_template[3] = {"DISK%02X.DSK", "HDSK%02X.DSK", "TDISK%02X.DSK"};
+static const char *dirfilename[3]    = {"DISKDIR.TXT",  "HDSKDIR.TXT", "TDISKDIR.TXT"};
 
 
 const char *image_get_dir_content(byte image_type)

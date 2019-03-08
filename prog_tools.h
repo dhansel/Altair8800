@@ -13,6 +13,7 @@ uint16_t prog_tools_copy_exerciser();
 uint16_t prog_tools_copy_turnmon();
 uint16_t prog_tools_copy_multiboot();
 uint16_t prog_tools_copy_diskboot();
+uint16_t prog_tools_copy_tdiskboot();
 uint16_t prog_tools_copy_hdbl();
 uint16_t prog_tools_copy_calc();
 uint16_t prog_tools_copy_statustest();
