@@ -312,15 +312,14 @@ static void tdrive_out_command(byte cmd)
       else if( (cmd&0x04)!=0 )
         drive_status = DRIVE_STATUS_T1_SEEKERR;
     }
-  else if( (cmd&0xF0)<0x80 )
+  else if( (cmd&0xC0)==0x40 )
     {
       // step in/out/again (type 1)
       static bool stepOut = false;
           
-      cmd &= 0xE0;
-      if( cmd==0x40 )
+      if( (cmd&0xE0)==0x40 )
         stepOut = false;
-      else if( cmd==0x60 )
+      else if( (cmd&0xE0)==0x60 )
         stepOut = true;
 
       // step the drive mechanism if we have a valid drive
@@ -333,7 +332,7 @@ static void tdrive_out_command(byte cmd)
         }
           
       // update track register if requested
-      if( cmd & 0x10 ) 
+      if( cmd & 0x10 )
         {
           if( stepOut && drive_track>0 ) 
             drive_track--;
