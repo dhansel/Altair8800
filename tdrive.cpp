@@ -312,7 +312,7 @@ static void tdrive_out_command(byte cmd)
       else if( (cmd&0x04)!=0 )
         drive_status = DRIVE_STATUS_T1_SEEKERR;
     }
-  else if( (cmd&0xC0)==0x40 )
+  else if( (cmd&0xE0)<0x80 )
     {
       // step in/out/again (type 1)
       static bool stepOut = false;
