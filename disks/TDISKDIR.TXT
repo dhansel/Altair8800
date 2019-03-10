@@ -4,6 +4,10 @@ Available Tarbell disks images:
 ---------------------------------------------
 0001) TDISK01.DSK: CP/M 1.3
 0010) TDISK02.DSK: CP/M 2.2
+0011) TDISK03.DSK: Comal 80
+0100) TDISK04.DSK: CP/M 1.4 for VDM-1
+0101) TDISK05.DSK: CP/M 2.2 for VDM-1
+0110) TDISK06.DSK: VDM-1 programs
 ---------------------------------------------
 
 These images were put together by Udo Munk.
