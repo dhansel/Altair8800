@@ -43,11 +43,12 @@ byte vdm1_get_iface() { return 0xff; }
 
 #define DEBUGLVL 0
 
-byte vdm_iface = 0xff;
-
-int  vdm_connected = 0;
-byte vdm_ctrl = 0x00;
-byte vdm_dip = 0;
+static byte vdm_iface = 0xff;
+static int  vdm_connected = 0;
+static byte vdm_ctrl = 0x00;
+static byte vdm_dip = 0;
+static byte vdm_keyboard_ctrl = 0;
+static byte vdm_keyboard_data = 0;
 uint16_t vdm1_mem_start, vdm1_mem_end;
 
 static void vdm1_send_dip();
@@ -212,8 +213,12 @@ void vdm1_receive(byte iface, byte data)
 
     case VDM_KEY:
       {
+        vdm_keyboard_ctrl = 0;
+        vdm_keyboard_data = data;
+
         byte dev = config_vdm1_keyboard_device();
         if( dev<0xff ) serial_receive_data(dev, data);
+
         state = 0;
         break;
       }
@@ -242,6 +247,33 @@ void vdm1_set_iface(byte iface)
 }
 
 
+byte vdm1_keyboard_in_ctrl()
+{
+  // control port (channel A) of a Protec 3P+S card jumpered such
+  // that the latched XDA signal (data available) is available at
+  // bit 0 (active low). Output will be 0 if keyboard input from 
+  // the VDM-1 client is available, otherwise 1.
+
+  // The 3P+S was not part of the VDM-1 but the parallel port keyboard
+  // emulation is included here since it was often used together
+  // with the VDM-1.
+  return vdm_keyboard_ctrl;
+}
+
+
+byte vdm1_keyboard_in_data()
+{
+  // data port (channel B) of a Protec 3+S card. Keyboard data from 
+  // the VDM-1 client will be available at this port.
+
+  // The 3P+S was not part of the VDM-1 but the parallel port keyboard
+  // emulation is included here since it was often used together
+  // with the VDM-1.
+  vdm_keyboard_ctrl = 1;
+  return vdm_keyboard_data;
+}
+
+
 byte vdm1_get_iface()
 {
   return vdm_iface;
@@ -261,6 +293,7 @@ void vdm1_setup()
   vdm1_set_iface(config_vdm1_interface());
   timer_setup(TIMER_VDM1, 0, vdm1_timer);
   vdm_connected = 0;
+  vdm_keyboard_ctrl = 1;
 }
 
 #endif

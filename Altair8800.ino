@@ -1559,6 +1559,12 @@ inline byte exec_input(byte port)
   else if( port==0x0e || (port>=0x18 && port<=0x1c) )
     return dazzler_in(port);
 #endif
+#if USE_VDM1>0
+  else if( port==0x04 )
+    return vdm1_keyboard_in_ctrl();
+  else if( port==0x05 )
+    return vdm1_keyboard_in_data();
+#endif
   else
     {
 #if !(READ_UNUSED_PORTS_EXT>0)
