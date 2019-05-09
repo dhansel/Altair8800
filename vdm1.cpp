@@ -47,8 +47,8 @@ static byte vdm_iface = 0xff;
 static int  vdm_connected = 0;
 static byte vdm_ctrl = 0x00;
 static byte vdm_dip = 0;
-static byte vdm_keyboard_ctrl = 0;
-static byte vdm_keyboard_data = 0;
+static byte vdm_keyboard_ctrl = 0xFF;
+static byte vdm_keyboard_data = 0xFF;
 uint16_t vdm1_mem_start, vdm1_mem_end;
 
 static void vdm1_send_dip();
@@ -59,6 +59,7 @@ static void vdm1_send_fullframe();
 static void vdm1_connect()
 {
   vdm_connected = 1;
+  vdm_keyboard_ctrl = 1;
   vdm1_send_dip();
   vdm1_send_ctrl();
   vdm1_send_fullframe();
@@ -240,7 +241,10 @@ void vdm1_set_iface(byte iface)
       fprev = host_serial_set_receive_callback(vdm_iface, vdm1_receive);
       
 #if DEBUGLVL>0
-      if( iface==0xff ) Serial.println("VDM-1 disabled"); else {Serial.print("VDM-1 on interface: "); Serial.println(host_serial_port_name(iface));}
+      if( iface==0xff ) 
+        Serial.println("VDM-1 disabled"); 
+      else 
+        {Serial.print("VDM-1 on interface: "); Serial.println(host_serial_port_name(iface));}
       delay(500);
 #endif
     }
@@ -293,7 +297,8 @@ void vdm1_setup()
   vdm1_set_iface(config_vdm1_interface());
   timer_setup(TIMER_VDM1, 0, vdm1_timer);
   vdm_connected = 0;
-  vdm_keyboard_ctrl = 1;
+  vdm_keyboard_ctrl = 0xFF;
+  vdm_keyboard_data = 0xFF;
 }
 
 #endif
