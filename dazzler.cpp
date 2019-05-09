@@ -141,7 +141,7 @@ void dazzler_out_ctrl(byte v)
           for(int i=dazzler_mem_start; i<dazzler_mem_end; i++)
             if( Mem[i] != Mem[i-d] )
               {
-                b[0] = DAZ_MEMBYTE | ((i & 0x0700)/256) ;
+                b[0] = DAZ_MEMBYTE | (((i-dazzler_mem_start) & 0x0700)/256) ;
                 b[1] = i & 255;
                 b[2] = Mem[i];
                 dazzler_send(b, 3);
