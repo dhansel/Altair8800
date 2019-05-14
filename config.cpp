@@ -2951,7 +2951,8 @@ void config_edit()
             Serial.println(F("\n\n"));
             Serial.println(F("Altair 8800 Simulator (C) 2017-2019 David Hansel"));
             Serial.println(F("https://www.hackster.io/david-hansel/arduino-altair-8800-simulator-3594a6"));
-            Serial.println(F("https://github.com/dhansel/Altair8800\n"));
+            Serial.println(F("https://github.com/dhansel/Altair8800"));
+            Serial.println(F("Firmware compiled on: " __DATE__ ", " __TIME__ "\n"));
             host_system_info();
             Serial.print(F("\n\nPress any key to continue..."));
             while( !serial_available() ); 
