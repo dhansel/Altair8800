@@ -21,7 +21,8 @@ class SwitchSerialClass : public Stream
     virtual int read(void);
     virtual void flush(void);
     virtual size_t write(uint8_t);
-    using Print::write; // pull in write(str) and write(buf, size) from Print
+    virtual size_t write(const uint8_t *buffer, size_t size);
+    using Print::write; // pull in write(str) from Print
     virtual operator bool();
 
     void    select(uint8_t n) { m_selected = n; }

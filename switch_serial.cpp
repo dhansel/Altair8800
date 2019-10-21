@@ -81,6 +81,21 @@ size_t SwitchSerialClass::write(uint8_t b)
 }
 
 
+size_t SwitchSerialClass::write(const uint8_t *buffer, size_t size)
+{
+  size_t sz = size;
+
+  while( sz>0 )
+    {
+      size_t n = host_serial_write(m_selected, (const char *) buffer, sz);
+      buffer += n;
+      sz -= n;
+    }
+
+  return size;
+}
+
+
 SwitchSerialClass::operator bool() 
 {
   return host_serial_ok(m_selected);
