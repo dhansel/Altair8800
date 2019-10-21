@@ -41,7 +41,7 @@ static SdFat SD;
 
 
 // The SerialUSB implementation (serial via native USB port) sends the data for
-// each "write" call in its own frame. Since all data in the simulator is sent
+// each "write" call in its own frame. Since most data in the simulator is sent
 // byte-by-byte, each byte is sent in a separate USB frame. That is not so much
 // a problem for hosts supporting High Speed (USB 2.0) but for hosts that only
 // support Full Speed mode, waiting for a new frame for each byte of data to send
@@ -806,94 +806,110 @@ void host_serial_receive_start_interrupt_if2();
 #ifdef USE_NATIVE_USB_TX_OPTIMIZATION
 // USB transmit buffering enabled (see comment at #define on top of file)
 
-// Maximum USB frame size for bulk transfers is 64 bytes of data in full-speed mode, 
-// 512 bytes  in high-speed mode. We don't know which mode we are in, additionally 
-// the frame rate in high-speed mode is much higher so it's unlikely we would fill be 
-// able to buffer more than 64 characters anyway.
-#define USB_BUFFER_SIZE 64
-volatile uint8_t usb_buffer_len = 0, usb_buffer[USB_BUFFER_SIZE];
+volatile size_t  fifo_size = 0, fifo_len = 0;
+volatile uint8_t sofcount = 0;
 
 static void usb_isr()
 {
-  if( Is_udd_in_send(CDC_TX) ) 
-    { 
-      // received an IN token
-      if( usb_buffer_len==0 ) 
-        { 
-          // acknowledge receipt of IN token (no data to send)
-          udd_ack_in_send(CDC_TX);
-          udd_ack_fifocon(CDC_TX);
-          
-          // don't need any more IN token interrupts for now
-          udd_disable_in_send_interrupt(CDC_TX);
-        }
-      else
-        { 
-          // send buffered data and clear buffer
-          UDD_Send(CDC_TX, (void *) usb_buffer, usb_buffer_len);
-          usb_buffer_len = 0; 
-        }
-    }
-  else  
-    {
-      bool isReceive = Is_udd_out_received(CDC_RX);
+  bool isReceive = Is_udd_out_received(CDC_RX) && Is_udd_endpoint_interrupt(CDC_RX);
 
-      // call original USB interrupt handler
-      gpf_isr_orig();
-      
-      // if interrupt was due to an OUT (receive data) packet then 
-      // call our receive interrupt handler
-      if( usb_receive_interrupt_enabled && isReceive )
-        host_serial_receive_start_interrupt_if2();
+  if( Is_udd_reset() )
+    {
+      fifo_size = 0;
+      fifo_len  = 0;
     }
+
+  // if there is data waiting to be sent then send it now
+  if( fifo_len>0 && (Is_udd_sof()||Is_udd_msof()) && Is_udd_sof_interrupt_enabled() )
+    {
+      if( sofcount>0 ) --sofcount;
+
+      if( sofcount==0 && udd_nb_busy_bank(CDC_TX)==0 )
+        {
+          udd_ack_fifocon(CDC_TX);
+          udd_disable_msof_interrupt();
+          udd_disable_sof_interrupt();
+          udd_ack_sof();
+          udd_ack_msof();
+          fifo_len  = 0;
+          sofcount  = 2;
+        }
+    }
+
+  // call original USB interrupt handler
+  gpf_isr_orig();
+
+  // if interrupt was due to an OUT (receive data) packet then
+  // call our receive interrupt handler
+  if( isReceive && usb_receive_interrupt_enabled )
+    host_serial_receive_start_interrupt_if2();
+}
+
+
+static size_t usb_write(const char *buf, size_t len)
+{
+  uint8_t nbytes;
+
+  udd_disable_msof_interrupt();
+  udd_disable_sof_interrupt();
+
+  // wait until FIFO is available
+  while( !Is_udd_fifocon(CDC_TX) );
+
+  // determine packet size (can't do it on reset because it is not guaranteed
+  // that we have registered our interrupt function at that point)
+  if( fifo_size==0 )
+    fifo_size = ((UOTGHS->UOTGHS_SR & UOTGHS_SR_SPEED_Msk) == UOTGHS_SR_SPEED_HIGH_SPEED) ? 512 : 64;
+  
+  // copy data to FIFO
+  volatile uint8_t *ptr_dest = ((volatile uint8_t *) &udd_get_endpoint_fifo_access8(CDC_TX)) + fifo_len;
+  if( len==1 )
+    {
+      // most common and trivial case - note that there's always room
+      // for at least one byte in the FIFO at this point
+      *ptr_dest = *buf;
+      fifo_len++;
+      nbytes = 1;
+    }
+  else
+    {
+      nbytes = min(len, fifo_size-fifo_len);
+      volatile uint8_t *ptr_end = ptr_dest + nbytes;
+      while( ptr_dest!=ptr_end ) *ptr_dest++ = *buf++;
+      fifo_len += nbytes;
+    }
+      
+  if( fifo_len==fifo_size )
+    {
+      // FIFO is full => send it now
+      udd_ack_fifocon(CDC_TX);
+      fifo_len  = 0;
+      sofcount  = 2;
+    }
+  else
+    {
+      // in full speed mode wait 1-2 SOF frames (1-2ms) before
+      // sending the FIFO - this gives us some time to collect
+      // more data and not waste a whole frame sending a single byte
+      // in high speed we just wait until the next micro-SOF
+      udd_ack_sof();
+      udd_ack_msof();
+      udd_enable_sof_interrupt();
+      udd_enable_msof_interrupt();
+    }
+
+  return nbytes;
 }
 
 inline size_t usb_write(uint8_t b)
 {
-  // if buffer is full, wait until it gets cleared (in usb_isr)
-  while( usb_buffer_len>=USB_BUFFER_SIZE ); 
-
-  noInterrupts();
-  
-  // buffer data
-  usb_buffer[usb_buffer_len++] = b;
-      
-  // if interrupts for received IN tokens are not enabled then enable them now
-  // (buffered data will be sent when the next IN token is received)
-  if( !Is_udd_in_send_interrupt_enabled(CDC_TX) && Is_udd_endpoint_configured(CDC_TX) )
-    { udd_enable_endpoint_interrupt(CDC_TX); udd_enable_in_send_interrupt(CDC_TX); }
-  
-  interrupts();
-  
-  return 1;
-}
-
-inline size_t usb_write(const char *buf, size_t len)
-{
-  // if buffer is full, wait until it gets cleared (in usb_isr)
-  while( usb_buffer_len>=USB_BUFFER_SIZE ); 
-
-  noInterrupts();
-  
-  // buffer data
-  size_t n = 0;
-  while( usb_buffer_len<USB_BUFFER_SIZE && len-- > 0 )
-    usb_buffer[usb_buffer_len++] = buf[n++];
-      
-  // if interrupts for received IN tokens are not enabled then enable them now
-  // (buffered data will be sent when the next IN token is received)
-  if( !Is_udd_in_send_interrupt_enabled(CDC_TX) && Is_udd_endpoint_configured(CDC_TX) )
-    { udd_enable_endpoint_interrupt(CDC_TX); udd_enable_in_send_interrupt(CDC_TX); }
-  
-  interrupts();
-  
-  return n;
+  return usb_write((const char *) &b, 1);
 }
 
 
 inline int usb_available_for_write()
 {
-  return USB_BUFFER_SIZE-usb_buffer_len;
+  return fifo_size-fifo_len;
 }
 
 
@@ -915,6 +931,11 @@ void usb_isr()
 inline size_t usb_write(byte b)
 {
   return SerialUSB.write(&b, 1);
+}
+
+static size_t usb_write(const char *buf, size_t len)
+{
+  return SerialUSB.write(buf, len);
 }
 
 inline int usb_available_for_write()
