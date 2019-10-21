@@ -19,7 +19,7 @@
 
 #include <stdio.h>
 #include <string.h>
-	
+
 #include "XModem.h"
 #ifdef UTEST
 #include "CppUTestExt/MockSupport.h"
@@ -37,17 +37,19 @@ const int XModem::rcvRetryLimit = 10;
 
 
 
-XModem::XModem(int (*recvChar)(int msDelay), void (*sendChar)(char sym))
+XModem::XModem(int (*recvChar)(int msDelay),
+               void (*sendData)(const char *data, int len))
 {
-	this->sendChar = sendChar;
+	this->sendData = sendData;
 	this->recvChar = recvChar;
 	this->dataHandler = NULL;
 	
 }
-XModem::XModem(int (*recvChar)(int msDelay), void (*sendChar)(char sym), 
-		bool (*dataHandler)(unsigned long number, char *buffer, int len))
+XModem::XModem(int (*recvChar)(int msDelay),
+               void (*sendData)(const char *data, int len),
+               bool (*dataHandler)(unsigned long number, char *buffer, int len))
 {
-	this->sendChar = sendChar;
+	this->sendData = sendData;
 	this->recvChar = recvChar;
 	this->dataHandler = dataHandler;
 	
@@ -76,14 +78,14 @@ int XModem::dataRead(int delay)
 }
 void XModem::dataWrite(char symbol)
 {
-	this->sendChar(symbol);
+  this->sendData(&symbol, 1);
 }
 bool XModem::receiveFrameNo()
 {
 	unsigned char num = 
 		(unsigned char)this->dataRead(XModem::receiveDelay);
 	unsigned char invnum = 
-		(unsigned char)this-> dataRead(XModem::receiveDelay);
+		(unsigned char)this->dataRead(XModem::receiveDelay);
 	this->repeatedBlock = false;
 	//check for repeated block
 	if (invnum == (255-num) && num == this->blockNo-1) {
@@ -197,7 +199,7 @@ bool XModem::receiveFrames(transfer_t transfer)
 					this->blockNo++;
 					this->blockNoExt++;
 				}
-			   	
+                                this->retries = 0;
 				break;
 			case XModem::EOT:
 				this->dataWrite(XModem::ACK);
@@ -234,14 +236,14 @@ bool XModem::receive()
 {
 	this->init();
 	
-	for (int i =0; i <  16; i++)
+	for (int i =0; i <  128; i++)
 	{
 		this->dataWrite('C');	
 		if (this->dataAvail(1000)) 
 			return receiveFrames(Crc);
 	
 	}
-	for (int i =0; i <  16; i++)
+	for (int i =0; i <  128; i++)
 	{
 		this->dataWrite(XModem::NACK);	
 		if (this->dataAvail(1000)) 
@@ -263,12 +265,12 @@ unsigned short XModem::crc16_ccitt(char *buf, int size)
 	}
 	return crc;
 }
-unsigned char XModem::generateChkSum(void)
+unsigned char XModem::generateChkSum(const char *buf, int len)
 {
 	//calculate chksum
 	unsigned char chksum = 0;
-	for(int i = 0; i< 128; i++) {
-		chksum += this->buffer[i];
+	for(int i = 0; i< len; i++) {
+		chksum += buf[i];
 	}
 	return chksum;
 	
@@ -286,11 +288,11 @@ bool XModem::transmitFrames(transfer_t transfer)
 		if (this->dataHandler != NULL)
 		{
 			if( false == 
-			    this->dataHandler(this->blockNoExt, this->buffer, 
+			    this->dataHandler(this->blockNoExt, this->buffer+3, 
 			    128))
 			{
 				//end of transfer
-				this->sendChar(XModem::EOT);
+				this->dataWrite(XModem::EOT);
 				//wait ACK
 				if (this->dataRead(XModem::receiveDelay) == 
 					XModem::ACK)
@@ -304,8 +306,8 @@ bool XModem::transmitFrames(transfer_t transfer)
 		else
 		{
 			//cancel transfer - send CAN twice
-			this->sendChar(XModem::CAN);
-			this->sendChar(XModem::CAN);
+			this->dataWrite(XModem::CAN);
+			this->dataWrite(XModem::CAN);
 			//wait ACK
 			if (this->dataRead(XModem::receiveDelay) == 
 				XModem::ACK)
@@ -313,26 +315,25 @@ bool XModem::transmitFrames(transfer_t transfer)
 			else
 				return false;
 		}
-		//send SOH
-		this->sendChar(XModem::SOH);
-		//send frame number	
-		this->sendChar(this->blockNo);
-		//send inv frame number
-		this->sendChar((unsigned char)(255-(this->blockNo)));
-		//send data
-		for(int i = 0; i <128; i++)
-			this->sendChar(this->buffer[i]);
-		//send checksum or crc
+		//SOH
+                buffer[0] = XModem::SOH;
+		//frame number
+		buffer[1] = this->blockNo;
+		//inv frame number
+		buffer[2] = (unsigned char)(255-(this->blockNo));
+		//(data is already in buffer starting at byte 3)
+		//checksum or crc
 		if (transfer == ChkSum) {
-			this->sendChar(this->generateChkSum());
+                  buffer[3+128] = this->generateChkSum(buffer+3, 128);
+                  this->sendData(buffer, 3+128+1);
 		} else {
-			unsigned short crc;
-			crc = this->crc16_ccitt(this->buffer, 128);
-			
-			this->sendChar((unsigned char)(crc >> 8));
-			this->sendChar((unsigned char)(crc));
-			 
+                  unsigned short crc;
+                  crc = this->crc16_ccitt(this->buffer+3, 128);
+                  buffer[3+128+0] = (unsigned char)(crc >> 8);
+                  buffer[3+128+1] = (unsigned char)(crc);;
+                  this->sendData(buffer, 3+128+2);
 		}
+
 		//TO DO - wait NACK or CAN or ACK
 		int ret = this->dataRead(XModem::receiveDelay);
 		switch(ret)
@@ -358,7 +359,7 @@ bool XModem::transmit()
 	this->init();
 	
 	//wait for CRC transfer
-	while(retry < 32)
+	while(retry < 256)
 	{
 		if(this->dataAvail(1000))
 		{

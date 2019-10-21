@@ -37,16 +37,15 @@ int recvChar(int msDelay)
   while( (int) (millis()-start) < msDelay) 
     { 
       if( Serial.available() ) return (uint8_t) Serial.read(); 
-      delay(1); 
     }
 
   return -1; 
 }
 
 
-void sendChar(char sym) 
-{ 
-  Serial.write(sym); 
+void sendData(const char *data, int size)
+{
+  Serial.write((const uint8_t *) data, size);
 }
 
 
@@ -226,7 +225,7 @@ static void receiveFile()
       datafile = host_filesys_file_open(fname, true);
       if( datafile )
         {
-          XModem modem(recvChar, sendChar, dataHandlerReceive);
+          XModem modem(recvChar, sendData, dataHandlerReceive);
           
           bool isempty = false;
           host_serial_interrupts_pause();
@@ -262,7 +261,7 @@ static void sendFile()
 
       if( datafile )
         {
-          XModem modem(recvChar, sendChar, dataHandlerSend);
+          XModem modem(recvChar, sendData, dataHandlerSend);
           
           host_serial_interrupts_pause();
           delay(100);

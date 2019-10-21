@@ -38,12 +38,12 @@ class XModem {
 		//retry counter for NACK
 		int retries;
 		//buffer
-		char buffer[128];
+		char buffer[133];
 		//repeated block flag
 		bool repeatedBlock;
 
 		int  (*recvChar)(int);
-		void (*sendChar)(char);
+                void (*sendData)(const char *data, int len);
 		bool (*dataHandler)(unsigned long number, char *buffer, int len);
 		unsigned short crc16_ccitt(char *buf, int size);
 		bool dataAvail(int delay);
@@ -58,7 +58,7 @@ class XModem {
 		void init(void);
 		
 		bool transmitFrames(transfer_t);
-		unsigned char generateChkSum(void);
+		unsigned char generateChkSum(const char *buffer, int len);
 		
 	public:
 		static const unsigned char NACK;
@@ -67,8 +67,8 @@ class XModem {
 		static const unsigned char EOT;
 		static const unsigned char CAN;
 	
-		XModem(int (*recvChar)(int), void (*sendChar)(char));
-		XModem(int (*recvChar)(int), void (*sendChar)(char), 
+		XModem(int (*recvChar)(int), void (*sendData)(const char *data, int len));
+		XModem(int (*recvChar)(int), void (*sendData)(const char *data, int len), 
   			        bool (*dataHandler)(unsigned long, char*, int));
 		bool receive();
 		bool transmit();
