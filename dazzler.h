@@ -10,9 +10,9 @@
 
 extern uint16_t dazzler_mem_start, dazzler_mem_end;
 
-#define dazzler_write_mem(a, v) { if( a<dazzler_mem_end && a>=dazzler_mem_start ) dazzler_write_mem_(a, v); }
+#define dazzler_write_mem(a, v) { if( a<dazzler_mem_end && a>=dazzler_mem_start && Mem[a]!=v ) dazzler_write_mem_do(a, v); }
 
-void dazzler_write_mem_(uint16_t a, byte v);
+void dazzler_write_mem_do(uint16_t a, byte v);
 void dazzler_out_ctrl(byte v);
 void dazzler_out_pict(byte v);
 byte dazzler_in(byte port);
