@@ -774,7 +774,7 @@ static void print_vdm1_dip56()
 {
   switch( (config_vdm1_dip()>>4) & 3 )
     {
-    case 0: Serial.print(F("off/off (all characters suppressed)")); break;
+    case 0: Serial.print(F("off/off (all characters suppressed, VT-CR blanking on)")); break;
     case 2: Serial.print(F("off/on  (control characters blanked, VT-CR blanking on)")); break;
     case 1: Serial.print(F("on /off (control characters shown, VT-CR blanking on)")); break;
     case 3: Serial.print(F("on /on  (control characters shown, VT-CR blanking off)")); break;
