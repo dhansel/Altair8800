@@ -150,6 +150,10 @@ void dazzler_write_mem_do(uint16_t a, byte v)
 void dazzler_out_ctrl(byte v)
 {
   byte b[3];
+  b[0] = DAZ_CTRL;
+
+  // client version 0 expects CTRL before FULLFRAME data
+  if( dazzler_client_version<1 ) { b[1] = v; dazzler_send(b, 2); }
 
 #if DEBUGLVL>0
   {
@@ -258,9 +262,9 @@ void dazzler_out_ctrl(byte v)
       dazzler_mem_end   = max(dazzler_mem_addr1, dazzler_mem_addr2) + dazzler_mem_size;
     }
 
-  b[0] = DAZ_CTRL;
-  b[1] = v;
-  dazzler_send(b, 2);
+  // client version 1 and later can have CTRLPIC after FULLFRAME data
+  // (avoids initial display of garbage memory)
+  if( dazzler_client_version>=1 ) { b[1] = v; dazzler_send(b, 2); }
 }
 
 
