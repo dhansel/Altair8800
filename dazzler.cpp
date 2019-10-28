@@ -152,15 +152,15 @@ void dazzler_out_ctrl(byte v)
   byte b[3];
   b[0] = DAZ_CTRL;
 
-  // client version 0 expects CTRL before FULLFRAME data
-  if( dazzler_client_version<1 ) { b[1] = v; dazzler_send(b, 2); }
-
 #if DEBUGLVL>0
   {
     static byte prev = 0xff;
     if( v!=prev ) {printf("dazzler_out_ctrl(%02x)\n", v); prev = v; }
   }
 #endif
+
+  // client version 0 expects CTRL before FULLFRAME data
+  if( dazzler_client_version<1 ) { b[1] = v; dazzler_send(b, 2); }
 
   if( dazzler_client_version<0 )
     {
@@ -477,7 +477,7 @@ byte dazzler_get_iface()
 
 void dazzler_setup()
 {
-  dazzler_mem_size  = 2048;
+  dazzler_mem_size  = 512;
   dazzler_mem_addr1 = 0xFFFF;
   dazzler_mem_addr2 = 0xFFFF;
   dazzler_mem_start = 0x0000;
