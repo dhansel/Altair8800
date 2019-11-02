@@ -192,8 +192,15 @@ void dazzler_out_ctrl(byte v)
     {
       // Dazzler client version 0 only has one buffer
       // (expects "v" value unchanged)
-      if( a!=dazzler_mem_addr1 )
+      if( dazzler_mem_addr1==0xFFFF )
         {
+          // not yet initialized => send full frame
+          dazzler_send_fullframe(BUFFER1, a);
+          dazzler_mem_addr1 = a;
+        }
+      else if( a!=dazzler_mem_addr1 )
+        {
+          // already initialized and different address => send diff
           dazzler_send_frame(BUFFER1, dazzler_mem_addr1, a);
           dazzler_mem_addr1 = a;
         }
