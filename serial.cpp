@@ -271,7 +271,8 @@ void serial_set_config(byte dev)
         serial_ctrl[dev] |= SSC_REALTIME;
       else
         serial_ctrl[dev] &= ~SSC_REALTIME;
-      if( dev==CSM_SIO ) serial_ctrl[dev] |= config_serial_siorev() & 3;
+
+      if( dev==CSM_SIO ) serial_ctrl[dev] = (serial_ctrl[dev] & ~3) | (config_serial_siorev() & 3);
     }
 }
 
