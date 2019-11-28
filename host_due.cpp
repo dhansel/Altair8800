@@ -48,6 +48,10 @@ static SdFat SD;
 // can get slow (similar to a 2400 baud connection). Enabling USE_NATIVE_USB_TX_OPTIMIZATION
 // will buffer characters sent while waiting for the next USB frame and then send 
 // them all together.
+// IMPORTANT: this MUST be enabled when using PIC32-based Dazzler or VDM-1 over USB
+// because the SerialUSB implementation does not properly support full-speed devices,
+// specifically it always sends data in 512-byte blocks (high-speed size) instead of
+// using 64-byte block sizes for full-speed devices.
 #define USE_NATIVE_USB_TX_OPTIMIZATION
 
 
@@ -848,7 +852,7 @@ static void usb_isr()
 
 static size_t usb_write(const char *buf, size_t len)
 {
-  uint8_t nbytes;
+  size_t nbytes;
 
   udd_disable_msof_interrupt();
   udd_disable_sof_interrupt();
@@ -878,7 +882,7 @@ static size_t usb_write(const char *buf, size_t len)
       while( ptr_dest!=ptr_end ) *ptr_dest++ = *buf++;
       fifo_len += nbytes;
     }
-      
+
   if( fifo_len==fifo_size )
     {
       // FIFO is full => send it now
