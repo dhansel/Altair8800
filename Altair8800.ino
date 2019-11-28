@@ -443,8 +443,11 @@ void process_inputs()
     {
       serial_close_files();
 #if USE_DAZZLER>0
-      // disable Dazzler
+      // turn off Dazzler and reset it
+      byte i = dazzler_get_iface();
       dazzler_out_ctrl(0);
+      dazzler_set_iface(0xff);
+      dazzler_set_iface(i);
 #endif
     }
 
@@ -1440,6 +1443,8 @@ void altair_out(byte port, byte data)
     dazzler_out_ctrl(data);
   else if( port==0x0F )
     dazzler_out_pict(data);
+  else if( port>=0x19 && port<=0x1F )
+    dazzler_out_dac(port-0x19, data);
 #endif
 #if USE_VDM1>0
   else if( port==0xC8 )

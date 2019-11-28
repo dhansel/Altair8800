@@ -29,6 +29,7 @@
 
 void dazzler_out_ctrl(byte v) {}
 void dazzler_out_pict(byte v) {}
+void dazzler_out_dac(byte port, byte v) {}
 byte dazzler_in(byte port) { return 0xff; }
 void dazzler_set_iface(byte iface) {}
 byte dazzler_get_iface() { return 0xff; }
@@ -36,12 +37,13 @@ void dazzler_setup() {}
 
 #else
 
-#define DAZZLER_HOST_VERSION 0x01
+#define DAZZLER_COMPUTER_VERSION 0x02
 
 #define DAZ_MEMBYTE   0x10
 #define DAZ_FULLFRAME 0x20
 #define DAZ_CTRL      0x30
 #define DAZ_CTRLPIC   0x40
+#define DAZ_DAC       0x50
 #define DAZ_VERSION   0xF0
 
 #define DAZ_JOY1      0x10
@@ -52,10 +54,19 @@ void dazzler_setup() {}
 #define BUFFER1       0x00
 #define BUFFER2       0x08
 
+#define FEAT_VIDEO    0x01
+#define FEAT_JOYSTICK 0x02
+#define FEAT_DUAL_BUF 0x04
+#define FEAT_VSYNC    0x08
+#define FEAT_DAC      0x10
+#define FEAT_KEYBAORD 0x20
+#define FEAT_FRAMEBUF 0x40
+
 #define DEBUGLVL 0
 
 byte dazzler_iface = 0xff;
 int  dazzler_client_version = -1;
+uint16_t dazzler_client_features = 0;
 uint32_t dazzler_vsync_cycles = 0;
 
 uint16_t dazzler_mem_addr1, dazzler_mem_addr2, dazzler_mem_start, dazzler_mem_end, dazzler_mem_size;
@@ -81,8 +92,11 @@ static void dazzler_send_fullframe(uint8_t buffer_flag, uint16_t addr)
 {
   // send full picture memory
   byte b = DAZ_FULLFRAME | buffer_flag | (dazzler_mem_size > 512 ? 1 : 0);
-  host_serial_write(dazzler_iface, b);
+  dazzler_send(&b, 1);
   dazzler_send(Mem+addr, dazzler_mem_size > 512 ? 2048 : 512);
+#if DEBUGLVL>0
+  printf("dazzler_send_fullframe(%i, %04X)\n", buffer_flag, addr);
+#endif
 }
 
 
@@ -90,6 +104,10 @@ static void dazzler_send_frame(int buffer_flag, uint16_t addr_old, uint16_t addr
 {
   uint8_t b[3];
   int n = 0, d = addr_new-addr_old, end = addr_new + dazzler_mem_size;
+
+#if DEBUGLVL>0
+  printf("dazzler_send_frame(%i, %04X, %04X)\n", buffer_flag, addr_old, addr_new);
+#endif
 
   // check how many bytes actually differ between the 
   // old and new memory locations (if a program is
@@ -119,11 +137,42 @@ static void dazzler_send_frame(int buffer_flag, uint16_t addr_old, uint16_t addr
 }
 
 
+static void dazzler_check_version()
+{
+  if( dazzler_client_version<0 )
+    {
+      // client version not yet determined => send host version to client
+      byte b = DAZ_VERSION | (DAZZLER_COMPUTER_VERSION&0x0F);
+      dazzler_send(&b, 1);
+
+      // wait to receive version response from client
+      // client response is received via interrupt in dazzler_receive()
+      unsigned long t = millis();
+      while( millis()-t < 50 && dazzler_client_version<0 ) { host_check_interrupts(); TIMER_ADD_CYCLES(2); }
+
+      // if client does not respond within 10ms then it is either not present
+      // or version 0 (which did not understand DAZ_VERSION and ignored it)
+      if( dazzler_client_version<0 ) 
+        {
+          dazzler_client_version=0;
+
+          // both version 0 clients (PIC32/Windows) had these features
+          dazzler_client_features = FEAT_VIDEO | FEAT_JOYSTICK | FEAT_FRAMEBUF;
+        }
+
+#if DEBUGLVL>0
+      Serial.print(F("client is version ")); Serial.print(dazzler_client_version);
+      Serial.print(F(" with features 0x")); Serial.println(dazzler_client_features, HEX);
+#endif
+    }
+}
+
+
 void dazzler_write_mem_do(uint16_t a, byte v)
 {
   byte b[3];
 
-#if DEBUGLVL>0
+#if DEBUGLVL>2
   printf("dazzler_write_mem(%04x, %02x)\n", a, v);
 #endif
 
@@ -155,28 +204,15 @@ void dazzler_out_ctrl(byte v)
 #if DEBUGLVL>0
   {
     static byte prev = 0xff;
-    if( v!=prev ) {printf("dazzler_out_ctrl(%02x)\n", v); prev = v; }
+    if( v!=prev ) { printf("dazzler_out_ctrl(%02x)\n", v); prev = v; }
   }
 #endif
 
-  // client version 0 expects CTRL before FULLFRAME data
-  if( dazzler_client_version<1 ) { b[1] = v; dazzler_send(b, 2); }
+  dazzler_check_version();
 
-  if( dazzler_client_version<0 )
-    {
-      // client version not yet determined => send host version to client
-      b[0] = DAZ_VERSION | (DAZZLER_HOST_VERSION&0x0F);
-      dazzler_send(b, 1);
-
-      // wait to receive version response from client
-      // client response is received via interrupt in dazzler_receive()
-      unsigned long t = millis();
-      while( millis()-t < 10 && dazzler_client_version<0 ) host_check_interrupts();
-
-      // if client does not respond within 10ms then it is either not present
-      // or version 0 (which did not understand DAZ_VERSION and ignored it)
-      if( dazzler_client_version<0 ) dazzler_client_version=0;
-    }
+  // if client uses a framebuffer then we need to send CTRL before FULLFRAME data
+  // so the client renders the data with the new properties
+  if( dazzler_client_features & FEAT_FRAMEBUF ) { b[1] = v; dazzler_send(b, 2); }
 
   // D7: 1=enabled, 0=disabled
   // D6-D0: bits 15-9 of dazzler memory address
@@ -188,10 +224,9 @@ void dazzler_out_ctrl(byte v)
       dazzler_mem_addr2 = 0xFFFF;
       v = 0x00;
     }
-  else if( dazzler_client_version<1 )
+  else if( (dazzler_client_features & FEAT_DUAL_BUF)==0 )
     {
-      // Dazzler client version 0 only has one buffer
-      // (expects "v" value unchanged)
+      // client only has a single buffer
       if( dazzler_mem_addr1==0xFFFF )
         {
           // not yet initialized => send full frame
@@ -269,9 +304,9 @@ void dazzler_out_ctrl(byte v)
       dazzler_mem_end   = max(dazzler_mem_addr1, dazzler_mem_addr2) + dazzler_mem_size;
     }
 
-  // client version 1 and later can have CTRLPIC after FULLFRAME data
-  // (avoids initial display of garbage memory)
-  if( dazzler_client_version>=1 ) { b[1] = v; dazzler_send(b, 2); }
+  // if client does not have a framebuffer (i.e. renders in real-time) then we can
+  // send CTRL after FULLFRAME data (avoids initial short initial incorrect display)
+  if( !(dazzler_client_features & FEAT_FRAMEBUF) ) { b[1] = v; dazzler_send(b, 2); }
 }
 
 
@@ -285,15 +320,18 @@ void dazzler_out_pict(byte v)
 
 #if DEBUGLVL>0
   static byte prev = 0xff;
-  if( v!=prev ) {printf("dazzler_out_pict(%02x)\n", v); prev = v; }
+  if( v!=prev ) { printf("dazzler_out_pict(%02x)\n", v); prev = v; }
 #endif
+
+  dazzler_check_version();
 
   byte b[2];
   b[0] = DAZ_CTRLPIC;
   b[1] = v;
 
-  // client version 0 expects CTRLPIC before FULLFRAME data
-  if( dazzler_client_version<1 ) dazzler_send(b, 2);
+  // if client uses a framebuffer then we need to send  CTRLPIC before FULLFRAME data
+  // so the client renders the data with the new properties
+  if( dazzler_client_features & FEAT_FRAMEBUF ) { b[1] = v; dazzler_send(b, 2); }
 
   uint16_t s = v & 0x20 ? 2048 : 512;
   if( s > dazzler_mem_size )
@@ -310,16 +348,41 @@ void dazzler_out_pict(byte v)
   else
     dazzler_mem_size = s;
 
-  // client version 1 and later can have CTRLPIC after FULLFRAME data
-  // (avoids initial display of garbage memory if memory size increased)
-  if( dazzler_client_version>=1 ) dazzler_send(b, 2);
+  // if client does not have a framebuffer (i.e. renders in real-time) then we can
+  // send CTRL after FULLFRAME data (avoids initial short initial incorrect display)
+  if( !(dazzler_client_features & FEAT_FRAMEBUF) ) { b[1] = v; dazzler_send(b, 2); }
+}
+
+
+void dazzler_out_dac(byte dacnum, byte v)
+{
+  static byte     prev_sample[7] = {0, 0, 0, 0, 0, 0, 0};
+  static uint32_t prev_sample_cycles[7] = {0, 0, 0, 0, 0, 0, 0};
+
+  if( (dazzler_client_features & FEAT_DAC) && v!=prev_sample[dacnum] )
+    {
+      uint32_t c = timer_get_cycles();
+      uint16_t delay = min(65535, (c - prev_sample_cycles[dacnum])/2);
+
+      byte b[4];
+      b[0] = DAZ_DAC | (dacnum & 0x0F);
+      b[1] = delay & 255;
+      b[2] = delay / 256;
+      b[3] = v;
+      dazzler_send(b, 4);
+
+      prev_sample[dacnum] = v;
+      prev_sample_cycles[dacnum] = c;
+    }
+
+  TIMER_ADD_CYCLES(11);
 }
 
 
 inline void set_d7a_port(byte p, byte v)
 {
-#if DEBUGLVL>0
-  printf("set_d7a_port(%i, %02x)\n", 0030+p, v);
+#if DEBUGLVL>1
+  printf("set_d7a_port(%02x, %02x)\n", 0030+p, v);
 #endif
   d7a_port[p]=v;
 }
@@ -327,9 +390,9 @@ inline void set_d7a_port(byte p, byte v)
 
 void dazzler_receive(byte iface, byte data)
 {
-  static byte state=0;
+  static byte state=0, bufdata[3];
 
-#if DEBUGLVL>0
+#if DEBUGLVL>1
   Serial.print("dazzler_receive: "); Serial.println(data, HEX);
 #endif
 
@@ -352,9 +415,22 @@ void dazzler_receive(byte iface, byte data)
             break;
 
           case DAZ_VERSION:
-            dazzler_client_version = data & 0x0F;
-            state = 0;
-            break;
+            {
+              byte version = data & 0x0F;
+              if( version<2 )
+                {
+                  // client version 0 did not send DAZ_VERSION, client version 1 (only PIC32) had these features:
+                  dazzler_client_features = FEAT_VIDEO | FEAT_JOYSTICK | FEAT_DUAL_BUF | FEAT_VSYNC;
+                  dazzler_client_version = version; 
+                  state = 0;
+                }
+              else
+                {
+                  // version 2 and up report features => wait for 2 more bytes of data
+                  bufdata[0] = version;
+                }
+              break;
+            }
 
           case DAZ_VSYNC:
             dazzler_vsync_cycles = timer_get_cycles();
@@ -388,8 +464,21 @@ void dazzler_receive(byte iface, byte data)
       break;
 
     case DAZ_KEY:
-      int i = config_serial_map_sim_to_host(CSM_SIO);
-      if( i<0xff ) serial_receive_host_data(i, data);
+      {
+        int i = config_serial_map_sim_to_host(CSM_SIO);
+        if( i<0xff ) serial_receive_host_data(i, data);
+        state = 0;
+        break;
+      }
+
+    case DAZ_VERSION:
+      bufdata[1] = data;
+      state++;
+      break;
+
+    case DAZ_VERSION+1:
+      dazzler_client_features = bufdata[1] + data * 256;
+      dazzler_client_version  = bufdata[0];
       state = 0;
       break;
     }
@@ -414,27 +503,25 @@ byte dazzler_in(byte port)
       const uint32_t cycles_per_frame = 33367;
       const uint32_t cycles_per_line  = cycles_per_frame/262;
 
+      uint32_t c, cc = timer_get_cycles();
+
       // determine position within frame
-      uint32_t c = timer_get_cycles() % cycles_per_frame;
+      // (if client does not send VSYNC then compute an aproximation)
+      if( dazzler_client_features & FEAT_VSYNC )
+        c = cc - dazzler_vsync_cycles;
+      else
+        c = cc % cycles_per_frame;
 
       // bits 0-5 are unused
       v = 0xff;
 
       // bit 6: is low for 4ms (8000 cycles) between frames
       // (we pull it low at the beginning of a frame)
-      // NOTE: bit 7 is also low during this period
-      if( dazzler_client_version==0 )
-        {
-          // client version 0 does not report VSYNC => compute an aproximation
-          if( c<8000 ) v &= ~0xC0;
-        }
-      else
-        {
-          // clients version 1 and later send VSYNC => keep bit 6 low
-          // for 8000 cycles after we receive it
-          if( timer_get_cycles()-dazzler_vsync_cycles < 8000 )
-            v &= ~0xC0;
-        }
+      // note that if bit 6 is low then bit 7 is also low,
+      // according to the Dazzler schematics: The 7493 counter
+      // which produces the bit 7 output is continuously reset
+      // while bit 6 is low.
+      if( c<8000 ) v &= ~0xC0;
 
       // bit 7: low for odd line, high for even line
       if( (c/cycles_per_line)&1 ) v &= ~0x80;
@@ -447,7 +534,7 @@ byte dazzler_in(byte port)
       v = d7a_port[port-0030];
     }
   
-#if DEBUGLVL>1
+#if DEBUGLVL>2
   printf("%04x: dazzler_in(%i)=%02x\n", regPC, port, v);
 #endif
 
@@ -467,6 +554,7 @@ void dazzler_set_iface(byte iface)
       // set receive callback
       dazzler_iface = iface;
       dazzler_client_version = -1;
+      dazzler_client_features = 0;
       fprev = host_serial_set_receive_callback(dazzler_iface, dazzler_receive);
       
 #if DEBUGLVL>0
@@ -491,6 +579,7 @@ void dazzler_setup()
   dazzler_mem_end   = 0x0000;
   for(int i=0; i<5; i++) d7a_port[i]=0xff;
   dazzler_client_version = -1;
+  dazzler_client_features = 0;
 
   dazzler_set_iface(config_dazzler_interface());
 }

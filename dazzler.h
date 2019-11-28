@@ -15,6 +15,7 @@ extern uint16_t dazzler_mem_start, dazzler_mem_end;
 void dazzler_write_mem_do(uint16_t a, byte v);
 void dazzler_out_ctrl(byte v);
 void dazzler_out_pict(byte v);
+void dazzler_out_dac(byte dacnum, byte v);
 byte dazzler_in(byte port);
 
 void dazzler_receive(int size, byte *data);
