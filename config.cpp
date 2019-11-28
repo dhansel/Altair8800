@@ -21,6 +21,7 @@
 #include "config.h"
 #include "mem.h"
 #include "serial.h"
+#include "printer.h"
 #include "filesys.h"
 #include "numsys.h"
 #include "drive.h"
@@ -32,7 +33,7 @@
 #include "vdm1.h"
 #include "cpucore.h"
 
-#define CONFIG_FILE_VERSION 8
+#define CONFIG_FILE_VERSION 9
 
 #define BAUD_110     0
 #define BAUD_150     1
@@ -73,7 +74,7 @@
 // V = VI board installed
 // R = RTC rate
 // d = force real-time mode for disk drives
-// p = printer type (00=NONE, 01=Okidata, 02=C700)
+// p = printer type (00=NONE, 01=Okidata/88-LPC, 02=C700, 03=Generic)
 // m = map printer to host interface (00=NONE, 01=primary, 02=secondary)
 // r = real-time mode for printer
 // h = real-time mode for hard drives
@@ -141,6 +142,10 @@ byte config_aux1_prog;
 
 // amount of RAM installed
 uint32_t config_mem_size;
+
+// status bytes for generic printer emulation
+byte config_printer_generic_status_busy;
+byte config_printer_generic_status_ready;
 
 
 // --------------------------------------------------------------------------------
@@ -471,6 +476,12 @@ byte config_printer_map_to_host_serial()
 byte config_printer_type()
 {
   return get_bits(config_flags, 19, 2);
+}
+
+
+byte config_printer_generic_get_status(bool busy)
+{
+  return busy ? config_printer_generic_status_busy : config_printer_generic_status_ready;
 }
 
 
@@ -913,8 +924,9 @@ static void print_printer_type()
   switch( config_printer_type() )
     {
     case 0: Serial.print(F("None")); break;
-    case 1: Serial.print(F("Okidata")); break;
+    case 1: Serial.print(F("Okidata/88-LPC")); break;
     case 2: Serial.print(F("C700")); break;
+    case 3: Serial.print(F("Generic")); break;
     }
 }
 
@@ -1403,7 +1415,7 @@ static bool save_config(byte fileno)
 {
   bool res = false;
   byte s = sizeof(uint32_t);
-  byte data[4*4+(1+NUM_SERIAL_DEVICES*4)+9*4+1+(1+NUM_DRIVES)+(1+NUM_TDRIVES)+(1+NUM_HDSK_UNITS*4)+1+1];
+  byte data[4*4+(1+NUM_SERIAL_DEVICES*4)+9*4+1+(1+NUM_DRIVES)+(1+NUM_TDRIVES)+(1+NUM_HDSK_UNITS*4)+1+1+2];
 
   // merge version number into config_flags
   config_flags = (config_flags & 0x00ffffff) | (((uint32_t) CONFIG_FILE_VERSION) << 24);
@@ -1430,6 +1442,9 @@ static bool save_config(byte fileno)
   for(byte i=0; i<NUM_HDSK_UNITS; i++) 
     for(byte j=0; j<4; j++)
       data[n++] = hdsk_get_mounted_image(i, j);
+
+  data[n++] = config_printer_generic_status_busy;
+  data[n++] = config_printer_generic_status_ready;
 
   data[n++] = config_mem_size/256;
   data[n++] = mem_get_num_roms(false);
@@ -1591,6 +1606,13 @@ static bool load_config(byte fileno)
             }
       hdsk_set_realtime((config_flags & CF_HDSK_RT)!=0);
 
+      if( v >= 9 )
+        {
+          // generic printer settings (version 9 and up)
+          filesys_read_data(fid, &config_printer_generic_status_busy, 1);
+          filesys_read_data(fid, &config_printer_generic_status_ready, 1);
+        }
+
       // memory (RAM) size
       if( filesys_read_data(fid, &d, 1) )
         config_mem_size = (d==0) ? 0x10000 : (d*256);
@@ -1680,6 +1702,7 @@ void config_edit_printer()
   byte row, col, r_type, r_iface, r_force, r_cmd;
   bool go = true, redraw = true;
 
+  byte prev_type = config_printer_type();
   while( go )
     {
       if( redraw )
@@ -1687,11 +1710,17 @@ void config_edit_printer()
           Serial.print(F("\033[2J\033[0;0H\n"));
           
           row = 4;
-          col = 30;
+          col = 33;
           Serial.println(F("Configure printer settings"));
-          Serial.print(F("\n(P)rinter type             : ")); r_type = row++; print_printer_type(); Serial.println();
-          Serial.print(F("Map printer to (i)nterface : ")); r_iface = row++; print_printer_mapped_to(); Serial.println();
-          Serial.print(F("(F)orce real-time mode     : ")); r_force = row++; print_flag(CF_PRINTER_RT); Serial.println();
+          Serial.print(F("\n(P)rinter type                : ")); r_type = row++; print_printer_type(); Serial.println();
+          Serial.print(F("Map printer to (i)nterface    : ")); r_iface = row++; print_printer_mapped_to(); Serial.println();
+          Serial.print(F("(F)orce real-time mode        : ")); r_force = row++; print_flag(CF_PRINTER_RT); Serial.println();
+          if( config_printer_type()==CP_GENERIC )
+            {
+              Serial.print(F("Status register (b)usy value  : ")); numsys_print_byte_hex(config_printer_generic_get_status(true)); Serial.println('h');
+              Serial.print(F("Status register (r)eady value : ")); numsys_print_byte_hex(config_printer_generic_get_status(false)); Serial.println('h');
+              row += 2;
+            }
           
           Serial.println(F("\nE(x)it to main menu"));
           Serial.print(F("\n\nCommand: ")); r_cmd = row + 4;
@@ -1707,7 +1736,9 @@ void config_edit_printer()
       switch( c )
         {
         case 'P': 
-          config_flags = toggle_bits(config_flags, 19, 2, 0, 2);
+          if( config_printer_type()==CP_GENERIC ) redraw = true;
+          config_flags = toggle_bits(config_flags, 19, 2, 0, 3);
+          if( config_printer_type()==CP_GENERIC ) redraw = true;
           set_cursor(r_type, col);
           print_printer_type(); 
           break;
@@ -1718,9 +1749,31 @@ void config_edit_printer()
           print_printer_mapped_to(); 
           break;
 
+        case 'b':
+        case 'r':
+          if( config_printer_type()==CP_GENERIC )
+            {
+              byte b;
+              Serial.print(F("\r\nEnter status byte: "));
+              if( numsys_read_byte(&b) )
+                {
+                  if( c=='b' ) 
+                    config_printer_generic_status_busy = b;
+                  else
+                    config_printer_generic_status_ready = b;
+                }
+              redraw = true;
+            }
+          break;
+
         case 'F': toggle_flag(CF_PRINTER_RT, r_force, col); break;
         case 27:
-        case 'x': go = false; break;
+        case 'x': 
+          {
+            go = false; 
+            if( config_printer_type()!=prev_type ) printer_setup();
+            break;
+          }
         }
     }
 }
@@ -3148,6 +3201,9 @@ void config_defaults(bool apply)
   // maximum amount of RAM supported by host
   config_mem_size = MEMSIZE; 
   mem_clear_roms();
+
+  config_printer_generic_status_busy = 0x00;
+  config_printer_generic_status_ready = 0xFF;
 
   if( apply ) 
     {

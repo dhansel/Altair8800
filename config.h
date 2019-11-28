@@ -157,6 +157,7 @@
 #define CP_NONE         0
 #define CP_OKI          1
 #define CP_C700         2
+#define CP_GENERIC      3
 
 extern uint32_t config_flags, config_flags2;
 extern uint32_t config_serial_settings;
@@ -209,5 +210,6 @@ byte     config_vdm1_keyboard_device();
 byte        config_printer_type();
 byte        config_printer_map_to_host_serial();
 inline byte config_printer_realtime() { return (config_flags & CF_PRINTER_RT)!=0; }
+byte        config_printer_generic_get_status(bool busy);
 
 #endif

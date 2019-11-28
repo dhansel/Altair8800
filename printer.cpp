@@ -45,10 +45,11 @@ void printer_setup() {}
 #define STLF_LF   1
 #define STLF_DONE 0
 
+#define BUFFER_SIZE 132
 static byte status = 0x00;
 static bool interrupt_enabled = false;
 static byte buffer_size = 0, buffer_counter = 0, linefeed_status = 0;
-static byte buffer[132];
+static byte buffer[BUFFER_SIZE];
 
 
 static bool print_character(byte c, unsigned long delay)
@@ -194,18 +195,13 @@ void printer_oki_out_data(byte data)
   if( interrupt_enabled ) 
     altair_interrupt(INT_LPC, false);
 
-  if( data==0x0d )
-    {
-      buffer_counter  = 0;
-      linefeed_status = STLF_CR;
-      print_next_character();
-    }
-  else if( data==0x0a )
-    {
-      linefeed_status = STLF_LF;
-      print_next_character();
-    }
-  else if( (status & PST_PRINTING)==0 && buffer_size<80 )
+  // Okidata printer only uses lower 6 bits, with
+  // 0x00-0x1f: upper case letters
+  // 0x20-0x3f: punctuation and numbers
+  data &= 0x3F;
+  if( data<0x20 ) data += 0x40;
+
+  if( (status & PST_PRINTING)==0 && buffer_size<80 )
     {
       buffer[buffer_size++] = data;
       if( buffer_size==80 )
@@ -315,10 +311,10 @@ void printer_c700_out_data(byte data)
           buffer_counter = 0;
           buffer_size = 0;
         }
-      else if( (status & PST_PRINTING)==0 && buffer_size<132 )
+      else if( (status & PST_PRINTING)==0 && buffer_size<BUFFER_SIZE )
         {
           buffer[buffer_size++] = data;
-          if( buffer_size==132 )
+          if( buffer_size==BUFFER_SIZE )
             {
               status |= PST_BUFFER_FULL;
               if( (status & PST_LINEFEED)==0 ) 
@@ -375,6 +371,88 @@ void printer_c700_setup()
 }
 
 
+// ----- Generic
+
+
+// for the generic emulation we use the buffer as a ring-buffer
+// not defining new buffer pointer variables to save host memory
+#define buffer_start buffer_counter
+#define buffer_end   buffer_size
+
+
+void printer_generic_out_ctrl(byte data)
+{}
+
+
+void printer_generic_out_data(byte data)
+{
+  if( config_printer_realtime() )
+    {
+      if( !(status & PST_BUFFER_FULL) )
+        {
+          buffer[buffer_end] = data;
+          buffer_end = (buffer_end+1) % BUFFER_SIZE;
+          
+          if( ((buffer_end+1) % BUFFER_SIZE) == buffer_start )
+            status |= PST_BUFFER_FULL;
+        }
+
+      // process first character as soon as possible
+      if( !timer_running(TIMER_PRINTER) )
+        timer_start(TIMER_PRINTER, 1);
+    }
+  else
+    host_serial_write(config_printer_map_to_host_serial(), data);
+}
+
+
+byte printer_generic_in_ctrl()
+{
+  bool busy;
+
+  if( config_printer_realtime() )
+    busy = (status & PST_BUFFER_FULL);
+  else
+    busy = host_serial_available_for_write(config_printer_map_to_host_serial())==0;
+  
+  return config_printer_generic_get_status(busy);
+}
+
+
+void printer_generic_interrupt()
+{
+  byte ser = config_printer_map_to_host_serial();
+  
+  if( !host_serial_available_for_write(ser) )
+    {
+      // serial output not assigned or not ready => check again in 10ms
+      timer_start(TIMER_PRINTER, 1000000/100);
+    }
+  else
+    {
+      byte data = buffer[buffer_start];
+      buffer_start = (buffer_start+1) % BUFFER_SIZE;
+      status &= ~PST_BUFFER_FULL;
+
+      host_serial_write(ser, data);
+      if( buffer_start!=buffer_end )
+        {
+          // buffer is not empty yet => schedule another inerrupt
+          int delay = (data==0x0d || data==0x0a) ? (1000000/10) : (1000000/100);
+          timer_start(TIMER_PRINTER, delay);
+        }
+    }
+}
+
+
+void printer_generic_setup()
+{
+  timer_setup(TIMER_PRINTER, 1000000, printer_generic_interrupt);
+  status = 0x00;
+  buffer_end = buffer_start = 0;
+}
+
+
 // ---------------------------------------------------------------------------------------------
 
 
@@ -386,6 +464,7 @@ void printer_out_ctrl(byte data)
     {
     case CP_OKI:  printer_oki_out_ctrl(data); break;
     case CP_C700: printer_c700_out_ctrl(data); break;
+    case CP_GENERIC: printer_generic_out_ctrl(data); break;
     }
 }
 
@@ -398,6 +477,7 @@ void printer_out_data(byte data)
     {
     case CP_OKI:  printer_oki_out_data(data); break;
     case CP_C700: printer_c700_out_data(data); break;
+    case CP_GENERIC: printer_generic_out_data(data); break;
     }
 }
 
@@ -410,6 +490,7 @@ byte printer_in_ctrl()
     {
     case CP_OKI:  data = printer_oki_in_ctrl(); break;
     case CP_C700: data = printer_c700_in_ctrl(); break;
+    case CP_GENERIC: data = printer_generic_in_ctrl(); break;
     }
 
   //printf("%04X: IN 02 <= %02X\n", regPC, data);
@@ -428,12 +509,17 @@ void printer_setup()
 {
   if( interrupt_enabled ) 
     altair_interrupt(INT_LPC, false);
+
   interrupt_enabled = false;
+  buffer_size = 0;
+  buffer_counter = 0;
+  linefeed_status = 0;
 
   switch( config_printer_type() )
     {
-    case CP_OKI:  return printer_oki_setup(); break;
-    case CP_C700: return printer_c700_setup(); break;
+    case CP_OKI:     return printer_oki_setup(); break;
+    case CP_C700:    return printer_c700_setup(); break;
+    case CP_GENERIC: return printer_generic_setup(); break;
     }
 }
 
