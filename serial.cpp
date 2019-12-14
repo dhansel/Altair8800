@@ -324,7 +324,7 @@ void serial_receive_host_data(byte host_interface, byte b)
   static unsigned long prevESC = 0;
   if( b==27 && config_serial_input_enabled() && !host_read_status_led_WAIT() && host_interface==config_host_serial_primary() )
     {
-      if( millis()-prevESC<250 )
+      if( millis()-prevESC>50 && millis()-prevESC<250 )
         {
           // if we have serial input enabled then hitting 
           // the ESC key twice works as STOP
