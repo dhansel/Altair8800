@@ -711,7 +711,7 @@ static void host_check_ctrlc(char c)
     {
       // CTRL-C was pressed.  If we receive two CTRL-C in short order
       // then we terminate the emulator.
-      if( millis()>prevCtrlC+250 )
+      if( millis()<prevCtrlC+50 || millis()>prevCtrlC+250 )
         prevCtrlC = millis();
       else
         exit(0);
