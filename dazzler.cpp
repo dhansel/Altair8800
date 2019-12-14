@@ -70,7 +70,7 @@ uint16_t dazzler_client_features = 0;
 uint32_t dazzler_vsync_cycles = 0;
 
 uint16_t dazzler_mem_addr1, dazzler_mem_addr2, dazzler_mem_start, dazzler_mem_end, dazzler_mem_size;
-volatile byte d7a_port[5];
+volatile byte d7a_port[5] = {0xff, 0x00, 0x00, 0x00, 0x00};
 
 
 static void dazzler_send(const byte *data, uint16_t size)
@@ -577,7 +577,6 @@ void dazzler_setup()
   dazzler_mem_addr2 = 0xFFFF;
   dazzler_mem_start = 0x0000;
   dazzler_mem_end   = 0x0000;
-  for(int i=0; i<5; i++) d7a_port[i]=0xff;
   dazzler_client_version = -1;
   dazzler_client_features = 0;
 
