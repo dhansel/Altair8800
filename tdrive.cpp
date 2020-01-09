@@ -394,6 +394,7 @@ static void tdrive_out_command(byte cmd)
           drive_data_idx   = 0;
           drive_data_count = 6;
           drive_command    = cmd;
+          drive_data_request = true;
           drive_data_buffer[0] = drive_current_track[drive_selected];
           drive_data_buffer[1] = 6;
           drive_data_buffer[2] = drive_current_sector;
