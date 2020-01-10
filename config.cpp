@@ -1097,43 +1097,44 @@ static uint32_t toggle_serial_flag_backspace(uint32_t settings)
 }
 
 
-static byte find_floppy_image(byte n, bool up)
+static byte find_floppy_image(byte n, bool up, byte max = 0xff)
 {
-  byte i=n;
+  int i=n;
+
   do
     {
       if( drive_get_image_filename(i)!=NULL ) return i;
       if( up ) i++; else i--;
     }
-  while( up && i>0 || !up && i<0xff );
+  while( i>=0 && i<=max );
 
   return 0;
 }
 
 
-static byte find_tfloppy_image(byte n, bool up)
+static byte find_tfloppy_image(byte n, bool up, byte max = 0xff)
 {
-  byte i=n;
+  int i=n;
   do
     {
       if( tdrive_get_image_filename(i)!=NULL ) return i;
       if( up ) i++; else i--;
     }
-  while( up && i>0 || !up && i<0xff );
+  while( i>=0 && i<=max );
 
   return 0;
 }
 
 
-static byte find_hdsk_image(byte n, bool up)
+static byte find_hdsk_image(byte n, bool up, byte max = 0xff)
 {
-  byte i=n;
+  int i=n;
   do
     {
       if( hdsk_get_image_filename(i)!=NULL ) return i;
       if( up ) i++; else i--;
     }
-  while( up && i>0 || !up && i<0xff );
+  while( i>=0 && i<=max );
 
   return 0;
 }
@@ -1146,48 +1147,50 @@ static void toggle_aux1_program_up(byte row, byte col)
 
   while( !found )
     {
+      b++;
       if( !found && (b & 0xC0)==0x00 )
         {
           // look for next integrated program
-          b = b + 1;
-          if( prog_get_name(b) )
+          if( b>0 && prog_get_name(b) )
             found = true;
-          else
-            b = 0x40;
+          else if( b==0x3F )
+            b = 0x41;
         }
 
       if( !found && (b & 0xC0)==0x40 )
         {
 #if NUM_TDRIVES>0
           // look for next tarbell floppy image
-          b = find_tfloppy_image((b & 0x3f)+1, true) | 0x40;
+          b = find_tfloppy_image(b & 0x3f, true, 0x3f) | 0x40;
           if( b>0x40 ) 
             found = true;
           else
 #endif
-            b = 0x80;
+            b = 0x81;
         }
 
       if( !found && (b & 0xC0)==0x80 )
         {
 #if NUM_DRIVES>0
           // look for next floppy disk image
-          b = find_floppy_image((b & 0x3f)+1, true) | 0x80;
+          b = find_floppy_image(b & 0x3f, true, 0x3f) | 0x80;
           if( b>0x80 ) 
             found = true;
           else
 #endif
-            b = 0xC0;
+            b = 0xC1;
         }
       
       if( !found && (b & 0xC0)==0xC0 )
         {
+#if NUM_HDSK_UNITS>0
           // look for next hard disk image
-          b = find_hdsk_image((b & 0x3f)+1, true) | 0xC0;
+          b = find_hdsk_image(b & 0x3f, true, 0x3f) | 0xC0;
           if( b>0xC0 ) 
             found = true;
           else
-            b = 0;
+#endif
+            b = 0x00;
         }
     }
 
@@ -1203,41 +1206,47 @@ static void toggle_aux1_program_down(byte row, byte col)
 
   while( !found )
     {
-      if( !found && (b & 0xC0)==0xC0 )
+      b--;
+	  if( !found && (b & 0xC0)==0xC0 )
         {
           // look for previous hard disk image
-          b = find_hdsk_image((b & 0x3f)-1, false) | 0xC0;
+#if NUM_HDSK_UNITS>0
+		  b = find_hdsk_image(b & 0x3f, false, 0x3f) | 0xC0;
           if( b>0xC0 ) 
             found = true;
           else
+#endif
             b = 0xBF;
         }
 
       if( !found && (b & 0xC0)==0x80 )
         {
           // look for previous floppy disk image
-          b = find_floppy_image((b & 0x3f)-1, false) | 0x80;
+#if NUM_DRIVES>0
+		  b = find_floppy_image(b & 0x3f, false, 0x3f) | 0x80;
           if( b>0x80 ) 
             found = true;
           else
+#endif
             b = 0x7F;
         }
 
       if( !found && (b & 0xC0)==0x40 )
         {
-          // look for previous floppy disk image
-          b = find_tfloppy_image((b & 0x3f)-1, false) | 0x40;
+          // look for previous tarbell floppy disk image
+#if NUM_TDRIVES>0
+		  b = find_tfloppy_image(b & 0x3f, false, 0x3f) | 0x40;
           if( b>0x40 ) 
             found = true;
           else
+#endif
             b = 0x3F;
         }
 
       if( !found && (b & 0xC0)==0x00 )
         {
           // look for previous integrated program
-          b = b - 1;
-          if( prog_get_name(b) )
+          if( b>0 && prog_get_name(b) )
             found = true;
         }
     }
