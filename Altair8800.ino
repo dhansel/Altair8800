@@ -783,60 +783,82 @@ void read_inputs_serial()
         }
       Serial.println();
     }
+#if NUM_DRIVES>0 || NUM_TDRIVES>0 || NUM_HDSK_UNITS>0
   else if( data == 'm' )
     {
-      char c;
+      char c = 0;
+#if NUM_DRIVES==0 && NUM_TDRIVES==0
+      c = 'h';
+#elif NUM_DRIVES==0 && NUM_HDSK_UNITS==0
+      c = 't';
+#elif NUM_TDRIVES==0 && NUM_HDSK_UNITS==0
+      c = 'f';
+#elif NUM_DRIVES==0
+      Serial.print(F("\r\nMount (t)arbell floppy or (h)ard disk? "));
+#elif NUM_TDRIVES==0
+      Serial.print(F("\r\nMount (f)loppy or (h)ard disk? "));
+#elif NUM_HDSK_UNITS==0
+      Serial.print(F("\r\nMount (f)loppy or (t)arbell floppy? "));
+#else
       Serial.print(F("\r\nMount (f)loppy, (t)arbell floppy or (h)ard disk? "));
-      do { c=serial_read(); } while(c!='f' && c!='F' && c!='h' && c!='H' && c!='t' && c!='T' && c!=27);
+#endif
+
+      if( c==0 ) 
+        {
+          do { c=serial_read(); } while(c!='f' && c!='F' && c!='h' && c!='H' && c!='t' && c!='T' && c!=27);
+          if( c!=27 ) { Serial.print(c); Serial.print(' '); }
+        }
+
       if( c==27 )
         Serial.println();
       else
         {
-          bool ok = true;
-          Serial.print(c);
+          bool ok = false;
+#if NUM_DRIVES>0
           if( (c=='f' || c=='F') )
             {
               byte b;
-              dswitch = 0x1000;
-              Serial.print(F(" Drive number (0-15): "));
-              if( numsys_read_byte(&b) && b<16 )
-                dswitch |= b << 8;
-              else
-                ok = false;
+              Serial.print(F("Floppy drive number (0-"));
+              Serial.print(NUM_DRIVES-1);
+              Serial.print(F("): "));
+              if( numsys_read_byte(&b) && b<NUM_DRIVES )
+                { dswitch = 0x1000 | (b << 8); ok = true; }
             }
-          else if( (c=='t' || c=='T') )
+#endif
+#if NUM_TDRIVES>0
+          if( (c=='t' || c=='T') )
             {
               byte b;
-              dswitch = 0x5000;
-              Serial.print(F(" Drive number (0-3): "));
+              Serial.print(F("Tarbell floppy drive number (0-"));
+              Serial.print(NUM_TDRIVES-1);
+              Serial.print(F("): "));
               if( numsys_read_byte(&b) && b<4 )
-                dswitch |= b << 8;
-              else
-                ok = false;
+                { dswitch = 0x5000 | (b << 8); ok = true; }
             }
-          else
+#endif
+#if NUM_HDSK_UNITS>0
+          if( (c=='h' || c=='H') )
             {
-              dswitch = 0x3000;
-#if NUM_HDSK_UNITS>1
-              Serial.print(F(" Unit number (1-")); 
+#if NUM_HDSK_UNITS==1
+              c = '1';
+#else
+              Serial.print(F("Hard disk unit number (1-")); 
               Serial.print(NUM_HDSK_UNITS);
               Serial.print(F("): "));
               do { c=serial_read(); } while( (c<'1' || c>'0'+NUM_HDSK_UNITS) && c!=27);
-              if( c==27 ) 
-                ok = false;
-              else
-                { Serial.print(c); dswitch |= (c-'1') << 10; }
+              if( c!=27 ) { Serial.print(c); Serial.print(' '); }
 #endif
-              if( ok )
-                {
-                  Serial.print(F(" Platter number (0-3): "));
+              if( c!=27 ) 
+                { 
+                  dswitch = 0x3000 | ((c-'1') << 10);
+
+                  Serial.print(F("Platter number (0-3): "));
                   do { c=serial_read(); } while( (c<'0' || c>'3') && c!=27);
-                  if( c==27 )
-                    ok = false;
-                  else
-                    { Serial.print(c); dswitch |= (c-'0') << 8; }
+                  if( c!=27 )
+                    { Serial.print(c); dswitch |= (c-'0') << 8; ok = true; }
                 }
             }
+#endif
           
           if( ok )
             {
@@ -847,6 +869,8 @@ void read_inputs_serial()
                   dswitch |= b;
                   cswitch |= BIT(SW_AUX2DOWN);
                 }
+              else
+                dswitch = 0;
             }
           else
             dswitch = 0;
@@ -854,6 +878,7 @@ void read_inputs_serial()
           Serial.println();
         }
     }
+#endif
   else if( data == 'Q' )
     cswitch |= BIT(SW_PROTECT);
   else if( data == 'q' )
@@ -1634,10 +1659,12 @@ void setup()
   drive_setup();
   tdrive_setup();
   hdsk_setup();
-  if( host_read_function_switch(SW_DEPOSIT) )
+  if( host_read_function_switch(SW_RESET) )
+    config_setup(-1);
+  else if( host_read_function_switch(SW_DEPOSIT) )
     config_setup(host_read_addr_switches());
   else 
-    config_setup(host_read_function_switch(SW_RESET) ? -1 : 0);
+    config_setup(0);
   cpu_setup();
   serial_setup();
   profile_setup();
@@ -1647,7 +1674,7 @@ void setup()
   vdm1_setup();
 
   // if RESET switch is held up during powerup then use default configuration settings
-  if( host_is_reset() )
+  if( host_read_function_switch(SW_RESET) )
     {
       // temporarily reset configuration (also calls host_serial_setup)
       config_defaults(true);
