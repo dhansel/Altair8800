@@ -175,12 +175,6 @@ uint32_t host_get_random()
 }
 
 
-bool host_is_reset()
-{
-  return host_read_function_switch(SW_RESET);
-}
-
-
 void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len)
 {
   for(uint32_t i=0; i<len; i++) 

@@ -67,16 +67,32 @@ byte stop_request;
 
 //#define DEBUG
 
+uint32_t boot_timeout = 0;
+uint16_t boot_function_switches = 0, boot_address_switches = 0;
+
+
+// for HOST_PC, function switches are only read during boot to determine
+// RESET and DEPOSIT functions
+uint16_t host_read_addr_switches()
+{
+  if( millis() < boot_timeout )
+    return boot_address_switches;
+  else
+    return 0;
+}
 
 bool host_read_function_switch(byte i)
 {
-  return false;
+  if( millis() < boot_timeout )
+    return boot_function_switches & (1<<i);
+  else
+    return false;
 }
 
 
 bool host_read_function_switch_debounced(byte i)
 {
-  return false;
+  return host_read_function_switch(i);
 }
 
 
@@ -499,9 +515,9 @@ DWORD WINAPI host_input_thread(void *data)
               else
                 {
                   // some sort of other events => clear it from the queue
-                  INPUT_RECORD r[512];
+                  INPUT_RECORD r;
                   DWORD read;
-                  ReadConsoleInput(stdIn, r, 512, &read );
+                  ReadConsoleInput(stdIn, &r, 1, &read);
                 }
             }
           else if( eventHandles[result] == socket_accept_event )
@@ -934,17 +950,6 @@ void host_system_info()
 extern int    g_argc;
 extern char **g_argv;
 
-bool host_is_reset()
-{
-  bool res = false;
-  for(int i=0; i<g_argc; i++)
-    if( strcmp(g_argv[i], "-r")==0 )
-      return true;
-
-  return false;
-}
-
-
 void host_setup()
 {
   data_leds = 0;
@@ -1001,6 +1006,21 @@ void host_setup()
   // set serial receive callbacks to default
   for(byte i=0; i<HOSTPC_NUM_SOCKET_CONN+1; i++)
     host_serial_set_receive_callback(i, serial_receive_host_data);
+
+  // handle RESET and DEPOSIT boot functions
+  boot_timeout = millis()+100;
+  boot_function_switches = 0;
+  for(int i=0; i<g_argc; i++)
+    {
+      if( strcmp(g_argv[i], "-r")==0 )
+        boot_function_switches |= (1<<SW_RESET);
+      else if( strcmp(g_argv[i], "-c")==0 && i<g_argc+1 )
+        {
+          boot_function_switches |= (1<<SW_DEPOSIT);
+          boot_address_switches   = atoi(g_argv[i+1]);
+          i++;
+        }
+    }
 }
 
 #endif

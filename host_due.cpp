@@ -1747,12 +1747,6 @@ uint32_t host_get_random()
 }
 
 
-bool host_is_reset()
-{
-  return host_read_function_switch(SW_RESET);
-}
-
-
 #include <malloc.h>
 extern char _end;
 extern "C" char *sbrk(int i);

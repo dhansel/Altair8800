@@ -3225,7 +3225,20 @@ void config_defaults(bool apply)
 void config_setup(int n)
 {
   config_defaults(true);
-  if( n<0 || load_config(n) )
+
+  bool ok = true;
+  if( n>=0 )
+    {
+      ok = load_config(n);
+      if( !ok && n>0 )
+        {
+          Serial.print(F("Configuration ")); Serial.print(n);
+          Serial.println(F(" does not exist => using default configuration (0)"));
+          ok = load_config(0);
+        }
+    }
+
+  if( ok )
     {
       apply_host_serial_settings(new_config_serial_settings, new_config_serial_settings2);
       mem_set_ram_limit_usr(config_mem_size-1);

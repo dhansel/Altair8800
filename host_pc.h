@@ -53,7 +53,7 @@ extern uint16_t addr_leds;
 extern byte stop_request;
 
 #define host_read_sense_switches()             0
-#define host_read_addr_switches()              0
+uint16_t host_read_addr_switches();
 
 #define host_set_status_led_INT()     status_leds |= ST_INT
 #define host_set_status_led_WO()      status_leds &= ~ST_WO
