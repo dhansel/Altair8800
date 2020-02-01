@@ -44,7 +44,7 @@
 uint16_t cswitch = 0;
 uint16_t dswitch = 0;
 
-uint16_t p_regPC = 0xFFFF;
+static uint16_t p_regPC = 0xFFFF;
 
 volatile uint32_t altair_interrupts_buf = 0;
 volatile uint32_t altair_interrupts     = 0;
@@ -1769,6 +1769,7 @@ void loop()
               if( altair_interrupts & INT_SWITCH )
                 {
                   // switch-related interrupt (simulation handling)
+                  p_regPC = ~regPC;
                   switch_interrupt_handler();
                   if( host_read_status_led_WAIT() ) 
                     break;    // exit simulation loop
@@ -1784,7 +1785,6 @@ void loop()
           else
             {
               // no interrupt => read opcode, put it on data bus LEDs and advance PC
-              p_regPC = regPC;
 #if USE_REAL_MREAD_TIMING>0
               host_set_status_led_M1();
               opcode = MEM_READ(regPC);
