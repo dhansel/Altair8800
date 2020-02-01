@@ -56,12 +56,6 @@
 #error "Maximum number of host serial interfaces supported is 5"
 #endif
 
-#if USE_SECOND_2SIO>0
-#define NUM_SERIAL_DEVICES 6
-#else
-#define NUM_SERIAL_DEVICES 4
-#endif
-
 // config_flags:
 // vvvvvvvv mmmpphrt ttttRRRR dVCDIPFT
 // T = Throttle
@@ -127,6 +121,8 @@ uint32_t config_serial_settings2, new_config_serial_settings2;
 // VV   = 88-SIO board version (0=rev0, 1=rev1, 2=Cromemco)
 uint32_t config_serial_device_settings[NUM_SERIAL_DEVICES];
 
+// map emulated device (SIO/2SIO etc.) to host serial port number
+byte config_serial_sim_to_host[NUM_SERIAL_DEVICES];
 
 // masks defining which interrupts (INT_*) are at which vector interrupt levels
 uint32_t config_interrupt_vi_mask[8];
@@ -393,11 +389,6 @@ byte config_map_device_to_host_interface(byte s)
     return s-1;
   else
     return 0xff;
-}
-
-byte config_serial_map_sim_to_host(byte dev)
-{
-  return config_map_device_to_host_interface(get_bits(config_serial_device_settings[dev], 17, 3));
 }
 
 bool config_serial_realtime(byte dev)
@@ -965,9 +956,13 @@ static void apply_host_serial_settings(uint32_t settings, uint32_t settings2)
   config_serial_settings  = settings;
   config_serial_settings2 = settings2;
   for(byte i=0; i<HOST_NUM_SERIAL_PORTS; i++)
-    host_serial_setup(i, config_host_serial_baud_rate(i), 
-                      config_host_serial_config(settings2, i),
-                      config_host_serial_primary()==i);
+    {
+      host_serial_setup(i, config_host_serial_baud_rate(i), 
+                        config_host_serial_config(settings2, i),
+                        config_host_serial_primary()==i);
+
+      config_serial_sim_to_host[i] = config_map_device_to_host_interface(get_bits(config_serial_device_settings[i], 17, 3));
+    }
 }
 
 

@@ -159,10 +159,18 @@
 #define CP_C700         2
 #define CP_GENERIC      3
 
+
+#if USE_SECOND_2SIO>0
+#define NUM_SERIAL_DEVICES 6
+#else
+#define NUM_SERIAL_DEVICES 4
+#endif
+
 extern uint32_t config_flags, config_flags2;
 extern uint32_t config_serial_settings;
 extern uint32_t config_interrupt_mask;
 extern uint32_t config_interrupt_vi_mask[8];
+extern byte     config_serial_sim_to_host[NUM_SERIAL_DEVICES];
 
 void config_setup(int n = 0);
 void config_edit();
@@ -190,7 +198,7 @@ uint32_t config_host_serial_baud_rate(byte iface);
 uint32_t config_host_serial_config(byte iface);
 byte     config_host_serial_primary();
 
-byte     config_serial_map_sim_to_host(byte dev); 
+#define  config_serial_map_sim_to_host(dev) config_serial_sim_to_host[dev]
 bool     config_serial_realtime(byte dev);
 uint32_t config_serial_playback_baud_rate(byte dev);
 byte     config_serial_playback_example_nuls(byte dev);
