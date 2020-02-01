@@ -73,12 +73,15 @@ inline uint16_t MEM_READ_WORD(uint16_t addr)
       byte l, h;
 #if USE_REAL_MREAD_TIMING>0
       l = MEM_READ(addr);
+      for(uint8_t i=0; i<5; i++) asm("NOP");
       addr++;
       h = MEM_READ(addr);
 #else
       host_set_status_leds_READMEM();
       host_set_addr_leds(addr);
       l = MREAD(addr);
+      host_set_data_leds(l);
+      for(uint8_t i=0; i<5; i++) asm("NOP");
       addr++;
       host_set_addr_leds(addr);
       h = MREAD(addr);
@@ -103,6 +106,7 @@ inline void MEM_WRITE_WORD(uint16_t addr, uint16_t v)
 #if SHOW_BUS_OUTPUT>0
       b = v & 255;
       MEM_WRITE(addr, b);
+      for(uint8_t i=0; i<5; i++) asm("NOP");
       b = v / 256;
       addr++;
       MEM_WRITE(addr, b);
@@ -112,6 +116,7 @@ inline void MEM_WRITE_WORD(uint16_t addr, uint16_t v)
       host_set_addr_leds(addr);
       b = v & 255;
       MWRITE(addr, b);
+      for(uint8_t i=0; i<5; i++) asm("NOP");
       addr++;
       host_set_addr_leds(addr);
       b = v / 256;
