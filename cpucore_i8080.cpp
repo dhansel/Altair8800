@@ -674,7 +674,7 @@ static void cpu_DADS()
 #define CPU_DCX(REG) \
   static void cpu_DCX ## REG () \
   {                      \
-    reg##REG.REG--;      \
+    host_set_addr_leds(--reg##REG.REG); \
     TIMER_ADD_CYCLES(5);  \
   }
 
@@ -737,7 +737,7 @@ static void cpu_INRM()
 #define CPU_INX(REG) \
   static void cpu_INX ## REG () \
   { \
-    reg##REG.REG++; \
+    host_set_addr_leds(++reg##REG.REG); \
     TIMER_ADD_CYCLES(5); \
   }
 
