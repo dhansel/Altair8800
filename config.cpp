@@ -412,6 +412,7 @@ uint32_t config_host_serial_config(uint32_t settings2, byte iface)
   byte v = get_bits(settings2, iface * 5, 5);
   switch( v )
     {
+#ifndef HOST_TEENSY_H // Teensy does not define these constants
     case 0x00: return SERIAL_5N1;
     case 0x01: return SERIAL_5N2;
     case 0x02: return SERIAL_5E1;
@@ -432,7 +433,7 @@ uint32_t config_host_serial_config(uint32_t settings2, byte iface)
     case 0x13: return SERIAL_7E2;
     case 0x14: return SERIAL_7O1;
     case 0x15: return SERIAL_7O2;
-
+#endif
     case 0x18: return SERIAL_8N1;
     case 0x19: return SERIAL_8N2;
     case 0x1A: return SERIAL_8E1;
@@ -956,13 +957,9 @@ static void apply_host_serial_settings(uint32_t settings, uint32_t settings2)
   config_serial_settings  = settings;
   config_serial_settings2 = settings2;
   for(byte i=0; i<HOST_NUM_SERIAL_PORTS; i++)
-    {
-      host_serial_setup(i, config_host_serial_baud_rate(i), 
-                        config_host_serial_config(settings2, i),
-                        config_host_serial_primary()==i);
-
-      config_serial_sim_to_host[i] = config_map_device_to_host_interface(get_bits(config_serial_device_settings[i], 17, 3));
-    }
+    host_serial_setup(i, config_host_serial_baud_rate(i),
+                      config_host_serial_config(settings2, i),
+                      config_host_serial_primary()==i);
 }
 
 
@@ -1687,6 +1684,9 @@ static bool load_config(byte fileno)
               config_serial_device_settings[i] = set_bits(config_serial_device_settings[i], 17, 3, 0);              
         }
 
+      for(byte dev=0; dev<NUM_SERIAL_DEVICES; dev++)
+        config_serial_sim_to_host[dev] = config_map_device_to_host_interface(get_bits(config_serial_device_settings[dev], 17, 3));
+
 #if STANDALONE>0
       config_flags |= CF_SERIAL_INPUT;      
 #endif
@@ -2392,6 +2392,7 @@ void config_edit_serial_device(byte dev)
         case 27:
         case 'x': 
           config_serial_device_settings[dev] = settings;
+          config_serial_sim_to_host[dev] = config_map_device_to_host_interface(get_bits(settings, 17, 3));
           serial_timer_interrupt_setup(dev);
           return;
         }
@@ -3180,6 +3181,9 @@ void config_defaults(bool apply)
   config_serial_device_settings[CSM_2SIO1] |= (1l << 17); // map to 2SIO-1 to host interface
 #endif
   config_serial_device_settings[CSM_ACR]   |= (1 << 7);  // enable CLOAD traps
+
+  for(byte dev=0; dev<NUM_SERIAL_DEVICES; dev++)
+    config_serial_sim_to_host[dev] = config_map_device_to_host_interface(get_bits(config_serial_device_settings[dev], 17, 3));
 
   config_interrupt_vi_mask[0] = INT_DRIVE;
   config_interrupt_vi_mask[1] = INT_RTC;
