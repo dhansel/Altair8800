@@ -960,6 +960,10 @@ static void apply_host_serial_settings(uint32_t settings, uint32_t settings2)
     host_serial_setup(i, config_host_serial_baud_rate(i),
                       config_host_serial_config(settings2, i),
                       config_host_serial_primary()==i);
+
+  // mapping for serial devices can have changed if primary serial was changed
+  for(byte dev=0; dev<NUM_SERIAL_DEVICES; dev++)
+    config_serial_sim_to_host[dev] = config_map_device_to_host_interface(get_bits(config_serial_device_settings[dev], 17, 3));
 }
 
 
