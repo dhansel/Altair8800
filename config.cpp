@@ -1684,7 +1684,7 @@ static bool load_config(byte fileno)
         {
           // make sure nothing is mapped to an illegal host serial port
           for(i=0; i<NUM_SERIAL_DEVICES; i++) 
-            if( config_serial_map_sim_to_host(i) >= HOST_NUM_SERIAL_PORTS )
+            if( config_map_device_to_host_interface(get_bits(config_serial_device_settings[i], 17, 3)) >= HOST_NUM_SERIAL_PORTS )
               config_serial_device_settings[i] = set_bits(config_serial_device_settings[i], 17, 3, 0);              
         }
 
