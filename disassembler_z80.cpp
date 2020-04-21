@@ -99,7 +99,7 @@ static void pBN(byte *Mem, uint16_t addr, byte n)
 
 static byte da_LDA(byte opcode, byte *Mem, uint16_t PC)
 {
-  pBN(Mem, PC, 1); Serial.print(F("ld   a,(")); pW(Mem, PC+1); Serial.print(')');
+  pBN(Mem, PC, 3); Serial.print(F("ld   a,(")); pW(Mem, PC+1); Serial.print(')');
   return 3;
 }
 
