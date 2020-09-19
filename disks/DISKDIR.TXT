@@ -20,7 +20,11 @@ Available disks images:
 10000) DISK10.DSK: Dazzler programs (boots CP/M)
 10001) DISK11.DSK: VDM-1 programs (boots CP/M)
 10010) DISK12.DSK: IMP modem executive (CP/M)
+10011) DISK13.DSK: CP/M 3.0 disk 1 (boot)
+10100) DISK14.DSK: CP/M 3.0 disk 2 (utilities)
+10101) DISK15.DSK: Felix animation system for Dazzler
+10110) DISK16.DSK: CP/M 2.2 MITS+Tarbell
 ---------------------------------------------
 
-Images 00-0F were put together by Mike Douglas.
-See README.TXT for more information.
+All images except 10,11,12,15 were put together by 
+Mike Douglas. See README.TXT for more information.
