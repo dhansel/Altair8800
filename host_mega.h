@@ -27,7 +27,7 @@
 
 #define PROF_DISPLAY_INTERVAL 100000
 
-#define host_set_addr_leds(v)  (PORTA=((v) & 0xff), PORTC=((v) / 256))
+inline void host_set_addr_leds(uint16_t v) { PORTA=(v & 0xff); PORTC=(v / 256); }
 #define host_read_addr_leds(v) (PORTA | (PORTC * 256))
 #define host_set_data_leds(v)  PORTL=(v)
 #define host_read_data_leds()  PORTL
