@@ -146,6 +146,16 @@ bool filesys_is_write(byte fid)
   return fid<=MAX_OPEN_FILES && file_open[fid-1]==2;
 }
 
+bool filesys_seek(byte fid, uint32_t pos)
+{
+  return host_filesys_file_seek(file_info[fid-1], pos);
+}
+
+uint32_t filesys_getpos(byte fid)
+{
+  return host_filesys_file_pos(file_info[fid-1]);
+}
+
 uint16_t filesys_read_data(byte fid, void *data, uint16_t len)
 {
   if( fid<=MAX_OPEN_FILES && file_open[fid-1]==1 )
@@ -626,6 +636,24 @@ bool filesys_eof(byte fid)
     }
   else
 	return true;
+}
+
+
+bool filesys_seek(byte fid, uint32_t pos)
+{
+  if( pos < file_data[fid].len )
+    {
+      file_data[fid-1].pos = pos;
+      return true;
+    }
+  else
+    return false;
+}
+
+
+uint32_t filesys_getpos(byte fid)
+{
+  return file_data[fid-1].pos;
 }
 
 

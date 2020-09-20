@@ -19,6 +19,9 @@ bool     filesys_eof(byte fid);
 bool     filesys_is_write(byte fid);
 bool     filesys_is_read(byte fid);
 
+uint32_t filesys_getpos(byte fid);
+bool     filesys_seek(byte fid, uint32_t pos);
+
 bool     filesys_read_char(byte fid, byte *c);
 uint16_t filesys_read_data(byte fid, void *data, uint16_t len);
 

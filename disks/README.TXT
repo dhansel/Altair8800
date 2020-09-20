@@ -2,8 +2,9 @@ The MITS disk and hard disk images in this directory were created by Mike Dougla
 of altairclone.com. Some can be found in the support/downloads area of the
 altair clone web site, others come from the Mike's personal web site at deramp.com
 
-The Tarbell disk images in this directory were taken from Udo Munk's collection
-of disk images (z80pack) at: https://www.autometer.de/unix4fun/z80pack
+The Tarbell and Cromemco disk images in this directory were taken from 
+Udo Munk's collection of disk images (z80pack) at: 
+https://www.autometer.de/unix4fun/z80pack
 
 
 More info about the hard disk images in this directory:

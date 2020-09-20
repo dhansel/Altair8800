@@ -10,6 +10,7 @@
 #include "host.h"
 #include "prog_basic.h"
 #include "breakpoint.h"
+#include "cpucore.h"
 #include "Altair8800.h"
 
 extern byte Mem[MEMSIZE];
@@ -99,15 +100,21 @@ inline void MEM_WRITE(uint16_t a, byte v)
 // manage ROMs
 #define MEM_ROM_FLAG_TEMP      0x01
 #define MEM_ROM_FLAG_AUTOSTART 0x04
+#define MEM_ROM_FLAG_DISABLED  0x08
 
-bool mem_add_rom(uint16_t start, uint16_t length, const char *name = NULL, uint16_t flags = 0);
+bool mem_add_rom(uint16_t start, uint16_t length, const char *name = NULL, uint16_t flags = 0, uint32_t filepos = 0);
+void mem_set_rom_filepos(byte i, uint32_t pos);
 bool mem_remove_rom(byte i, bool clear = true);
 byte mem_get_num_roms(bool includeTemp = true);
 void mem_set_rom_flags(byte i, uint16_t flags);
 bool mem_get_rom_info(byte i, char *name = NULL, uint16_t *start = NULL, uint16_t *length = NULL, uint16_t *flags = NULL);
+void mem_disable_rom(byte i);
+void mem_disable_rom(const char *name);
 uint16_t mem_get_rom_autostart_address();
 void mem_clear_roms();
 void mem_reset_roms();
+void mem_restore_roms();
+byte mem_find_rom(const char *name);
 
 
 // set the highest address to be treated as RAM (everything above is ROM)

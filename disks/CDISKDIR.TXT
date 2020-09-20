@@ -1,0 +1,10 @@
+---------------------------------------------
+Available Cromemco disks images:
+---------------------------------------------
+0001) CDISK01.DSK: CDOS 2.58  (5" SS SD)
+0002) CDISK02.DSK: micah-cp/m (8" SS DD)
+0003) CDISK03.DSK: itc cp/m   (8" DS DD)
+---------------------------------------------
+
+These images were put together by Udo Munk.
+See README.TXT for more information.

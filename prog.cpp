@@ -73,6 +73,9 @@ struct prog_info_struct get_prog_info(byte i)
 #if NUM_TDRIVES>0
       {PSTR("Tarbell disk boot ROM"),      prog_tools_copy_tdiskboot,     true},
 #endif
+#if NUM_CDRIVES>0
+      {PSTR("Cromemco RDOS 1.0 ROM"),      prog_tools_copy_rdos10,        true},
+#endif
 #endif
 #if USE_DAZZLER>0
       {PSTR("Dazzler Kaleidoscope"),       prog_dazzler_copy_kaleidoscope,true},

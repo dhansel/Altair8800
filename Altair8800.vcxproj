@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
@@ -14,18 +14,21 @@
     <ProjectGuid>{FBA8BB04-6A3A-4E0A-AF03-515CDBD0385C}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>Altair8800</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v141</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v141</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -83,6 +86,7 @@
     <ClCompile Include="Arduino\Arduino.cpp" />
     <ClCompile Include="Arduino\Print.cpp" />
     <ClCompile Include="breakpoint.cpp" />
+    <ClCompile Include="cdrive.cpp" />
     <ClCompile Include="config.cpp" />
     <ClCompile Include="cpucore.cpp" />
     <ClCompile Include="cpucore_i8080.cpp" />
@@ -130,6 +134,7 @@
     <ClInclude Include="Altair8800.h" />
     <ClInclude Include="Arduino\Arduino.h" />
     <ClInclude Include="breakpoint.h" />
+    <ClInclude Include="cdrive.h" />
     <ClInclude Include="config.h" />
     <ClInclude Include="cpucore.h" />
     <ClInclude Include="cpucore_i8080.h" />

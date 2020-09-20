@@ -32,6 +32,7 @@
 #include "filesys.h"
 #include "drive.h"
 #include "tdrive.h"
+#include "cdrive.h"
 #include "hdsk.h"
 #include "timer.h"
 #include "prog.h"
@@ -328,6 +329,26 @@ void process_inputs()
             }
 	}
 #endif
+#if NUM_CDRIVES>0
+      else if( (dswitch&0xF000)==0x7000 )
+        {
+          if( (dswitch & 0xff)==0 )
+            cdrive_dir();
+          else
+            {
+              const char *desc = cdrive_get_image_description(dswitch & 0xff);
+              if( cdrive_mount((dswitch >> 8) & 0x03, dswitch & 0xff) )
+                {
+                  if( desc == NULL )
+                    DBG_FILEOPS4(2, F("mounted new disk image "), cdrive_get_image_filename(dswitch & 0xff, false), F(" in cromemco drive "), (dswitch >> 8) & 0x0f);
+                  else
+                    DBG_FILEOPS4(2, F("mounted disk image '"), desc, F("' in cromemco drive "), (dswitch >> 8) & 0x0f);
+                }
+              else
+                DBG_FILEOPS4(1, F("error mounting disk image "), cdrive_get_image_filename(dswitch & 0xff, false), F(" in cromemco drive "), (dswitch >> 8) & 0x0f);
+            }
+        }
+#endif
 #if NUM_TDRIVES>0
       else if( (dswitch&0xF000)==0x5000 )
 	{
@@ -397,6 +418,15 @@ void process_inputs()
 	  else
 	    DBG_FILEOPS2(1, F("error unmounting drive "), (dswitch>>8) & 0x0f);
 	}
+#endif
+#if NUM_CDRIVES>0
+      else if ( (dswitch&0xF000)==0x7000 )
+        {
+          if ( cdrive_unmount((dswitch >> 8) & 0x03) )
+            DBG_FILEOPS2(2, F("unmounted cromemco drive "), (dswitch >> 8) & 0x0f);
+          else
+            DBG_FILEOPS2(1, F("error unmounting cromemco drive "), (dswitch >> 8) & 0x0f);
+        }
 #endif
 #if NUM_TDRIVES>0
       else if( (dswitch&0xF000)==0x5000 )
@@ -783,30 +813,38 @@ void read_inputs_serial()
         }
       Serial.println();
     }
-#if NUM_DRIVES>0 || NUM_TDRIVES>0 || NUM_HDSK_UNITS>0
+#if NUM_DRIVES>0 || NUM_CDRIVES>0 || NUM_TDRIVES>0 || NUM_HDSK_UNITS>0
   else if( data == 'm' )
     {
       char c = 0;
-#if NUM_DRIVES==0 && NUM_TDRIVES==0
+#if NUM_DRIVES==0 && NUM_TDRIVES==0 && NUM_CDRIVES==0
       c = 'h';
-#elif NUM_DRIVES==0 && NUM_HDSK_UNITS==0
+#elif NUM_DRIVES==0 && NUM_HDSK_UNITS==0 && NUM_CDRIVES==0
       c = 't';
-#elif NUM_TDRIVES==0 && NUM_HDSK_UNITS==0
+#elif NUM_TDRIVES==0 && NUM_HDSK_UNITS==0 && NUM_CDRIVES==0
       c = 'f';
-#elif NUM_DRIVES==0
-      Serial.print(F("\r\nMount (t)arbell floppy or (h)ard disk? "));
-#elif NUM_TDRIVES==0
-      Serial.print(F("\r\nMount (f)loppy or (h)ard disk? "));
-#elif NUM_HDSK_UNITS==0
-      Serial.print(F("\r\nMount (f)loppy or (t)arbell floppy? "));
+#elif NUM_DRIVES==0 && NUM_HDSK_UNITS==0 && NUM_TDRIVES==0
+      c = 'c';
 #else
-      Serial.print(F("\r\nMount (f)loppy, (t)arbell floppy or (h)ard disk? "));
+      Serial.print(F("\r\nMount "));
+#if NUM_DRIVES>0
+      Serial.print(F("(f)loppy "));
 #endif
-
+#if NUM_CDRIVES>0
+      Serial.print(F("(c)romemco floppy "));
+#endif
+#if NUM_TDRIVES>0
+      Serial.print(F("(t)arbell floppy "));
+#endif
+#if NUM_HDSK_UNITS>0
+      Serial.print(F("(h)ard disk "));
+#endif
+      Serial.print(F("? "));
+#endif
       if( c==0 ) 
         {
-          do { c=serial_read(); } while(c!='f' && c!='F' && c!='h' && c!='H' && c!='t' && c!='T' && c!=27);
-          if( c!=27 ) { Serial.print(c); Serial.print(' '); }
+          do { c=serial_read(); } while(c!='f' && c!='F' && c!='h' && c!='H' && c!='t' && c!='T' && c!='c' && c!='C' && c!=27);
+          if( c!=27 ) { Serial.print(c); Serial.println(' '); }
         }
 
       if( c==27 )
@@ -823,6 +861,17 @@ void read_inputs_serial()
               Serial.print(F("): "));
               if( numsys_read_byte(&b) && b<NUM_DRIVES )
                 { dswitch = 0x1000 | (b << 8); ok = true; }
+            }
+#endif
+#if NUM_CDRIVES>0
+          if( (c == 'c' || c == 'C') )
+            {
+              byte b;
+              Serial.print(F("Cromemco floppy drive number (0-"));
+              Serial.print(NUM_CDRIVES - 1);
+              Serial.print(F("): "));
+              if( numsys_read_byte(&b) && b < 4 )
+                { dswitch = 0x7000 | (b << 8); ok = true; }
             }
 #endif
 #if NUM_TDRIVES>0
@@ -1126,19 +1175,20 @@ void reset(bool resetPC)
   if( host_read_function_switch(SW_STOP) )
 #endif
     {
-      // remove ROMS that were temporarily installed by the Simulator
-      // and restore auto-disable ROMS
-      mem_reset_roms();
-
       have_ps2 = false;
 
       // close all open files
       serial_close_files();
     }
 
+  // remove ROMS that were temporarily installed by the Simulator
+  // and restore auto-disable ROMS
+  mem_reset_roms();
+
   altair_interrupts     = 0;
   altair_interrupts_buf = 0;
   tdrive_reset();
+  cdrive_reset();
 }
 
 
@@ -1509,11 +1559,14 @@ void altair_out(byte port, byte data)
   else if( port==0x03 )
     printer_out_data(data);
 #endif
+#if NUM_CDRIVES>0
+  else if( (port>=0x30 && port<=0x34) || (port==0x40) || (port==0x04 && vdm1_get_iface() == 0xff) )
+    cdrive_out(port, data);
+#endif
 #if NUM_TDRIVES>0
   else if( port>=0xf8 && port<=0xfc )
     tdrive_out(port, data);
 #endif
-  
   if( host_read_status_led_WAIT() )
     {
 #if SHOW_BUS_OUTPUT>0
@@ -1580,6 +1633,10 @@ inline byte exec_input(byte port)
     return printer_in_ctrl();
   else if( port==0x03 )
     return printer_in_data();
+#endif
+#if NUM_CDRIVES>0
+  else if( (port>=0x30 && port<=0x34) || (port==0x04 && vdm1_get_iface()==0xff) )
+    return cdrive_in(port);
 #endif
 #if NUM_TDRIVES>0
   else if( port>=0xf8 && port<=0xfc )
@@ -1658,6 +1715,7 @@ void setup()
   filesys_setup();
   drive_setup();
   tdrive_setup();
+  cdrive_setup();
   hdsk_setup();
   if( host_read_function_switch(SW_RESET) )
     config_setup(-1);

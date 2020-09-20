@@ -802,8 +802,11 @@ byte serial_sio_in_data()
 
 void serial_sio_out_ctrl(byte data)
 {
-  // write to control register of 88-SIO
+  // port 0 of Cromemco serial card is baud rate (ignore)
+  if( (serial_ctrl[CSM_SIO] & (SSC_SIOTP0|SSC_SIOTP1))==2 )
+    return;
 
+  // write to control register of 88-SIO
   if( !(serial_ctrl[CSM_SIO] & SSC_INTRX) && (data & 0x01) )
     {
       DBG_FILEOPS(4, F("ENABLING receive interrupts on SIO"));

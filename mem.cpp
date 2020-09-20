@@ -21,6 +21,8 @@
 #include "mem.h"
 #include "host.h"
 #include "numsys.h"
+#include "filesys.h"
+#include "config.h"
 
 
 word mem_ram_limit = 0xFFFF, mem_protected_limit = 0xFFFF;
@@ -298,7 +300,7 @@ void mem_setup()
 
 #if MAX_NUM_ROMS==0
 
-bool mem_add_rom(uint16_t start, uint16_t length, const char *name, uint16_t flags) { return false; }
+bool mem_add_rom(uint16_t start, uint16_t length, const char *name, uint16_t flags, uint32_t config_file_offset) { return false; }
 bool mem_remove_rom(byte i, bool clear) { return false; }
 byte mem_get_num_roms(bool includeTemp) { return 0; }
 void mem_set_rom_flags(byte i, uint16_t flags) {}
@@ -314,6 +316,7 @@ uint16_t mem_roms_start[MAX_NUM_ROMS];
 uint16_t mem_roms_length[MAX_NUM_ROMS];
 uint16_t mem_roms_flags[MAX_NUM_ROMS];
 char     mem_roms_name[MAX_NUM_ROMS][9];
+uint32_t mem_roms_filepos[MAX_NUM_ROMS];
 
 
 bool mem_remove_rom(byte i, bool clear)
@@ -327,7 +330,7 @@ bool mem_remove_rom(byte i, bool clear)
       for(j=i+1; j<mem_roms_num; j++)
         {
           mem_roms_start[j-1] = mem_roms_start[j];
-          mem_roms_length[j-1] = mem_roms_length[j];
+         mem_roms_length[j-1] = mem_roms_length[j];
           mem_roms_flags[j-1] = mem_roms_flags[j];
           strcpy(mem_roms_name[j-1], mem_roms_name[j]);
         }
@@ -347,7 +350,7 @@ bool mem_remove_rom(byte i, bool clear)
 }
 
 
-bool mem_add_rom(uint16_t start, uint16_t length, const char *nameOpt, uint16_t flags)
+bool mem_add_rom(uint16_t start, uint16_t length, const char *nameOpt, uint16_t flags, uint32_t filepos)
 {
   int i, j, conflict = -1;
   const char *name = nameOpt == NULL ? "[?]" : nameOpt;
@@ -411,6 +414,7 @@ bool mem_add_rom(uint16_t start, uint16_t length, const char *nameOpt, uint16_t 
   mem_roms_flags[i]  = flags;
   strncpy(mem_roms_name[i], name, 8);
   mem_roms_name[i][8] = 0;
+  mem_roms_filepos[i] = filepos;
   mem_roms_num++;
 
   // write-protect area occupied by ROM
@@ -418,6 +422,40 @@ bool mem_add_rom(uint16_t start, uint16_t length, const char *nameOpt, uint16_t 
   mem_protect_calc_limit();
 
   return true;
+}
+
+
+void mem_set_rom_filepos(byte i, uint32_t pos)
+{
+  if( i<mem_roms_num ) mem_roms_filepos[i] = pos;
+}
+
+
+void mem_disable_rom(byte i)
+{
+  if( i<mem_roms_num && !(mem_roms_flags[i]&MEM_ROM_FLAG_DISABLED) )
+    {
+      if( mem_roms_filepos[i]==0 && !(mem_roms_flags[i]&MEM_ROM_FLAG_TEMP) )
+        Serial.println(F("[WARNING: ROMs can only be disabled if configuration was previously saved]"));
+      else
+        {
+          uint16_t start  = mem_roms_start[i];
+          uint16_t length = mem_roms_length[i];
+          mem_roms_flags[i] |= MEM_ROM_FLAG_DISABLED;
+          mem_protect_flags_set(start, length, false);
+          mem_protect_calc_limit();
+          // initialize newly visible RAM 
+          mem_ram_init_section(start, start+length-1, config_clear_memory());
+        }
+    }
+}
+
+
+void mem_disable_rom(const char *name)
+{
+  for(byte i=0; i<mem_roms_num; i++)
+    if( strncmp(mem_roms_name[i], name, 9)==0 )
+      mem_disable_rom(i);
 }
 
 
@@ -469,9 +507,45 @@ bool mem_get_rom_info(byte i, char *name, uint16_t *start, uint16_t *length, uin
 }
 
 
+byte mem_find_rom(const char *name)
+{
+  byte n = mem_get_num_roms();
+  for(byte i=0; i<mem_roms_num; i++)
+    if( strncmp(name, mem_roms_name[i], 9)==0 )
+      return i;
+
+  return 0xff;
+}
+
+
 void mem_clear_roms()
 {
   while( mem_roms_num>0 ) mem_remove_rom(0);
+}
+
+
+void mem_restore_roms()
+{
+  for(byte i=0; i<mem_roms_num; i++ )
+    if( (mem_roms_flags[i]&MEM_ROM_FLAG_DISABLED) && !(mem_roms_flags[i] & MEM_ROM_FLAG_TEMP) )
+      {
+        if( mem_roms_filepos[i]>0 )
+          {
+            // restore ROM data from config file
+            byte fid = filesys_open_read('C', config_get_current());
+            if( fid )
+              {
+                filesys_seek(fid, mem_roms_filepos[i]);
+                filesys_read_data(fid, Mem+mem_roms_start[i], mem_roms_length[i]);
+                filesys_close(fid);
+              }
+          }
+
+        mem_roms_flags[i] &= ~MEM_ROM_FLAG_DISABLED;
+        mem_protect_flags_set(mem_roms_start[i], mem_roms_length[i], true);
+      }
+
+  mem_protect_calc_limit();
 }
 
 
@@ -485,6 +559,8 @@ void mem_reset_roms()
       else
         i++;
     }
+
+  mem_restore_roms();
 }
 
 #endif

@@ -49,6 +49,11 @@
 #define NUM_DRIVES 4
 
 
+// Enables support for Cromemco disk drives (maximum 4).
+// Set to 0 to disable Cromemco drive support.
+#define NUM_CDRIVES 4
+
+
 // Enables support for Tarbell disk drives (maximum 4).
 // Set to 0 to completely disable Tarbell drive support.
 #define NUM_TDRIVES 0
@@ -175,6 +180,7 @@ extern byte     config_serial_sim_to_host[NUM_SERIAL_DEVICES];
 void config_setup(int n = 0);
 void config_edit();
 void config_defaults(bool apply);
+byte config_get_current();
 
 #if USE_THROTTLE>0
 int     config_throttle(); // 0=off, <0=auto delay, >0=manual delay

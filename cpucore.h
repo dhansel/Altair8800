@@ -63,12 +63,15 @@ extern uint16_t regSP;
 #define regL  regHL.L
 #define regPC regPCU.PC
 
+#define PROC_I8080 0
+#define PROC_Z80   1
 
 #if USE_Z80==0 
 
   // fixed I8080 CPU
   #define cpu_opcodes cpucore_i8080_opcodes
   #define cpu_clock_KHz()     CPU_CLOCK_I8080
+  #define cpu_get_processor() PROC_I8080
 
 #elif USE_Z80==1 
 
@@ -76,13 +79,12 @@ extern uint16_t regSP;
   extern byte regRL;
   #define cpu_opcodes cpucore_z80_opcodes
   #define cpu_clock_KHz()     CPU_CLOCK_Z80
+  #define cpu_get_processor() PROC_Z80
 
 #else 
 
   // CPU is switchable
   extern byte regRL;
-  #define PROC_I8080 0
-  #define PROC_Z80   1
   void cpu_set_processor(int processor);
   int  cpu_get_processor();
   int  cpu_clock_KHz();

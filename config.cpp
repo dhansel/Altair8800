@@ -25,6 +25,7 @@
 #include "filesys.h"
 #include "numsys.h"
 #include "drive.h"
+#include "cdrive.h"
 #include "tdrive.h"
 #include "hdsk.h"
 #include "prog.h"
@@ -33,7 +34,7 @@
 #include "vdm1.h"
 #include "cpucore.h"
 
-#define CONFIG_FILE_VERSION 9
+#define CONFIG_FILE_VERSION 10
 
 #define BAUD_110     0
 #define BAUD_150     1
@@ -55,6 +56,10 @@
 #if HOST_NUM_SERIAL_PORTS>5
 #error "Maximum number of host serial interfaces supported is 5"
 #endif
+
+
+// current configuration number
+static byte config_current = 0;
 
 // config_flags:
 // vvvvvvvv mmmpphrt ttttRRRR dVCDIPFT
@@ -857,6 +862,16 @@ static void print_drive_mounted()
 }
 
 
+static void print_cdrive_mounted()
+{
+  byte n = 0;
+  for(byte i=0; i<NUM_CDRIVES; i++)
+    if( cdrive_get_mounted_image(i)>0 ) n++;
+
+  Serial.print(n); Serial.print(F(" mounted"));
+}
+
+
 static void print_tdrive_mounted()
 {
   byte n = 0;
@@ -875,6 +890,17 @@ static void print_drive_mounted_image(byte d)
     { Serial.print(F("empty disk #")); numsys_print_byte(d); }
   else
     Serial.print(drive_get_image_description(d));
+}
+
+
+static void print_cdrive_mounted_image(byte d)
+{
+  if( d==0 )
+    Serial.print(F("none"));
+  else if( cdrive_get_image_filename(d)==NULL )
+    { Serial.print(F("empty disk #")); numsys_print_byte(d); }
+  else
+    Serial.print(cdrive_get_image_description(d));
 }
 
 
@@ -1108,6 +1134,20 @@ static byte find_floppy_image(byte n, bool up, byte max = 0xff)
 }
 
 
+static byte find_cfloppy_image(byte n, bool up, byte max = 0xff)
+{
+  int i=n;
+  do
+    {
+      if( cdrive_get_image_filename(i)!=NULL ) return i;
+      if( up ) i++; else i--;
+    }
+  while( i>=0 && i<=max );
+
+  return 0;
+}
+
+
 static byte find_tfloppy_image(byte n, bool up, byte max = 0xff)
 {
   int i=n;
@@ -1207,7 +1247,7 @@ static void toggle_aux1_program_down(byte row, byte col)
         {
           // look for previous hard disk image
 #if NUM_HDSK_UNITS>0
-		  b = find_hdsk_image(b & 0x3f, false, 0x3f) | 0xC0;
+          b = find_hdsk_image(b & 0x3f, false, 0x3f) | 0xC0;
           if( b>0xC0 ) 
             found = true;
           else
@@ -1219,7 +1259,7 @@ static void toggle_aux1_program_down(byte row, byte col)
         {
           // look for previous floppy disk image
 #if NUM_DRIVES>0
-		  b = find_floppy_image(b & 0x3f, false, 0x3f) | 0x80;
+          b = find_floppy_image(b & 0x3f, false, 0x3f) | 0x80;
           if( b>0x80 ) 
             found = true;
           else
@@ -1231,7 +1271,7 @@ static void toggle_aux1_program_down(byte row, byte col)
         {
           // look for previous tarbell floppy disk image
 #if NUM_TDRIVES>0
-		  b = find_tfloppy_image(b & 0x3f, false, 0x3f) | 0x40;
+          b = find_tfloppy_image(b & 0x3f, false, 0x3f) | 0x40;
           if( b>0x40 ) 
             found = true;
           else
@@ -1257,17 +1297,23 @@ bool config_use_z80()
 }
 
 
+static uint32_t toggle_flag(uint32_t flags, uint32_t value, byte row, byte col)
+{
+  flags = (flags & ~value) | (~(flags & value) & value);
+  print_flag(flags, value, row, col);
+  return flags;
+}
+
+
 static void toggle_flag(uint32_t value, byte row, byte col)
 {
-  config_flags = (config_flags & ~value) | (~(config_flags & value) & value);
-  print_flag(config_flags, value, row, col);
+  config_flags = toggle_flag(config_flags, value, row, col);
 }
 
 
 static void toggle_flag2(uint32_t value, byte row, byte col)
 {
-  config_flags2 = (config_flags2 & ~value) | (~(config_flags2 & value) & value);
-  print_flag(config_flags2, value, row, col);
+  config_flags2 = toggle_flag(config_flags2, value, row, col);
 }
 
 
@@ -1420,7 +1466,30 @@ static bool save_config(byte fileno)
 {
   bool res = false;
   byte s = sizeof(uint32_t);
-  byte data[4*4+(1+NUM_SERIAL_DEVICES*4)+9*4+1+(1+NUM_DRIVES)+(1+NUM_TDRIVES)+(1+NUM_HDSK_UNITS*4)+1+1+2];
+  byte data[4*4+(1+NUM_SERIAL_DEVICES*4)+9*4+1+(1+NUM_DRIVES)+(2+NUM_CDRIVES)+(1+NUM_TDRIVES)+(1+NUM_HDSK_UNITS*4)+1+1+2];
+
+  // check for disabled, non-temporary ROMs that need to be restored before saving
+  uint16_t flags;
+  bool haveDisabledRoms = false;
+  for(byte i=0; i<mem_get_num_roms() && !haveDisabledRoms; i++)
+    if( mem_get_rom_info(i, NULL, NULL, NULL, &flags) )
+      haveDisabledRoms = (flags & MEM_ROM_FLAG_DISABLED)!=0 && (flags & MEM_ROM_FLAG_TEMP)==0;
+
+#if MAX_NUM_ROMS>0
+  // if there are such ROMS then we need to reset the machine (to re-enable the ROMs) before
+  // we can save the configuration.
+  if( haveDisabledRoms )
+    {
+      char c;
+      Serial.print(F("Disabled ROMs will be restored before saving configuration. Continue? (y/n)? "));
+      do { delay(50); c = serial_read(); } while( c!='y' && c!='n' );
+      Serial.println(c);
+      if( c=='y' ) 
+        mem_restore_roms();
+      else
+        return true;
+    }
+#endif
 
   // merge version number into config_flags
   config_flags = (config_flags & 0x00ffffff) | (((uint32_t) CONFIG_FILE_VERSION) << 24);
@@ -1439,6 +1508,10 @@ static bool save_config(byte fileno)
   
   data[n++] = NUM_DRIVES;
   for(byte i=0; i<NUM_DRIVES; i++) data[n++] = drive_get_mounted_image(i);
+
+  data[n++] = NUM_CDRIVES;
+  for(byte i=0; i<NUM_CDRIVES; i++) data[n++] = cdrive_get_mounted_image(i);
+  data[n++] = cdrive_get_switches();
 
   data[n++] = NUM_TDRIVES;
   for(byte i=0; i<NUM_TDRIVES; i++) data[n++] = tdrive_get_mounted_image(i);
@@ -1460,6 +1533,7 @@ static bool save_config(byte fileno)
       // of deleting/creating the file)
       res = filesys_write_file('C', fileno, (void *) data, n);
     }
+#if MAX_NUM_ROMS>0
   else
     {
       // can't write all at once if we have to store ROM data
@@ -1470,7 +1544,7 @@ static bool save_config(byte fileno)
           for(byte i=0; i<mem_get_num_roms() && res; i++)
             {
               char name[9];
-              uint16_t start, length, flags;
+              uint16_t start, length;
               mem_get_rom_info(i, name, &start, &length, &flags);
               if( !(flags & MEM_ROM_FLAG_TEMP) )
                 {
@@ -1479,6 +1553,7 @@ static bool save_config(byte fileno)
                   memcpy(data+4, &flags, 2);
                   memcpy(data+6, name, 8);
                   res &= filesys_write_data(fid, (void *) data, 6+8);
+                  mem_set_rom_filepos(i, filesys_getpos(fid));
                   res &= filesys_write_data(fid, Mem+start, length);
                 }
             }
@@ -1486,6 +1561,7 @@ static bool save_config(byte fileno)
           filesys_close(fid);
         }
     }
+#endif
 
   return res;
 }
@@ -1583,6 +1659,23 @@ static bool load_config(byte fileno)
           }
       drive_set_realtime((config_flags & CF_DRIVE_RT)!=0);
 
+      if( v >= 10 )
+        {
+          // cromemco disk drive settings (version 10 and up)
+          if( filesys_read_data(fid, &n, 1)!=1 ) n = 0;
+          for(i=0; i<n; i++) 
+            if( filesys_read_data(fid, &d, 1)==1 && i<NUM_CDRIVES )
+              {
+                if( d>0 )
+                  cdrive_mount(i, d);
+                else
+                  cdrive_unmount(i);
+              }
+
+          if( filesys_read_data(fid, &d, 1)==1 )
+            cdrive_set_switches(d);
+        }
+
       if( v >= 8 )
         {
           // tarbell disk drive settings (version 8 and up)
@@ -1595,7 +1688,6 @@ static bool load_config(byte fileno)
                 else
                   tdrive_unmount(i);
               }
-          drive_set_realtime((config_flags & CF_DRIVE_RT)!=0);
         }
 
       // hard disk settings
@@ -1637,7 +1729,7 @@ static bool load_config(byte fileno)
               if( filesys_read_data(fid, &flags, 2)==2 )
                 if( filesys_read_data(fid, name, 8)==8 )
                   {
-                    if( mem_add_rom(start, length, name, flags) )
+                    if( mem_add_rom(start, length, name, flags, filesys_getpos(fid)) )
                       filesys_read_data(fid, Mem+start, length);
                     else
                       for(uint16_t j=0; j<length; j++)
@@ -1695,6 +1787,7 @@ static bool load_config(byte fileno)
       config_flags |= CF_SERIAL_INPUT;      
 #endif
       ok = true;
+      config_current = fileno;
     }
 
   return ok;
@@ -1863,6 +1956,107 @@ void config_edit_drives()
       drive_mount(i, mounted[i]);
 }
 #endif
+
+
+// --------------------------------------------------------------------------------
+
+
+#if NUM_CDRIVES>0
+void config_edit_cdrives()
+{
+  bool go = true;
+  byte i, switches = cdrive_get_switches(), mounted[NUM_CDRIVES];
+
+  for(i=0; i<NUM_CDRIVES; i++) mounted[i] = cdrive_get_mounted_image(i);
+
+  byte row, col, r_drives[NUM_CDRIVES], r_cmd, r_rom, r_romdis, r_auto, r_inhfmt;
+  row = 4;
+  col = 33;
+  Serial.print(F("\033[2J\033[0;0H\n"));
+
+  Serial.println(F("Configure Cromemco disk drive settings\n"));
+  Serial.print(F("Enable boot (R)OM             : ")); print_flag(switches, CDRIVE_SWITCH_ROM_ENABLE, 0, 0); Serial.println(); r_rom = row++;
+  Serial.print(F("Disable boot ROM after (b)oot : ")); print_flag(switches, CDRIVE_SWITCH_ROM_DISABLE_AFTER_BOOT, 0, 0); Serial.println(); r_romdis = row++;
+  Serial.print(F("Enable (a)uto-boot            : ")); print_flag(switches, CDRIVE_SWITCH_AUTOBOOT, 0, 0); Serial.println(); r_auto = row++;
+  Serial.print(F("Inhibit disk (f)ormatting     : ")); print_flag(switches, CDRIVE_SWITCH_INHIBIT_INIT, 0, 0); Serial.println(); r_inhfmt = row++;
+
+  row++;
+  Serial.print(F("\n"));
+  for(i=0; i<NUM_CDRIVES; i++)
+    {
+      Serial.print(F("Drive (")); 
+      if( i<10 ) Serial.write(48+i); else Serial.write(87+i);
+      Serial.print(F(") mounted disk image  : "));
+      print_cdrive_mounted_image(mounted[i]);
+      Serial.println();
+      r_drives[i] = row++;
+    }
+
+  Serial.println(F("\nE(x)it to main menu")); row+=4;
+  Serial.print(F("\n\nCommand: ")); r_cmd = row++;
+
+  while( go )
+    {
+      set_cursor(r_cmd, 10);
+      while( !serial_available() ) delay(50);
+      char c = serial_read();
+      if( c>31 && c<127 ) Serial.println(c);
+
+      switch( c )
+        {
+        case 27:
+        case 'x': go = false; break;
+
+        case 'R':
+          switches = toggle_flag(switches, CDRIVE_SWITCH_ROM_ENABLE, r_rom, col);
+          break;
+
+        case 'b':
+          switches = toggle_flag(switches, CDRIVE_SWITCH_ROM_DISABLE_AFTER_BOOT, r_romdis, col);
+          break;
+
+        case 'a':
+          switches = toggle_flag(switches, CDRIVE_SWITCH_AUTOBOOT, r_auto, col);
+          break;
+
+        case 'f':
+          switches = toggle_flag(switches, CDRIVE_SWITCH_INHIBIT_INIT, r_inhfmt, col);
+          break;
+
+        default:
+          {
+            int d = -1;
+            if( c>='0' && c<='9' ) 
+              d = c-48;
+            else if( c>='a' && c<='f' )
+              d = c-87;
+
+            if( d>=0 && d<=NUM_CDRIVES )
+              {
+                byte next = find_cfloppy_image(mounted[d]+1, true);
+                if( cdrive_get_mounted_image(d)>0 && 
+                    cdrive_get_image_filename(drive_get_mounted_image(d))==NULL &&
+                    mounted[d] < cdrive_get_mounted_image(d) &&
+                    (next      > cdrive_get_mounted_image(d) || next<mounted[d]) )
+                  next = cdrive_get_mounted_image(d);
+
+                mounted[d] = next;
+                set_cursor(r_drives[d], col);
+                print_cdrive_mounted_image(mounted[d]);
+              }
+          }
+        }
+    }
+
+  cdrive_set_switches(switches);
+  for(i=0; i<NUM_CDRIVES; i++) 
+    if( mounted[i] != cdrive_get_mounted_image(i) )
+      cdrive_mount(i, mounted[i]);
+}
+#endif
+
+
+// --------------------------------------------------------------------------------
 
 
 #if NUM_TDRIVES>0
@@ -2140,9 +2334,12 @@ void config_edit_interrupts()
         case '6': conn_2sio3 = toggle_interrupt_conn(INT_2SIO3, conn_2sio3, r_2sio3, col); break;
         case '7': conn_2sio4 = toggle_interrupt_conn(INT_2SIO4, conn_2sio4, r_2sio4, col); break;
 #endif
+#if NUM_DRIVES>0
         case '8': conn_drive = toggle_interrupt_conn(INT_DRIVE, conn_drive, r_drive, col); break;
-        case '9': conn_hdsk  = toggle_interrupt_conn(INT_HDSK, conn_hdsk, r_hdsk, col);   break;
-
+#endif
+#if NUM_HDSK_UNITS>0
+		case '9': conn_hdsk  = toggle_interrupt_conn(INT_HDSK, conn_hdsk, r_hdsk, col);   break;
+#endif
         case 27:
         case 'x': go = false; break;
         }
@@ -2700,7 +2897,8 @@ void config_memory()
                       bool comma = false;
                       Serial.print(F(" ("));
                       if( flags & MEM_ROM_FLAG_AUTOSTART ) { if( comma ) Serial.print(','); else comma=true; Serial.print(F("auto-start")); }
-                      if( flags & MEM_ROM_FLAG_TEMP )     { if( comma ) Serial.print(','); else comma=true; Serial.print(F("temporary")); }
+                      if( flags & MEM_ROM_FLAG_TEMP )      { if( comma ) Serial.print(','); else comma=true; Serial.print(F("temporary")); }
+                      if( flags & MEM_ROM_FLAG_DISABLED )  { if( comma ) Serial.print(','); else comma=true; Serial.print(F("disabled")); }
                       Serial.print(')');
                     }
                   Serial.println();
@@ -2917,6 +3115,9 @@ void config_edit()
 #if NUM_DRIVES>0
           Serial.print(F("(D) Configure disk drives   : ")); print_drive_mounted(); Serial.println(); row++;
 #endif
+#if NUM_CDRIVES>0
+          Serial.print(F("(C) Configure cromemco drive: ")); print_cdrive_mounted(); Serial.println(); row++;
+#endif
 #if NUM_TDRIVES>0
           Serial.print(F("(B) Configure tarbell drive : ")); print_tdrive_mounted(); Serial.println(); row++;
 #endif
@@ -2989,6 +3190,9 @@ void config_edit()
 #if NUM_DRIVES>0
         case 'D': config_edit_drives(); break;
 #endif
+#if NUM_CDRIVES>0
+        case 'C': config_edit_cdrives(); break;
+#endif
 #if NUM_TDRIVES>0
         case 'B': config_edit_tdrives(); break;
 #endif
@@ -3011,7 +3215,7 @@ void config_edit()
         case 'h': 
           {
             Serial.println(F("\n\n"));
-            Serial.println(F("Altair 8800 Simulator (C) 2017-2019 David Hansel"));
+            Serial.println(F("Altair 8800 Simulator (C) 2017-2020 David Hansel"));
             Serial.println(F("https://www.hackster.io/david-hansel/arduino-altair-8800-simulator-3594a6"));
             Serial.println(F("https://github.com/dhansel/Altair8800"));
             Serial.println(F("Firmware compiled on: " __DATE__ ", " __TIME__ "\n"));
@@ -3046,6 +3250,7 @@ void config_edit()
                         Serial.print(F("Configuration #")); numsys_print_byte(i);
                         Serial.print(F(" exists. Overwrite (y/n)? "));
                         do { delay(50); c = serial_read(); } while( c!='y' && c!='n' );
+                        Serial.println(c);
                         ok = (c=='y');
                       }
 
@@ -3137,6 +3342,7 @@ void config_defaults(bool apply)
   // - Profiling disabled
   // - Throttling enabled (on Due)
 
+  config_current = 0;
   config_flags = 0;
 #if STANDALONE>0
   config_flags |= CF_SERIAL_DEBUG;
@@ -3204,7 +3410,9 @@ void config_defaults(bool apply)
 
   drive_set_realtime((config_flags & CF_DRIVE_RT)!=0);
   hdsk_set_realtime((config_flags & CF_DRIVE_RT)!=0);
+  cdrive_set_switches(CDRIVE_SWITCH_ROM_DISABLE_AFTER_BOOT);
   for(i=0; i<NUM_DRIVES; i++) drive_unmount(i);
+  for(i=0; i<NUM_CDRIVES; i++) cdrive_unmount(i);
   for(i=0; i<NUM_TDRIVES; i++) tdrive_unmount(i);
   for(i=0; i<NUM_HDSK_UNITS; i++) 
     for(j=0; j<4; j++)
@@ -3222,6 +3430,12 @@ void config_defaults(bool apply)
       apply_host_serial_settings(new_config_serial_settings, new_config_serial_settings2);
       mem_set_ram_limit_usr(config_mem_size-1);
     }
+}
+
+
+byte config_get_current()
+{
+  return config_current;
 }
 
 
