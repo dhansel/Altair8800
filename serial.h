@@ -7,6 +7,7 @@
 #define SERIAL_H
 
 #include "Arduino.h"
+#include "host.h"
 
 #define DBG_FILEOPS_LEVEL 3
 

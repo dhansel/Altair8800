@@ -15,6 +15,8 @@
 #include "host_due.h"
 #elif defined(_WIN32) || defined(__linux__)
 #include "host_pc.h"
+#elif defined(__MK66FX1M0__)
+#include "host_teensy36.h"
 #else
 #error requires Arduino Mega2560, Arduino Due or Windows/Linux PC
 #endif
