@@ -1434,7 +1434,8 @@ size_t host_serial_write(byte i, const char *buf, size_t n)
         // the serial transmit buffer can get out of sync and skip data bytes
         // (bug in Arduino UART serial implementation)
         noInterrupts();
-        if( Serial.availableForWrite()<n ) n = Serial.availableForWrite();
+        i = Serial.availableForWrite();
+        if( i<n ) n = i;
         for(i=0; i<n; i++) Serial.write(buf[i]); 
         interrupts();
         return i;
@@ -1447,7 +1448,8 @@ size_t host_serial_write(byte i, const char *buf, size_t n)
         // the serial transmit buffer can get out of sync and skip data bytes
         // (bug in Arduino UART serial implementation)
         noInterrupts();
-        if( Serial1.availableForWrite()<n ) n = Serial1.availableForWrite();
+        i = Serial1.availableForWrite();
+        if( i<n ) n = i;
         for(i=0; i<n; i++) Serial1.write(buf[i]); 
         interrupts();
         return i;
