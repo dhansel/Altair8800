@@ -11,7 +11,7 @@
 // [this gets included from prog_examples.cpp]
 
 // short example list: quicker upload => easier for debugging
-#define USE_SHORT_EXAMPLE_LIST
+//#define USE_SHORT_EXAMPLE_LIST
 
 #include "config.h"
 
