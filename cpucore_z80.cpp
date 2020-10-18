@@ -110,7 +110,7 @@ inline void MEM_WRITE_WORD(uint16_t addr, uint16_t v)
   else
     {
       byte b;
-#if SHOW_BUS_OUTPUT>0
+#if SHOW_MWRITE_OUTPUT>0
       b = v & 255;
       MEM_WRITE(addr, b);
       for(uint8_t i=0; i<5; i++) asm("NOP");
@@ -167,7 +167,7 @@ static void popStackSlow(byte *valueH, byte *valueL)
 }
 
 
-#if SHOW_BUS_OUTPUT>0
+#if SHOW_MWRITE_OUTPUT>0
 
 #define pushStack(valueH, valueL)               \
   if( !host_read_status_led_WAIT() )            \

@@ -17,7 +17,5 @@ bool drive_unmount(byte drive_num);
 byte drive_get_mounted_image(byte drive_num);
 void drive_reset();
 void drive_set_realtime(bool b);
-byte drive_in(byte addr);
-void drive_out(byte addr, byte data);
 
 #endif

@@ -24,15 +24,13 @@
 #include "serial.h"
 #include "timer.h"
 #include "numsys.h"
+#include "io.h"
 
 #if USE_DAZZLER==0
 
-void dazzler_out_ctrl(byte v) {}
-void dazzler_out_pict(byte v) {}
-void dazzler_out_dac(byte port, byte v) {}
-byte dazzler_in(byte port) { return 0xff; }
 void dazzler_set_iface(byte iface) {}
 byte dazzler_get_iface() { return 0xff; }
+void dazzler_register_ports() {}
 void dazzler_setup() {}
 
 #else
@@ -82,7 +80,7 @@ static void dazzler_send(const byte *data, uint16_t size)
         {
           n = host_serial_write(dazzler_iface, ((const char *) data)+ptr, size);
           ptr  += n;
-          size -= n;
+          size -= (uint16_t) n;
         }
     }
 }
@@ -379,6 +377,17 @@ void dazzler_out_dac(byte dacnum, byte v)
 }
 
 
+void dazzler_out(byte port, byte data)
+{
+  if( port==0x0E )
+    dazzler_out_ctrl(data);
+  else if( port==0x0F )
+    dazzler_out_pict(data);
+  else if( port>=0x19 && port<=0x1F )
+    dazzler_out_dac(port-0x19, data);
+}
+
+
 inline void set_d7a_port(byte p, byte v)
 {
 #if DEBUGLVL>1
@@ -489,7 +498,7 @@ byte dazzler_in(byte port)
 {
   byte v = 0;
 
-  if( port==0016 )
+  if( port==0x0e )
     {
       // the values here are approximated and certainly not
       // synchronized with the actual picture on the client
@@ -526,7 +535,7 @@ byte dazzler_in(byte port)
       // bit 7: low for odd line, high for even line
       if( (c/cycles_per_line)&1 ) v &= ~0x80;
     }
-  else if( port>=0030 && port<0035 )
+  else if( port>=0x18 && port<=0x1c )
     {
       // D+7A I/O board
       // The D+7A board was not part of the Dazzler but we include
@@ -542,9 +551,34 @@ byte dazzler_in(byte port)
 }
 
 
+void dazzler_register_ports()
+{
+  bool mapped = config_dazzler_interface()!=0xff;
+  io_register_port_inp(0x0e, mapped ? dazzler_in : NULL);
+  io_register_port_inp(0x18, mapped ? dazzler_in : NULL);
+  io_register_port_inp(0x19, mapped ? dazzler_in : NULL);
+  io_register_port_inp(0x1a, mapped ? dazzler_in : NULL);
+  io_register_port_inp(0x1b, mapped ? dazzler_in : NULL);
+  io_register_port_inp(0x1c, mapped ? dazzler_in : NULL);
+      
+  io_register_port_out(0x0e, mapped ? dazzler_out : NULL);
+  io_register_port_out(0x0f, mapped ? dazzler_out : NULL);
+  io_register_port_out(0x19, mapped ? dazzler_out : NULL);
+  io_register_port_out(0x1a, mapped ? dazzler_out : NULL);
+  io_register_port_out(0x1b, mapped ? dazzler_out : NULL);
+  io_register_port_out(0x1c, mapped ? dazzler_out : NULL);
+  io_register_port_out(0x1d, mapped ? dazzler_out : NULL);
+  io_register_port_out(0x1e, mapped ? dazzler_out : NULL);
+  io_register_port_out(0x1f, mapped ? dazzler_out : NULL);
+}
+
+
 void dazzler_set_iface(byte iface)
 {
   static host_serial_receive_callback_tp fprev = NULL;
+
+  if( iface==0xff )
+    dazzler_out_ctrl(0);
 
   if( iface != dazzler_iface )
     {
@@ -560,6 +594,7 @@ void dazzler_set_iface(byte iface)
 #if DEBUGLVL>0
       if( iface==0xff ) Serial.println("Dazzler disabled"); else {Serial.print("Dazzler on interface:"); Serial.println(iface);}
 #endif
+      dazzler_register_ports();
     }
 }
 

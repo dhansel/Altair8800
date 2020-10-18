@@ -78,7 +78,7 @@ inline byte MEM_READ(uint16_t a)
 #define MEM_READ(a) ( host_read_status_led_WAIT() ? MEM_READ_STEP(a) : (host_set_status_leds_READMEM(),  host_set_addr_leds(a), host_set_data_leds(MREAD(a)) ))
 #endif
 
-#if SHOW_BUS_OUTPUT>0
+#if SHOW_MWRITE_OUTPUT>0
 inline void MEM_WRITE(uint16_t a, byte v)
 {
   if( host_read_status_led_WAIT() )

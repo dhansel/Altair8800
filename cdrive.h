@@ -15,10 +15,8 @@ const char *cdrive_get_image_description(byte image_num);
 bool cdrive_mount(byte drive_num, byte image_num);
 bool cdrive_unmount(byte drive_num);
 byte cdrive_get_mounted_image(byte drive_num);
+void cdrive_register_ports();
 void cdrive_reset();
-
-byte cdrive_in(byte addr);
-void cdrive_out(byte addr, byte data);
 
 #define CDRIVE_SWITCH_ROM_ENABLE             0x01
 #define CDRIVE_SWITCH_ROM_DISABLE_AFTER_BOOT 0x02

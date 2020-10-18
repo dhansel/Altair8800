@@ -24,13 +24,12 @@
 #include "Altair8800.h"
 #include "timer.h"
 #include "image.h"
+#include "io.h"
 
 #define DEBUGLVL 0
 
 #if NUM_HDSK_UNITS == 0
 
-void hdsk_4pio_out(byte port, byte data) {}
-byte hdsk_4pio_in(byte port) { return 0xff; }
 void hdsk_reset() {}
 void hdsk_setup() {}
 
@@ -263,6 +262,7 @@ static bool hdsk_ACMD_strobed;
 
 void hdsk_ivbyte_set(byte addr, byte value);
 byte hdsk_ivbyte_read(byte addr);
+void hdsk_register_ports();
 
 
 static const char *hdsk_cmd_str(byte cmd)
@@ -911,6 +911,21 @@ void hdsk_reset()
 }
 
 
+void hdsk_register_ports()
+{
+  bool hdsk_used = false;
+  for(byte i=0; i<NUM_HDSK_UNITS; i++)
+    for(byte j=0; j<4; j++)
+      hdsk_used |= hdsk_mounted_image[i][j]!=0;
+  
+  for(byte i=0xA0; i<0xA8; i++)
+    {
+      io_register_port_inp(i, hdsk_used ? hdsk_4pio_in : NULL);
+      io_register_port_out(i, hdsk_used ? hdsk_4pio_out : NULL);
+    }
+}
+
+
 void hdsk_setup()
 {
   int i, j;
@@ -936,6 +951,7 @@ void hdsk_setup()
   hdsk_realtime = false;
   timer_setup(TIMER_HDSK, 0, hdsk_timer);
   hdsk_reset();
+  hdsk_register_ports();
 }
 
 
@@ -965,6 +981,7 @@ bool hdsk_mount(byte unit_num, byte platter_num, byte image_num)
           hdsk_mounted_image[unit_num][platter_num] = image_num;
           image_get_filename(IMAGE_HDSK, image_num, filename, 13, false);
           hdsk_file[unit_num][platter_num] = host_filesys_file_open(filename, true);
+          hdsk_register_ports();
         }
 
       return true;
@@ -982,6 +999,7 @@ bool hdsk_unmount(byte unit_num, byte platter_num)
         {
           hdsk_mounted_image[unit_num][platter_num] = 0;
           host_filesys_file_close(hdsk_file[unit_num][platter_num]);
+          hdsk_register_ports();
         }
       return true;
     }

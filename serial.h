@@ -42,38 +42,9 @@ void serial_receive_data(byte dev, byte b);
 bool serial_available();
 int  serial_read();
 void serial_reset(byte dev = 0xff);
+void serial_register_ports();
 void serial_set_config(byte dev = 0xff);
 byte serial_last_active_primary_device();
-
-byte serial_2sio1_in_ctrl();
-byte serial_2sio1_in_data();
-void serial_2sio1_out_ctrl(byte data);
-void serial_2sio1_out_data(byte data);
-
-byte serial_2sio2_in_ctrl();
-byte serial_2sio2_in_data();
-void serial_2sio2_out_ctrl(byte data);
-void serial_2sio2_out_data(byte data);
-
-byte serial_2sio3_in_ctrl();
-byte serial_2sio3_in_data();
-void serial_2sio3_out_ctrl(byte data);
-void serial_2sio3_out_data(byte data);
-
-byte serial_2sio4_in_ctrl();
-byte serial_2sio4_in_data();
-void serial_2sio4_out_ctrl(byte data);
-void serial_2sio4_out_data(byte data);
-
-byte serial_sio_in_ctrl();
-byte serial_sio_in_data();
-void serial_sio_out_ctrl(byte data);
-void serial_sio_out_data(byte data);
-
-byte serial_acr_in_ctrl();
-byte serial_acr_in_data();
-void serial_acr_out_ctrl(byte data);
-void serial_acr_out_data(byte data);
 
 void serial_update_hlda_led();
 

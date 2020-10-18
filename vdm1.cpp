@@ -23,11 +23,14 @@
 #include "host.h"
 #include "serial.h"
 #include "timer.h"
+#include "io.h"
+#include "cdrive.h"
 
 #if USE_VDM1==0
 
 void vdm1_out(byte v) {}
 void vdm1_set_iface(byte iface) {}
+void vdm1_register_ports() {}
 void vdm1_setup() {}
 byte vdm1_get_iface() { return 0xff; }
 
@@ -89,7 +92,7 @@ static void vdm1_send(const byte *data, uint16_t size)
         {
           n = host_serial_write(vdm_iface, ((const char *) data)+ptr, size);
           ptr  += n;
-          size -= n;
+          size -= (uint16_t) n;
         }
     }
 }
@@ -143,7 +146,7 @@ void vdm1_write_mem_(uint16_t a, byte v)
 }
 
 
-void vdm1_out(byte v)
+void vdm1_out(byte port, byte v)
 {
 #if DEBUGLVL>0
   printf("vdm1_out(%02x)\n", v);
@@ -227,6 +230,52 @@ void vdm1_receive(byte iface, byte data)
 }
 
 
+byte vdm1_keyboard_in_ctrl(byte port)
+{
+  // control port (channel A) of a Protec 3P+S card jumpered such
+  // that the latched XDA signal (data available) is available at
+  // bit 0 (active low). Output will be 0 if keyboard input from 
+  // the VDM-1 client is available, otherwise 1.
+
+  // The 3P+S was not part of the VDM-1 but the parallel port keyboard
+  // emulation is included here since it was often used together
+  // with the VDM-1.
+  return vdm_keyboard_ctrl;
+}
+
+
+byte vdm1_keyboard_in_data(byte port)
+{
+  // data port (channel B) of a Protec 3+S card. Keyboard data from 
+  // the VDM-1 client will be available at this port.
+
+  // The 3P+S was not part of the VDM-1 but the parallel port keyboard
+  // emulation is included here since it was often used together
+  // with the VDM-1.
+  vdm_keyboard_ctrl = 1;
+  return vdm_keyboard_data;
+}
+
+
+void vdm1_register_ports()
+{
+  bool mapped = config_vdm1_interface()!=0xff;
+  io_register_port_out(0xC8, mapped ? vdm1_out : NULL);
+
+  mapped = config_vdm1_keyboard_device()!=0xff;
+  io_register_port_inp(0x04, mapped ? vdm1_keyboard_in_ctrl : NULL);
+  io_register_port_inp(0x05, mapped ? vdm1_keyboard_in_data : NULL);
+  
+#if NUM_CDRIVES>0
+  // both VDM1 keyboard support and Cromemco disk controller use port 4.  
+  // We give the VDM1 keyboard priority to use that port but when the VDM1 
+  // keyboard gets disabled we re-initialize the Cromemco controller so 
+  // it can grab the port.
+  if( !mapped ) cdrive_register_ports();
+#endif
+}
+
+
 void vdm1_set_iface(byte iface)
 {
   static host_serial_receive_callback_tp fprev = NULL;
@@ -247,34 +296,9 @@ void vdm1_set_iface(byte iface)
         {Serial.print("VDM-1 on interface: "); Serial.println(host_serial_port_name(iface));}
       delay(500);
 #endif
+
+      vdm1_register_ports();
     }
-}
-
-
-byte vdm1_keyboard_in_ctrl()
-{
-  // control port (channel A) of a Protec 3P+S card jumpered such
-  // that the latched XDA signal (data available) is available at
-  // bit 0 (active low). Output will be 0 if keyboard input from 
-  // the VDM-1 client is available, otherwise 1.
-
-  // The 3P+S was not part of the VDM-1 but the parallel port keyboard
-  // emulation is included here since it was often used together
-  // with the VDM-1.
-  return vdm_keyboard_ctrl;
-}
-
-
-byte vdm1_keyboard_in_data()
-{
-  // data port (channel B) of a Protec 3+S card. Keyboard data from 
-  // the VDM-1 client will be available at this port.
-
-  // The 3P+S was not part of the VDM-1 but the parallel port keyboard
-  // emulation is included here since it was often used together
-  // with the VDM-1.
-  vdm_keyboard_ctrl = 1;
-  return vdm_keyboard_data;
 }
 
 

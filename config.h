@@ -51,7 +51,7 @@
 
 // Enables support for Cromemco disk drives (maximum 4).
 // Set to 0 to disable Cromemco drive support.
-#define NUM_CDRIVES 4
+#define NUM_CDRIVES 0
 
 
 // Enables support for Tarbell disk drives (maximum 4).
@@ -85,22 +85,11 @@
 #define USE_VDM1 0
 
 
-// If enabled, the D0-7 LEDs will show values being output to the data bus
-// (i.e. memory write or OUT operations). This is different from the original
-// Altair behavior where the D0-7 LEDs were all on for write operations
-// (because the LEDs are wired to the DIN bus lines which are floating during
-// CPU write).
-// Enabling this (a) helps debugging and (b) allows to connect external devices
-// using the data LEDs as a data bus.
-// Enabling this also makes sure that the "WO" LED will go out (negative logic)
-// AFTER the address and data buses have been set to the proper values.
-// It also enables real timing of the "WO" LED similar to the
-// USE_REAL_MREAD_TIMING setting below.
-// Enable this if you want to connect some external hardware that needs to see
-// data during memory write or OUT instructions.
-// Or if you want to see CPU output data during writes and do not care that this
-// behavior does not match the original.
-#define SHOW_BUS_OUTPUT 0
+// Enables support for the external I/O bus described in the documentation.
+// Enabling this slightly changes the LED behavior during input/output operations
+// to facilitate I/O through the Arduino pins connected to the D0-7 LEDs.
+// See the "Interfacing external hardware" section in the documentation for details.
+#define USE_IO_BUS 0
 
 
 // To improve performance, the MEMR LED handling is a bit lazy while a program is
@@ -114,11 +103,18 @@
 #define USE_REAL_MREAD_TIMING 0
 
 
-// If enabled and an "IN" instruction is executed for a port that is not
-// emulated, read the input data from the SW15-8 inputs instead.
-// Enable this if you want to connect external hardware that provides
-// input data for IN instructions.
-#define READ_UNUSED_PORTS_EXT 0
+// If enabled, the D0-7 LEDs will show values being output to the data bus
+// during memory write operations). This is different from the original
+// Altair behavior where the D0-7 LEDs were all on for write operations
+// because the LEDs are wired to the DIN bus lines which are floating during
+// CPU write). Additionally, enabling this makes sure that the "WO" LED will
+// go out (negative logic) AFTER the address and data buses have been set to
+// the proper values. It also changes timing of the "WO" LED similar to
+// the USE_REAL_MREAD_TIMING setting above.
+// Enable this if you want to connect external hardware that needs to see
+// data during memory write instructions or if you want to see the data
+// during writes and do not care that this behavior does not match the original.
+#define SHOW_MWRITE_OUTPUT 0
 
 
 // If enabled, Address switch state will be set by issuing the '/'

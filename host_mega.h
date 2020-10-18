@@ -36,9 +36,7 @@ inline void host_set_addr_leds(uint16_t v) { PORTA=(v & 0xff); PORTC=(v / 256); 
 #define host_set_status_led_WO()      PORTB &= ~0x02
 #define host_set_status_led_STACK()   PORTB |=  0x04
 #define host_set_status_led_HLTA()    PORTB |=  0x08
-#define host_set_status_led_OUT()     PORTB |=  0x10
 #define host_set_status_led_M1()      PORTB |=  0x20
-#define host_set_status_led_INP()     PORTB |=  0x40
 #define host_set_status_led_MEMR()    PORTB |=  0x80
 #define host_set_status_led_INTE()    digitalWrite(38, HIGH);
 #define host_set_status_led_PROT()    digitalWrite(39, HIGH)
@@ -49,9 +47,7 @@ inline void host_set_addr_leds(uint16_t v) { PORTA=(v & 0xff); PORTC=(v / 256); 
 #define host_clr_status_led_WO()      PORTB |=  0x02
 #define host_clr_status_led_STACK()   PORTB &= ~0x04
 #define host_clr_status_led_HLTA()    PORTB &= ~0x08
-#define host_clr_status_led_OUT()     PORTB &= ~0x10
 #define host_clr_status_led_M1()      PORTB &= ~0x20
-#define host_clr_status_led_INP()     PORTB &= ~0x40
 #define host_clr_status_led_MEMR()    PORTB &= ~0x80
 #define host_clr_status_led_INTE()    digitalWrite(38, LOW);
 #define host_clr_status_led_PROT()    digitalWrite(39, LOW)
@@ -67,6 +63,24 @@ inline void host_set_addr_leds(uint16_t v) { PORTA=(v & 0xff); PORTC=(v / 256); 
 #define host_set_status_leds_READMEM_M1()    PORTB |=  0xA2; 
 #define host_set_status_leds_READMEM_STACK() PORTB |=  0x86; 
 #define host_set_status_leds_WRITEMEM()      PORTB &= ~0x82
+
+#if USE_IO_BUS>0
+// switch WAIT and DATA LEDs to inputs and turn on INP LED
+#define host_set_status_led_INP()   { DDRL = 0x00; DDRG &= ~0x02; PORTB |= 0x40; }
+#define host_clr_status_led_INP()   { PORTB &= ~0x40; DDRG |= 0x02; DDRL = 0xFF; }
+// switch WAIT LED to input and turn on OUT LED
+#define host_set_status_led_OUT()   { DDRG &= 0xFE; PORTB |=  0x10; }
+#define host_clr_status_led_OUT()   { PORTB &= ~0x10; DDRG |= 0x01; }
+// read input from pins connected to DATA and WAIT LEDs
+#define host_read_data_bus()        PINL
+#define host_read_status_WAIT()     (PING & 0x02)
+#else
+#define host_set_status_led_INP()     PORTB |=  0x40
+#define host_clr_status_led_INP()     PORTB &= ~0x40
+#define host_set_status_led_OUT()     PORTB |=  0x10
+#define host_clr_status_led_OUT()     PORTB &= ~0x10
+#endif
+
 
 uint16_t host_read_status_leds();
 

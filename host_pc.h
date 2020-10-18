@@ -110,4 +110,8 @@ void host_check_interrupts();
 void host_serial_interrupts_pause();
 void host_serial_interrupts_resume();
 
+// external bus I/O not supported on this platform
+#define host_read_status_WAIT() 0
+#define host_read_data_bus()    0xFF
+
 #endif

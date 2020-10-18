@@ -16,7 +16,5 @@ bool tdrive_mount(byte drive_num, byte image_num);
 bool tdrive_unmount(byte drive_num);
 byte tdrive_get_mounted_image(byte drive_num);
 void tdrive_reset();
-byte tdrive_in(byte addr);
-void tdrive_out(byte addr, byte data);
 
 #endif

@@ -25,6 +25,7 @@
 #include "timer.h"
 #include "image.h"
 #include "host.h"
+#include "io.h"
 
 #if NUM_DRIVES == 0
 
@@ -37,8 +38,6 @@ bool drive_unmount(byte drive_num) { return false; }
 byte drive_get_mounted_image(byte drive_num) { return 0; }
 void drive_reset() {}
 void drive_set_realtime(bool b) {}
-byte drive_in(byte addr) { return 0; }
-void drive_out(byte addr, byte data) {}
 
 #elif NUM_DRIVES>16
 
@@ -80,6 +79,8 @@ static HOST_FILESYS_FILE_TYPE drive_file[NUM_DRIVES];
 #define DRIVE_HEAD_STEP_DELAY3       20000
 static bool drive_sector_true = false;
 static byte drive_head_moving = 0;
+
+static void drive_register_ports();
 
 static uint32_t drive_get_file_pos(byte drive_num)
 {
@@ -150,25 +151,6 @@ static void drive_sector_interrupt()
 }
 
 
-void drive_setup()
-{
-  drive_selected = 0xff;
-  for(byte i=0; i<NUM_DRIVES; i++)
-    {
-      drive_status[i] = 0;
-      drive_current_track[i] = 0;
-      drive_current_sector[i] = 0;
-      drive_current_byte[i] = 0;
-      drive_mounted_disk[i] = 0;
-      drive_num_tracks[i] = DRIVE_NUM_TRACKS;
-      drive_num_sectors[i] = DRIVE_NUM_SECTORS;
-    }
-  
-  // prepare sector change timer interrupt 
-  timer_setup(TIMER_DRIVE, DRIVE_SECTOR_TRUE_DELAY, drive_sector_interrupt);
-}
-
-
 void drive_dir()
 {
   Serial.print(image_get_dir_content(IMAGE_FLOPPY));
@@ -184,6 +166,7 @@ bool drive_unmount(byte drive_num)
       drive_mounted_disk[drive_num] = 0;
       host_filesys_file_close(drive_file[drive_num]);
       altair_interrupt(INT_DRIVE, false);
+      drive_register_ports();
     }
 
   return true;
@@ -236,6 +219,7 @@ bool drive_mount(byte drive_num, byte image_num)
               drive_num_sectors[drive_num] = DRIVE_NUM_SECTORS;
             }
 
+          drive_register_ports();
           return true;
         }
     }
@@ -522,5 +506,42 @@ void drive_out(byte addr, byte data)
       }
     }
 }
+
+
+void drive_register_ports()
+{
+  bool drive_used = false;
+  for(byte i=0; i<NUM_DRIVES; i++)
+    drive_used |= drive_mounted_disk[i]!=0;
+
+  io_register_port_inp(0x08, drive_used ? drive_in : NULL);
+  io_register_port_inp(0x09, drive_used ? drive_in : NULL);
+  io_register_port_inp(0x0A, drive_used ? drive_in : NULL);
+  io_register_port_out(0x08, drive_used ? drive_out : NULL);
+  io_register_port_out(0x09, drive_used ? drive_out : NULL);
+  io_register_port_out(0x0A, drive_used ? drive_out : NULL);
+}
+
+
+void drive_setup()
+{
+  drive_selected = 0xff;
+  for(byte i=0; i<NUM_DRIVES; i++)
+    {
+      drive_status[i] = 0;
+      drive_current_track[i] = 0;
+      drive_current_sector[i] = 0;
+      drive_current_byte[i] = 0;
+      drive_mounted_disk[i] = 0;
+      drive_num_tracks[i] = DRIVE_NUM_TRACKS;
+      drive_num_sectors[i] = DRIVE_NUM_SECTORS;
+    }
+
+  drive_register_ports();
+  
+  // prepare sector change timer interrupt 
+  timer_setup(TIMER_DRIVE, DRIVE_SECTOR_TRUE_DELAY, drive_sector_interrupt);
+}
+
 
 #endif

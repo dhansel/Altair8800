@@ -11,10 +11,9 @@
 #include <SdFat.h>
 
 
-// The (rarely used) PROTECT switch can be sacrificed to enable an additional
-// serial port on the pins usually used for the switch. If USE_SERIAL_ON_A6A7
-// is set to 1 here then the PROTECT switch is not used and instead
-// pins A6 (RX) and A7 (TX) are used as the additional serial port.
+// If the PROTECT switch is not used (USE_PROTECT set to 0 in config.h) then those pins
+// can be used to provide an additional serial interface. Set USE_SERIAL_ON_A6A7 to 1
+// here. The A6 pin is RX and A7 is TX.
 // WARNING: It is highly recommended to physically disable the PROTECT switch by
 //          disconnecting the GND wire from the switch before enabling this. The serial
 //          lines idle HIGH and the PROTECT switch will connect them to GND when pressed,
@@ -70,9 +69,7 @@ uint16_t host_read_addr_switches();
 #define host_set_status_led_WO()      REG_PIOC_CODR = 1<<28
 #define host_set_status_led_STACK()   REG_PIOC_SODR = 1<<26
 #define host_set_status_led_HLTA()    REG_PIOC_SODR = 1<<25
-#define host_set_status_led_OUT()     REG_PIOC_SODR = 1<<24
 #define host_set_status_led_M1()      REG_PIOC_SODR = 1<<23
-#define host_set_status_led_INP()     REG_PIOC_SODR = 1<<22
 #define host_set_status_led_MEMR()    REG_PIOC_SODR = 1<<21
 #define host_set_status_led_INTE()    REG_PIOD_SODR = 1<<8;
 #define host_set_status_led_PROT()    REG_PIOB_SODR = 1<<27
@@ -83,9 +80,7 @@ uint16_t host_read_addr_switches();
 #define host_clr_status_led_WO()      REG_PIOC_SODR = 1<<28
 #define host_clr_status_led_STACK()   REG_PIOC_CODR = 1<<26
 #define host_clr_status_led_HLTA()    REG_PIOC_CODR = 1<<25
-#define host_clr_status_led_OUT()     REG_PIOC_CODR = 1<<24
 #define host_clr_status_led_M1()      REG_PIOC_CODR = 1<<23
-#define host_clr_status_led_INP()     REG_PIOC_CODR = 1<<22
 #define host_clr_status_led_MEMR()    REG_PIOC_CODR = 1<<21
 #define host_clr_status_led_INTE()    REG_PIOD_CODR = 1<<8;
 #define host_clr_status_led_PROT()    REG_PIOB_CODR = 1<<27
@@ -96,6 +91,25 @@ uint16_t host_read_addr_switches();
 #define host_read_status_led_M1()     (REG_PIOC_PDSR & (1<<23))
 #define host_read_status_led_HLTA()   (REG_PIOC_PDSR & (1<<25))
 #define host_read_status_led_INTE()   status_inte
+
+
+#if USE_IO_BUS>0
+// switch WAIT and DATA LEDs to inputs and turn on INP LED
+#define host_set_status_led_INP()   { REG_PIOD_ODR = 0xFF; REG_PIOC_ODR = 1<<29; REG_PIOC_SODR = 1<<22; }
+#define host_clr_status_led_INP()   { REG_PIOC_CODR = 1<<22; REG_PIOC_OER = 1<<29; REG_PIOD_OER = 0xFF; }
+// switch WAIT LED to input and turn on OUT LED
+#define host_set_status_led_OUT()   { REG_PIOC_ODR  = 1<<29; REG_PIOC_SODR = 1<<24; }
+#define host_clr_status_led_OUT()   { REG_PIOC_CODR = 1<<24; REG_PIOC_OER  = 1<<29; }
+// read input from pins connected to DATA and WAIT LEDs
+#define host_read_data_bus            host_read_data_leds
+#define host_read_status_WAIT()       (REG_PIOC_PDSR & (1<<29))
+#else
+#define host_set_status_led_INP()     REG_PIOC_SODR = 1<<22;
+#define host_clr_status_led_INP()     REG_PIOC_CODR = 1<<22;
+#define host_set_status_led_OUT()     REG_PIOC_SODR = 1<<24
+#define host_clr_status_led_OUT()     REG_PIOC_CODR = 1<<24
+#endif
+
 
 // reading from memory (MEMR on, WO on)
 #define host_set_status_leds_READMEM()        REG_PIOC_SODR = 0x10200000

@@ -27,6 +27,7 @@
 #include "prog_ps2.h"
 #include "timer.h"
 #include "numsys.h"
+#include "io.h"
 
 #define SST_RDRF     0x01 // receive register full (character received)
 #define SST_TDRE     0x02 // send register empty (ready for next byte)
@@ -63,6 +64,10 @@ static byte last_active_primary_device = CSM_SIO;
 static void serial_replay(byte dev);
 static void acr_read_next_byte();
 static void serial_timer_interrupt_check_enable(byte dev = 0xff);
+
+void serial_sio_register_io();
+void serial_acr_register_io();
+void serial_2sio_register_io(byte dev);
 
 
 static const __FlashStringHelper *devname(byte dev)
@@ -259,10 +264,20 @@ void serial_close_files()
 // -----------------------------------------------------------------------------------------------------------------------
 
 
+void serial_register_ports()
+{
+  serial_sio_register_io();
+  serial_acr_register_io();
+  for(byte dev=CSM_2SIO1; dev<NUM_SERIAL_DEVICES && dev<=CSM_2SIO4; dev++) 
+    serial_2sio_register_io(dev); 
+}
+
+
 void serial_set_config(byte dev)
 {
   if( dev==0xff )
     {
+      serial_register_ports();
       for(dev=0; dev<NUM_SERIAL_DEVICES; dev++) serial_set_config(dev);
     }
   else
@@ -273,6 +288,16 @@ void serial_set_config(byte dev)
         serial_ctrl[dev] &= ~SSC_REALTIME;
 
       if( dev==CSM_SIO ) serial_ctrl[dev] = (serial_ctrl[dev] & ~3) | (config_serial_siorev() & 3);
+
+      switch( dev )
+        {
+        case CSM_SIO   : serial_sio_register_io(); break;
+        case CSM_ACR   : serial_acr_register_io(); break;
+        case CSM_2SIO1 : 
+        case CSM_2SIO2 : 
+        case CSM_2SIO3 : 
+        case CSM_2SIO4 : serial_2sio_register_io(dev); break;
+        }
     }
 }
 
@@ -616,10 +641,14 @@ static byte serial_map_characters_out(byte dev, byte data)
 
 // -----------------------------------------------------------------------------------------------------------------------
 
+// map between port number (16..23, 0x10..0x17) and CSM_2SIO1..CSM_2SIO4
+#define PORT2DEV(port) ((port/2)+CSM_2SIO1-8)
+#define DEV2PORT(dev)  ((dev+8-CSM_2SIO1)*2)
 
-byte serial_2sio_in_ctrl(byte dev)
+byte serial_2sio_in_ctrl(byte port)
 {
   // read control register of 88-2SIO device
+  byte dev  = PORT2DEV(port);
   byte data = serial_status_dev[dev];
   byte fid  = serial_fid[dev];
 
@@ -645,9 +674,10 @@ byte serial_2sio_in_ctrl(byte dev)
 }
 
 
-byte serial_2sio_in_data(byte dev)
+byte serial_2sio_in_data(byte port)
 {
   byte data = 0;
+  byte dev  = PORT2DEV(port);
 
   // get character
   data = serial_read(dev);
@@ -663,8 +693,10 @@ byte serial_2sio_in_data(byte dev)
 }
 
 
-void serial_2sio_out_ctrl(byte dev, byte data)
+void serial_2sio_out_ctrl(byte port, byte data)
 {
+  byte dev  = PORT2DEV(port);
+
   // write to control register of 88-2SIO1 device
   if( !(serial_ctrl[dev] & SSC_INTRX) && (data & 0x80) )
     {
@@ -699,8 +731,10 @@ void serial_2sio_out_ctrl(byte dev, byte data)
 }
 
 
-void serial_2sio_out_data(byte dev, byte data)
+void serial_2sio_out_data(byte port, byte data)
 {
+  byte dev = PORT2DEV(port);
+
   // map character (for BASIC etc)
   data = serial_map_characters_out(dev, data);
 
@@ -717,32 +751,21 @@ void serial_2sio_out_data(byte dev, byte data)
 }
 
 
-byte serial_2sio1_in_ctrl() { return serial_2sio_in_ctrl(CSM_2SIO1); }
-byte serial_2sio1_in_data() { return serial_2sio_in_data(CSM_2SIO1); }
-void serial_2sio1_out_ctrl(byte data) { serial_2sio_out_ctrl(CSM_2SIO1, data); }
-void serial_2sio1_out_data(byte data) { serial_2sio_out_data(CSM_2SIO1, data); }
+void serial_2sio_register_io(byte dev)
+{
+  byte port   = DEV2PORT(dev);
+  bool mapped = config_serial_map_sim_to_host(dev)!=0xFF;
+  io_register_port_inp(port,   mapped ? serial_2sio_in_ctrl  : NULL);
+  io_register_port_inp(port+1, mapped ? serial_2sio_in_data  : NULL);
+  io_register_port_out(port,   mapped ? serial_2sio_out_ctrl : NULL);
+  io_register_port_out(port+1, mapped ? serial_2sio_out_data : NULL);
+}
 
-byte serial_2sio2_in_ctrl() { return serial_2sio_in_ctrl(CSM_2SIO2); }
-byte serial_2sio2_in_data() { return serial_2sio_in_data(CSM_2SIO2); }
-void serial_2sio2_out_ctrl(byte data) { serial_2sio_out_ctrl(CSM_2SIO2, data); }
-void serial_2sio2_out_data(byte data) { serial_2sio_out_data(CSM_2SIO2, data); }
-
-#if USE_SECOND_2SIO>0
-byte serial_2sio3_in_ctrl() { return serial_2sio_in_ctrl(CSM_2SIO3); }
-byte serial_2sio3_in_data() { return serial_2sio_in_data(CSM_2SIO3); }
-void serial_2sio3_out_ctrl(byte data) { serial_2sio_out_ctrl(CSM_2SIO3, data); }
-void serial_2sio3_out_data(byte data) { serial_2sio_out_data(CSM_2SIO3, data); }
-
-byte serial_2sio4_in_ctrl() { return serial_2sio_in_ctrl(CSM_2SIO4); }
-byte serial_2sio4_in_data() { return serial_2sio_in_data(CSM_2SIO4); }
-void serial_2sio4_out_ctrl(byte data) { serial_2sio_out_ctrl(CSM_2SIO4, data); }
-void serial_2sio4_out_data(byte data) { serial_2sio_out_data(CSM_2SIO4, data); }
-#endif
 
 // ------------------------------------------------------------------------------------------------------------
 
 
-byte serial_sio_in_ctrl()
+byte serial_sio_in_ctrl(byte port)
 {
   byte data = serial_status_dev[CSM_SIO];
 
@@ -782,7 +805,7 @@ byte serial_sio_in_ctrl()
 }
 
 
-byte serial_sio_in_data()
+byte serial_sio_in_data(byte port)
 {
   byte data = 0;
 
@@ -800,7 +823,7 @@ byte serial_sio_in_data()
 }
 
 
-void serial_sio_out_ctrl(byte data)
+void serial_sio_out_ctrl(byte port, byte data)
 {
   // port 0 of Cromemco serial card is baud rate (ignore)
   if( (serial_ctrl[CSM_SIO] & (SSC_SIOTP0|SSC_SIOTP1))==2 )
@@ -837,7 +860,7 @@ void serial_sio_out_ctrl(byte data)
 }
 
 
-void serial_sio_out_data(byte data)
+void serial_sio_out_data(byte port, byte data)
 {
   // map character (for BASIC etc)
   data = serial_map_characters_out(CSM_SIO, data);
@@ -852,6 +875,16 @@ void serial_sio_out_data(byte data)
       // this also schedules a timer to set the TDRE flag again
       set_serial_status(CSM_SIO, serial_status[CSM_SIO] & ~SST_TDRE);
     }
+}
+
+
+void serial_sio_register_io()
+{
+  bool mapped = config_serial_map_sim_to_host(CSM_SIO)!=0xFF;
+  io_register_port_inp(0, mapped ? serial_sio_in_ctrl  : NULL);
+  io_register_port_inp(1, mapped ? serial_sio_in_data  : NULL);
+  io_register_port_out(0, mapped ? serial_sio_out_ctrl : NULL);
+  io_register_port_out(1, mapped ? serial_sio_out_data : NULL);
 }
 
 
@@ -1032,7 +1065,7 @@ static void acr_read_next_byte()
 }
 
 
-byte serial_acr_in_ctrl()
+byte serial_acr_in_ctrl(byte port)
 {
   byte data = serial_status_dev[CSM_ACR];
 
@@ -1083,7 +1116,7 @@ byte serial_acr_in_ctrl()
 
 
 
-byte serial_acr_in_data()
+byte serial_acr_in_data(byte port)
 {
   byte data = 0;
 
@@ -1100,7 +1133,7 @@ byte serial_acr_in_data()
 }
 
 
-void serial_acr_out_ctrl(byte data)
+void serial_acr_out_ctrl(byte port, byte data)
 {
   // write to control register of acr interface
   if( !(serial_ctrl[CSM_ACR] & SSC_INTRX) && (data & 0x01) )
@@ -1133,7 +1166,7 @@ void serial_acr_out_ctrl(byte data)
 }
 
 
-void serial_acr_out_data(byte data)
+void serial_acr_out_data(byte port, byte data)
 {
   //printf("ACR port data write at %04x: %02x (%c)\n", regPC, data, data>=32 ? data : '.');
 
@@ -1155,6 +1188,16 @@ void serial_acr_out_data(byte data)
       // this also schedules a timer to set the TDRE flag again
       set_serial_status(CSM_ACR, serial_status[CSM_ACR] & ~SST_TDRE);
     }
+}
+
+
+void serial_acr_register_io()
+{
+  bool mapped = config_serial_map_sim_to_host(CSM_ACR)!=0xFF;
+  io_register_port_inp(6, mapped ? serial_acr_in_ctrl  : NULL);
+  io_register_port_inp(7, mapped ? serial_acr_in_data  : NULL);
+  io_register_port_out(6, mapped ? serial_acr_out_ctrl : NULL);
+  io_register_port_out(7, mapped ? serial_acr_out_data : NULL);
 }
 
 

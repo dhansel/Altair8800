@@ -24,6 +24,7 @@
 #include "Altair8800.h"
 #include "timer.h"
 #include "image.h"
+#include "io.h"
 
 #if NUM_TDRIVES == 0
 
@@ -35,8 +36,6 @@ bool tdrive_mount(byte drive_num, byte image_num) { return false; }
 bool tdrive_unmount(byte drive_num) { return false; }
 byte tdrive_get_mounted_image(byte drive_num) { return 0; }
 void tdrive_reset() {}
-byte tdrive_in(byte addr) { return 0; }
-void tdrive_out(byte addr, byte data) {}
 
 #elif NUM_TDRIVES>4
 
@@ -74,6 +73,7 @@ static byte drive_command, drive_aux;
 static byte drive_data_idx, drive_data_count;
 static byte drive_data_buffer[DRIVE_SECTOR_LENGTH];
 
+static void tdrive_register_ports();
 
 
 static uint32_t drive_get_file_pos(byte drive_num)
@@ -110,12 +110,6 @@ static void drive_write_sector(byte drive_num)
 }
 
 
-void tdrive_setup()
-{
-  tdrive_reset();
-}
-
-
 void tdrive_reset()
 {
   drive_selected = 0;
@@ -145,6 +139,7 @@ bool tdrive_unmount(byte drive_num)
       if( (drive_command&0xE0)==0xA0 || (drive_command&0xF0)==0xF0 ) drive_write_sector(drive_selected);
       drive_mounted_disk[drive_num] = 0;
       host_filesys_file_close(drive_file[drive_num]);
+      tdrive_register_ports();
     }
 
   return true;
@@ -180,6 +175,7 @@ bool tdrive_mount(byte drive_num, byte image_num)
           image_get_filename(IMAGE_TARBELL, image_num, filename, 13, false);
           drive_mounted_disk[drive_num] = image_num;
           drive_file[drive_num] = host_filesys_file_open(filename, true);
+          tdrive_register_ports();
           return true;
         }
     }
@@ -534,6 +530,30 @@ void tdrive_out(byte addr, byte data)
         break;
       }
     }
+}
+
+
+void tdrive_register_ports()
+{
+  bool drive_used = false;
+  for(byte i=0; i<NUM_TDRIVES; i++)
+    drive_used |= drive_mounted_disk[i]!=0;
+
+  for(byte i=0xf8; i<=0xfd; i++)
+    {
+      io_register_port_inp(i, drive_used ? tdrive_in : NULL);
+      io_register_port_out(i, drive_used ? tdrive_out : NULL);
+    }
+}
+
+
+void tdrive_setup()
+{
+  for(byte i=0; i<NUM_TDRIVES; i++)
+    drive_mounted_disk[i] = 0;
+
+  tdrive_register_ports();
+  tdrive_reset();
 }
 
 #endif

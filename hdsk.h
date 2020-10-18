@@ -3,9 +3,6 @@
 
 #include <Arduino.h>
 
-void hdsk_4pio_out(byte port, byte data);
-byte hdsk_4pio_in(byte port);
-
 const char *hdsk_get_image_filename(byte image_num, bool check_exist = true);
 const char *hdsk_get_image_description(byte image_num);
 bool hdsk_mount(byte unit_num, byte platter_num, byte image_num);

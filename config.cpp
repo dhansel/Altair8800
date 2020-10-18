@@ -33,6 +33,7 @@
 #include "sdmanager.h"
 #include "vdm1.h"
 #include "cpucore.h"
+#include "io.h"
 
 #define CONFIG_FILE_VERSION 10
 
@@ -1790,6 +1791,13 @@ static bool load_config(byte fileno)
       config_current = fileno;
     }
 
+  // note: registered ports for drives are controlled by mount/unmount functions
+  serial_register_ports();
+  printer_register_ports();
+  altair_vi_register_ports();
+  dazzler_register_ports();
+  vdm1_register_ports();
+  
   return ok;
 }
 
@@ -1804,6 +1812,7 @@ void config_edit_printer()
   bool go = true, redraw = true;
 
   byte prev_type = config_printer_type();
+  byte prev_mapping = config_printer_map_to_host_serial();
   while( go )
     {
       if( redraw )
@@ -1872,7 +1881,8 @@ void config_edit_printer()
         case 'x': 
           {
             go = false; 
-            if( config_printer_type()!=prev_type ) printer_setup();
+            if( config_printer_type()!=prev_type || config_printer_map_to_host_serial() != prev_mapping )
+              printer_setup();
             break;
           }
         }
@@ -2067,7 +2077,7 @@ void config_edit_tdrives()
 
   for(i=0; i<NUM_TDRIVES; i++) mounted[i] = tdrive_get_mounted_image(i);
 
-  byte row, col, r_realtime, r_drives[NUM_TDRIVES], r_cmd;
+  byte row, col,r_drives[NUM_TDRIVES], r_cmd;
   row = 4;
   col = 32;
   Serial.print(F("\033[2J\033[0;0H\n"));
@@ -2356,6 +2366,7 @@ void config_edit_interrupts()
   if( conn_drive < 0xff ) config_interrupt_vi_mask[conn_drive] |= INT_DRIVE;
   if( conn_lpc   < 0xff ) config_interrupt_vi_mask[conn_lpc]   |= INT_LPC;
   if( conn_hdsk  < 0xff ) config_interrupt_vi_mask[conn_hdsk]  |= INT_HDSK;
+  altair_vi_register_ports();
 }
 
 
@@ -2451,6 +2462,8 @@ void config_edit_vdm1()
         case 'x': go = false; break;
         }
     }
+
+  vdm1_register_ports();
 }
 #endif
 
@@ -2595,6 +2608,7 @@ void config_edit_serial_device(byte dev)
           config_serial_device_settings[dev] = settings;
           config_serial_sim_to_host[dev] = config_map_device_to_host_interface(get_bits(settings, 17, 3));
           serial_timer_interrupt_setup(dev);
+          serial_register_ports();
           return;
         }
     }
@@ -2765,7 +2779,7 @@ void config_host_serial()
 
   col = 0;
   for(i=0; i<HOST_NUM_SERIAL_PORTS; i++)
-    col = max(col, strlen(host_serial_port_name(i)));
+    col = (byte) max(col, strlen(host_serial_port_name(i)));
   col += 8;
 
   while( go )
@@ -3204,6 +3218,7 @@ void config_edit()
           config_flags2 = toggle_bits(config_flags2, 0, 3, 0, HOST_NUM_SERIAL_PORTS);
           set_cursor(r_dazzler, col);
           print_dazzler_mapped_to(); 
+          dazzler_register_ports();
           redraw = false;
           break;
 #endif
@@ -3220,6 +3235,8 @@ void config_edit()
             Serial.println(F("https://github.com/dhansel/Altair8800"));
             Serial.println(F("Firmware compiled on: " __DATE__ ", " __TIME__ "\n"));
             host_system_info();
+            Serial.println();
+            io_print_registered_ports();
             Serial.print(F("\n\nPress any key to continue..."));
             while( !serial_available() ); 
             while( serial_available() ) serial_read();
@@ -3425,6 +3442,13 @@ void config_defaults(bool apply)
   config_printer_generic_status_busy = 0x00;
   config_printer_generic_status_ready = 0xFF;
 
+  // note: registered ports for drives are controlled by mount/unmount functions
+  serial_register_ports();
+  printer_register_ports();
+  altair_vi_register_ports();
+  dazzler_register_ports();
+  dazzler_register_ports();
+  
   if( apply ) 
     {
       apply_host_serial_settings(new_config_serial_settings, new_config_serial_settings2);

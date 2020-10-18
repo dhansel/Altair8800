@@ -24,15 +24,13 @@
 #include "timer.h"
 #include "cpucore.h"
 #include "Altair8800.h"
+#include "io.h"
 
 
 #if USE_PRINTER==0
 
-void printer_out_ctrl(byte data) {}
-void printer_out_data(byte data) {}
-byte printer_in_ctrl() { return 0xff; }
-byte printer_in_data() { return 0xff; }
 void printer_setup() {}
+void printer_register_ports() {}
 
 #else
 
@@ -456,7 +454,7 @@ void printer_generic_setup()
 // ---------------------------------------------------------------------------------------------
 
 
-void printer_out_ctrl(byte data)
+void printer_out_ctrl(byte port, byte data)
 {
   //printf("%04X: OUT 02, %02X\n", regPC, data);
 
@@ -469,7 +467,7 @@ void printer_out_ctrl(byte data)
 }
 
 
-void printer_out_data(byte data)
+void printer_out_data(byte port, byte data)
 {
   //printf("%04X: OUT 03, %02X\n", regPC, data);
 
@@ -482,7 +480,7 @@ void printer_out_data(byte data)
 }
 
 
-byte printer_in_ctrl()
+byte printer_in_ctrl(byte port)
 {
   byte data = 0xff;
 
@@ -498,10 +496,12 @@ byte printer_in_ctrl()
 }
 
 
-byte printer_in_data()
+void printer_register_ports()
 {
-  // can't read data from printer
-  return 0xff;
+  bool mapped = (config_printer_type() != CP_NONE) && (config_printer_map_to_host_serial() != 0xff);
+  io_register_port_inp(2, mapped ? printer_in_ctrl  : NULL);
+  io_register_port_out(2, mapped ? printer_out_ctrl : NULL);
+  io_register_port_out(3, mapped ? printer_out_data : NULL);
 }
 
 
@@ -514,6 +514,8 @@ void printer_setup()
   buffer_size = 0;
   buffer_counter = 0;
   linefeed_status = 0;
+
+  printer_register_ports();
 
   switch( config_printer_type() )
     {

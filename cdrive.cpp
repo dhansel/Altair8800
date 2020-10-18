@@ -27,6 +27,7 @@
 #include "host.h"
 #include "mem.h"
 #include "prog_tools.h"
+#include "io.h"
 
 #if NUM_CDRIVES == 0
 
@@ -38,8 +39,6 @@ bool cdrive_mount(byte cdrive_num, byte image_num) { return false; }
 bool cdrive_unmount(byte cdrive_num) { return false; }
 byte cdrive_get_mounted_image(byte cdrive_num) { return 0; }
 void cdrive_reset() {}
-byte cdrive_in(byte addr) { return 0; }
-void cdrive_out(byte addr, byte data) {}
 void cdrive_set_switches(byte switches) {}
 byte cdrive_get_switches() { return 0; }
 
@@ -224,18 +223,6 @@ static void cdrive_flush()
 }
 
 
-void cdrive_setup()
-{
-  for(byte i=0; i<NUM_CDRIVES; i++)
-    {
-      drive_mounted_disk_type[i] = 0xff;
-      drive_mounted_disk[i] = 0;
-    }
-
-  cdrive_reset();
-}
-
-
 void cdrive_dir()
 {
   Serial.print(image_get_dir_content(IMAGE_CROMEMCO));
@@ -249,6 +236,7 @@ bool cdrive_unmount(byte drive_num)
       drive_mounted_disk[drive_num] = 0;
       drive_mounted_disk_type[drive_num] = 0xff;
       host_filesys_file_close(drive_file[drive_num]);
+      cdrive_register_ports();
     }
 
   return true;
@@ -288,6 +276,7 @@ bool cdrive_mount(byte drive_num, byte image_num)
           drive_mounted_disk_type[drive_num] = cdrive_get_type_id(drive_file[drive_num], host_filesys_file_size(filename));
 
           //printf("mounted disk in drive %i is type = %i: %s\n", drive_num, drive_mounted_disk_type[drive_num], drive_types[drive_mounted_disk_type[drive_num]].id);
+          cdrive_register_ports();
           return true;
         }
     }
@@ -484,6 +473,10 @@ byte cdrive_in(byte port)
 
          break;
        }
+
+     case 0xF0:
+       data = 0xFF; 
+       break;
     }
 
   //printf("%04x: cdrive IN  : %02x -> %02x\n", regPC-1, port, data);
@@ -694,7 +687,7 @@ void cdrive_out(byte port, byte data)
                 drive_buffer[0] = drive_current_track[drive_selected];
                 drive_buffer[1] = 0;
                 drive_buffer[2] = drive_current_sector;
-                drive_buffer[3] = DRIVE_SECTOR_LENGTH;
+                drive_buffer[3] = (byte) DRIVE_SECTOR_LENGTH;
                 drive_buffer[4] = 0;
                 drive_buffer[5] = 0;
                 drive_current_byte = 0;
@@ -911,6 +904,44 @@ void cdrive_out(byte port, byte data)
         break;
       }
     }
+}
+
+
+void cdrive_register_ports()
+{
+  bool drive_used = false;
+  for(byte i=0; i<NUM_CDRIVES; i++)
+    drive_used |= drive_mounted_disk[i]!=0;
+
+  for(byte i=0x30; i<=0x34; i++)
+    {
+      io_register_port_inp(i, drive_used ? cdrive_in : NULL);
+      io_register_port_out(i, drive_used ? cdrive_out : NULL);
+    }
+
+  if( config_vdm1_keyboard_device()==0xFF )
+    {
+      // both VDM1 keyboard support and Cromemco disk controller use port 4.  
+      // We give the VDM1 keyboard priority to use that port.
+      io_register_port_inp(0x04, drive_used ? cdrive_in : NULL);
+      io_register_port_out(0x04, drive_used ? cdrive_out : NULL);
+    }
+
+  io_register_port_inp(0xF0, drive_used ? cdrive_in : NULL);
+  io_register_port_out(0x40, drive_used ? cdrive_out : NULL);
+}
+
+
+void cdrive_setup()
+{
+  for(byte i=0; i<NUM_CDRIVES; i++)
+    {
+      drive_mounted_disk_type[i] = 0xff;
+      drive_mounted_disk[i] = 0;
+    }
+  
+  cdrive_register_ports();
+  cdrive_reset();
 }
 
 
