@@ -498,6 +498,7 @@ static File storagefile;
 
 bool host_storage_init(bool write)
 {
+  HLDAGuard hlda;
   host_storage_close();
 
   storagefile = SD.open("STORAGE.DAT", write ? FILE_WRITE : FILE_READ);
@@ -1774,6 +1775,7 @@ void host_system_info()
 
 #if USE_HOST_FILESYS>0
   SwitchSerial.print("SD card file system");
+  HLDAGuard hlda;
   if( SD.card()->errorCode()==SD_CARD_ERROR_NONE )
     { SwitchSerial.print(" ("); SwitchSerial.print(SD.card()->cardSize() / (2*1024)); SwitchSerial.println("M)"); }
   else
@@ -1801,7 +1803,6 @@ void host_setup()
   // (e.g. serial-to-bluetooth) won't work
   pinMode(19, INPUT_PULLUP);
   
-
   // attach interrupts
   switches_setup();
 
@@ -1823,7 +1824,6 @@ void host_setup()
 
 #if NUM_DRIVES>0 || NUM_HDSK_UNITS>0 || USE_HOST_FILESYS>0
   // check if SD card available (send "chip select" signal to HLDA status light)
-  HLDAGuard hlda;
   // SdInfo.h in the SdFat library says: Set SCK rate to F_CPU/3 (SPI_DIV3_SPEED) for Due
   // (84MHZ/3 = 28MHz). If that fails try 4MHz and if that fails too then fall back to 250Khz.
   // If neither of those work then something is seriously wrong.
@@ -1837,6 +1837,7 @@ void host_setup()
       use_sd = host_storage_init(true);
 #endif
     }
+  host_clr_status_led_HLDA();
 #endif
 
   // set serial receive callbacks to default
