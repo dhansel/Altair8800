@@ -1148,7 +1148,6 @@ void panelUpdate()
 
 // Make sure we don't have an object in the middle of the 
 // boundary change
-/*
 bool reserveSramBoundary() {
   void* locks[1000];
   uint8_t ct = 0;
@@ -1157,7 +1156,7 @@ bool reserveSramBoundary() {
     locks[ct] = malloc(64);
   
     if ((uintptr_t)locks[ct] >= 0x20000000u ){
-      for (int i=0; i<ct; i++){
+      for (int i=0; i<ct-1; i++){
         free(locks[i]);
       }
       return true;
@@ -1173,16 +1172,15 @@ bool reserveSramBoundary() {
 
   return false;
 }
-*/
+
 void host_setup()
 {
   int ret;
-/*
   if(reserveSramBoundary())
   {
     if (Serial) SwitchSerial.println("mem-quirk");    
   }
-*/
+
   //Keyboard init
   if (uKbd_start()){
     if (Serial) SwitchSerial.println("no keyboard");
