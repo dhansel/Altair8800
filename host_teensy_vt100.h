@@ -23,6 +23,7 @@ extern void host_vga_write(uint8_t c);
 extern void host_vga_setpos(uint8_t x, uint8_t y);
 extern void host_vga_clear();
 
+
 // Buffers
 static uint8_t esc_input_buffer[14]; 
 static uint8_t buffer_index=0;
@@ -75,6 +76,12 @@ static void err_send_buffer()
 }
 
 
+// must keep track of cursor position here since uvga library has
+// no function to query cursor position and current cursor position 
+// is needed for some VT100 codes
+static const int num_cols = 360/8, num_rows = 300/8;
+static int cursor_x = 0, cursor_y = 0;
+
 //Escape Code Handler
 static uint8_t do_esc()
 {
@@ -89,19 +96,38 @@ static uint8_t do_esc()
     if (uVtIsAlpha(code)){
       //Found an end code
       switch(code) {
+      case 'D': {
+                  uint8_t n = uVtNum((char*)&esc_input_buffer[2]);
+                  cursor_x -= n;
+                  if( cursor_x<0 ) cursor_x = 0;
+                  host_vga_setpos(cursor_x, cursor_y);
+                  return 0;
+                  break;
+                  }
         case 'H': {
-                  uint8_t y = uVtNum((char*)&esc_input_buffer[2]);
-                  uint8_t x = uVtNum2((char*)&esc_input_buffer[2]);
-                  host_vga_setpos(x, y);
+                  // rows/columns are one-based but 0,0 can also be used for left upper corner
+                  // see for example: https://vt100.net/docs/vt100-ug/chapter3.html (CUP command)
+                  cursor_y = max(uVtNum((char*)&esc_input_buffer[2])-1, 0);
+                  cursor_x = max(uVtNum2((char*)&esc_input_buffer[2])-1, 0);
+                  host_vga_setpos(cursor_x, cursor_y);
                   return 0;
                   break;
         }
         case 'J': {
                   uint8_t x = uVtNum((char*)&esc_input_buffer[2]);
                   host_vga_clear();
+                  cursor_x = 0;
+                  cursor_y = 0;
                   return 0;
                   break;
         }
+      case 'K': {
+                  uint8_t x = uVtNum((char*)&esc_input_buffer[2]);
+                  for(int i=cursor_x; i<num_cols; i++) host_vga_write(' ');
+                  host_vga_setpos(cursor_x, cursor_y);
+                  return 0;
+                  break;
+      }
       }
     }
   }  
@@ -138,7 +164,28 @@ uint8_t uVt_write(uint8_t c)
     return 0;
   }
 
-  //UVGA already handles tabs and stuff
-  host_vga_write(c);
-
+  // Only let text run over into next line if simulation is running. 
+  // If simulation is not running then we're in the configuration menu
+  // which is much more readable if we just cut off lines.
+  if( !(status_led_local & ST_WAIT) || c=='\r' || c=='\n' || c=='\b' || cursor_x<num_cols-1 )
+    {
+      //UVGA already handles tabs and stuff
+      host_vga_write(c);
+    }
+  else
+    return 0;
+  
+  // update cursor position
+  switch( c )
+    {
+    case '\r': cursor_x = 0; break;
+    case '\b': cursor_x = max(cursor_x-1, 0); break;
+    case '\n': cursor_x = 0; cursor_y = min(cursor_y+1, num_rows-1); break;
+    default: 
+      {
+        cursor_x++; 
+        if( cursor_x>=num_cols ) { cursor_x = 0; cursor_y = min(cursor_y+1, num_rows-1); }
+        break;
+      }
+    }
 }
