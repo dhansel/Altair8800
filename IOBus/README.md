@@ -14,7 +14,7 @@ firmware.
 
 ## I/O Bus Basics
 
-When the emulat performs an OUT instruction it sets the A0-7 LEDs
+When the emulator performs an OUT instruction it sets the A0-7 LEDs
 to the output address, sets the D0-7 LEDs to the output data and
 then switches the OUT LED on. External hardware connceted to the
 bus will see the low->high transition of the OUT signal, can see
@@ -71,6 +71,11 @@ with this bus. The main limitations are:
 
   The I/O bus works only for INP/OUT instructions. It is not possible
   to intercept memory read/write operations at this point.
+  
+* **Signal levels**
+
+  All signals on the bus are 3.3V level whereas the S-100 bus worked
+  with 5V signal levels.
 
 ## I/O Cards
 
