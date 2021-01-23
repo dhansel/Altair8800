@@ -1,7 +1,7 @@
 ## Serial port (88-2SIO)
 
 The 88-2SIO card for the Altair had two serial ports with RTS/CTS
-flow control. This card implements on such serial port. 
+flow control. This card implements one such serial port. 
 
 ![Serial card](serial.jpg)
 
