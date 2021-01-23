@@ -21,9 +21,11 @@ drive cable (with the cable twist between the two drive connectors).
 The 4 DIP switches on the card have the following functions:
 
 DIP | Function when on         | Function when off
-----+--------------------------+------------------
+----|--------------------------|------------------
 1   | Act as 88-MDS controller | Act as 88-DCDD controller
 2   | Swap drives A and B      | Do not swap drives
 3   | Drive B is Shugart SA-800| Drive B is generic 5.25-inch
 4   | Drive A is Shugart SA-800| Drive A is generic 5.25-inch
 
+Schematics and PCB as well as a Gerber file for PCB production are in this directory. 
+The project is also available on EasyEDA: https://oshwlab.com/hansel72/diskcontrolleruno
