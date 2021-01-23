@@ -2,19 +2,39 @@
 
 ![IOBus Cards](cards.jpg)
 
-Since all pins of the Arduino Due are used for driving the LEDs,
-reading switches and a few serial ports it is not easy to connect
-other hardware to the emulator. For example, a parallel port would
-be a nice addition but would require at least 8 more pins to drive
-the parallel signals.
-
 While thinking about ways to connect more hardware I realized that
 the signals that drive the DATA and ADDRESS LEDs, together with a
-few control signals (INP, OUT, WAIT) could be used to form an I/O bus.
+few control signals (INP, OUT, WAIT) could be used to form a
+simple but effective I/O bus.
 
-Such a bus could work similar to the original S-100 bus and allow
-many external devices to be connected and accessed by existing
-emulated software with only minor changes to the emulator software.
+Such a bus could work very similar to the original S-100 bus and 
+allow multiple external devices to be connected and accessed by 
+existing emulated software with only minor changes to the emulator 
+firmware.
+
+## I/O Bus Basics
+
+When the emulat performs an OUT instruction it sets the A0-7 LEDs
+to the output address, sets the D0-7 LEDs to the output data and
+then switches the OUT LED on. External hardware connceted to the
+bus will see the low->high transition of the OUT signal, can see
+whether the proper address is present on A0-7 and if so read the 
+data from the D0-7 signals.
+
+When the emulator performs an IN instruction it sets the A0-7 LEDs
+to the input address, switches the D0-7 data lines to input mode
+and then switches the INP LED on. External hardware will see the
+INP signal and can can place the proper data on the D0-7 data lines
+for the emulator to read.
+
+In both cases external hardware can pull the WAIT signal high
+to indicate that it needs more time to process the IN/OUT
+instruction. If so, the emulator will wait until WAIT goes
+back low before continuing program execution.
+
+For a more detailed description of the timing and possible 
+handshaking see the "Interfacing external hardware" section in 
+the [emulator documentation](https://github.com/dhansel/Altair8800/blob/master/Documentation.pdf).
 
 ## I/O Bus limitations
 
@@ -22,9 +42,7 @@ While Input/output operations on this bus work very similar to the S-100
 bus, there are several significant differences that make it impossible
 to connect original S-100 hardware to the bus.  But schematics for
 a range of S-100 devices are available and some can re-created to work
-with this bus. 
-
-Some main limitations are:
+with this bus. The main limitations are:
 
 * **No common clock signal.**
 
@@ -53,25 +71,6 @@ Some main limitations are:
 
   The I/O bus works only for INP/OUT instructions. It is not possible
   to intercept memory read/write operations at this point.
-
-## I/O Bus Basics
-
-If the emulator performs an OUT instruction it sets the A0-7 LEDs
-to the output address, sets the D0-7 LEDs to the output data and
-then switches the OUT LED on. External hardware connceted to the
-bus will see the low->high transition of the OUT signal, can see
-whether the proper address is present on A0-7 and if so read the 
-data from the D0-7 signals.
-
-If the emulator performs an IN instruction it sets the A0-7 LEDs
-to the input address, switches the D0-7 data lines to input mode
-and then switches the INP LED on. External hardware will see the
-INP signal and can can place the proper data on the D0-7 data lines
-for the emulator to read.
-
-For a more detailed description of the timing and possible 
-handshaking see the "Interfacing external hardware" section in 
-the emulator documentation.
 
 ## I/O Cards
 
