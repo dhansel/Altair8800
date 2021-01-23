@@ -15,3 +15,6 @@ Obviously the Altair Simulator already comes with a serial interface
 but this card offers the possibility of adding more serial interfaces
 as well as supporting RTS/CTS flow control which can be helpfule when
 talking to slow peripherals such as printers.
+
+Schematics and PCB as well as a Gerber file for PCB production are in this directory. 
+The project is also available on EasyEDA: https://oshwlab.com/hansel72/2sio_copy
