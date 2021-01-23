@@ -3,6 +3,8 @@
 This card replicates the function of the MITS 88-DCDD 8-inch 
 and 88-MDS (Minidisk) 5.25-inch disk controllers.
 
+![Floppy Disk Controller Card](diskcontroller.jpg)
+
 It can be connected to a 5.25-inch disk drive and either use
 it in double-density mode to replicate the Minidisk system
 or in high-density mode to replicate the 8-inch system. Note

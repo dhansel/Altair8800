@@ -1,5 +1,7 @@
 ## LED Output Register
 
+![LED Output Register](ledoutput.jpg)
+
 One advantage of the IMSAI 8080 over the Altair 8800 was the output
 register at address 255 which would display the output value on a 
 set of 8 LEDs on the front panel. This allowed for some crude but simple

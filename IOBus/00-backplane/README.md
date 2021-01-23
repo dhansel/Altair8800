@@ -3,6 +3,8 @@
 The backplane provides four slots to plug in extension cards.
 It also contains a 5V regulator. 
 
+![IOBus Backplane](backplane.jpg)
+
 The I/O bus carries the Arduino's 
 +5V and +3.3V output voltages which can be used to power the
 extension cards. However, some cards (e.g. the 88-PIO parallel 

@@ -1,5 +1,7 @@
 # I/O Bus for Altair 8800 simulator
 
+![IOBus Cards](cards.jpg)
+
 Since all pins of the Arduino Due are used for driving the LEDs,
 reading switches and a few serial ports it is not easy to connect
 other hardware to the emulator. For example, a parallel port would

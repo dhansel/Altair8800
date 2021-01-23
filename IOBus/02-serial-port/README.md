@@ -3,6 +3,8 @@
 The 88-2SIO card for the Altair had two serial ports with RTS/CTS
 flow control. This card implements on such serial port. 
 
+![Serial card](serial.jpg)
+
 Note that the output signals are 5V TTL level signals. To get true
 serial level signals they will need to be converted through a MAX232
 or similar converter.
