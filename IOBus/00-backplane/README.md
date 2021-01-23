@@ -22,3 +22,7 @@ available and the 5V is directly taken from USB.
 
 As implemented here, the backplane connects to the Arduino
 via a DB-25 connector and a 25-wire ribbon cable.
+
+Schematics and PCB as well as a Gerber file for PCB production
+are in this directory. The project is also available on EasyEDA:
+https://oshwlab.com/hansel72/backplane
