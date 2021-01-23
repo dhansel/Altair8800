@@ -24,33 +24,33 @@ with this bus.
 
 Some main limitations are:
 
-### No common clock signal.
+* **No common clock signal.**
 
-The Arduino Due emulates the instructions executed by
-the Intel 8080 (or Z80) processor but each emulated instruction
-takes a different amount of real time. Furthermore the time for
-each instrution does not match 100% the timing of the original
-processor, i.e. the emulator does not emulate the real 2MHz clock 
-of the Altair. That means that the I/O bus can not provide a 
-clock signal which is required by most S-100 cards for synchronous
-communication between the card and the processor.
+  The Arduino Due emulates the instructions executed by
+  the Intel 8080 (or Z80) processor but each emulated instruction
+  takes a different amount of real time. Furthermore the time for
+  each instrution does not match 100% the timing of the original
+  processor, i.e. the emulator does not emulate the real 2MHz clock 
+  of the Altair. That means that the I/O bus can not provide a 
+  clock signal which is required by most S-100 cards for synchronous
+  communication between the card and the processor.
 
-However, using the INP/OUT signals combined with the WAIT signal
-it is possible to communicate asynchronously. For more specific 
-information on how this communication works, see the "Interfacing
-external hardware" section in the documentation.
+  However, using the INP/OUT signals combined with the WAIT signal
+  it is possible to communicate asynchronously. For more specific 
+  information on how this communication works, see the "Interfacing
+  external hardware" section in the documentation.
 
-### No interrupt signals
+* **No interrupt signals**
 
-The I/O bus at this point does not support interrupts. It may be
-possible to add support for interrupts but very little software 
-actually uses interrupts and the effort necessary to support them 
-outhweighs the benefits.
+  The I/O bus at this point does not support interrupts. It may be
+  possible to add support for interrupts but very little software 
+  actually uses interrupts and the effort necessary to support them 
+  outhweighs the benefits.
 
-### No RAM/ROM access
+* **No RAM/ROM access**
 
-The I/O bus works only for INP/OUT instructions. It is not possible
-to intercept memory read/write operations at this point.
+  The I/O bus works only for INP/OUT instructions. It is not possible
+  to intercept memory read/write operations at this point.
 
 ## I/O Bus Basics
 
