@@ -88,7 +88,7 @@ with corresponding name:
 - A [parallel port](https://github.com/dhansel/Altair8800/tree/master/IOBus/03-parallel-port) equivalent to a 88-PIO card
 
 - A [floppy disk controller](https://github.com/dhansel/Altair8800/tree/master/IOBus/04-disk-controller) equivalent to the 88-DCDD and 88-MD (minidisk)
-  controllers with (and with significantly extended functionality)
+  controllers that can use regular 5.25" and 3.5" floppy drives as well as Shugart SA-800 8" drives.
   
 The cards plug into a [backplane](https://github.com/dhansel/Altair8800/tree/master/IOBus/00-backplane) that connects to the Altair Simulator.
 
