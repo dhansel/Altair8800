@@ -73,6 +73,29 @@ For a more detailed description of the timing and possible
 handshaking see the "Interfacing external hardware" section in 
 the emulator documentation.
 
+## I/O Cards
+
+So far there are four different types of cards that can be plugged
+into the I/O bus. Each is described in more detail in a sub-folder
+with corresponding name:
+
+- An [LED output register](https://github.com/dhansel/Altair8800/tree/master/IOBus/00-led-output-register) card that provides 8 LEDs at address 255,
+  equivalent to the 8-bit output register on the IMSAI-8080
+
+- A [serial port card](https://github.com/dhansel/Altair8800/tree/master/IOBus/02-serial-port) which is equivalent to "half" a 88-2SIO
+  card ("half" because it provides only a single serial port)
+
+- A [parallel port](https://github.com/dhansel/Altair8800/tree/master/IOBus/03-parallel-port) equivalent to a 88-PIO card
+
+- A [floppy disk controller](https://github.com/dhansel/Altair8800/tree/master/IOBus/04-disk-controller) equivalent to the 88-DCDD and 88-MD (minidisk)
+  controllers with (and with significantly extended functionality)
+  
+The cards plug into a [backplane](https://github.com/dhansel/Altair8800/tree/master/IOBus/00-backplane) that connects to the Altair Simulator.
+
+Note that except for the LED output register card (which is hardwired
+to address 255) all other cards include jumpers to configure their address.
+That allows multiple of the same card to be plugged in at the same time.
+
 ## I/O Bus Connections
 
 All signals for the I/O bus can be picked up directly on the
@@ -107,24 +130,3 @@ CLR        | D53         | 23
 +5V        | +5V         | 25    
 RAW voltage| RAW         | 13    
 Ground     | GND         | 24    
-
-## I/O Cards
-
-So far there are four different types of cards that can be plugged
-into the I/O bus. Each is described in more detail in a sub-folder
-with corresponding name:
-
-- An LED output register card that provides 8 LEDs at address 255,
-  equivalent to the 8-bit output register on the IMSAI-8080
-
-- A serial port card which is equivalent to "half" a 88-2SIO
-  card ("half" because it provides only a single serial port)
-
-- A parallel port equivalent to a 88-PIO card
-
-- A floppy disk controller equivalent to the 88-DCDD and 88-MD (minidisk)
-  controllers with (and with significantly extended functionality)
-
-Note that except for the LED output register card (which is hardwired
-to address 255) all other cards include jumpers to configure their address.
-That allows multiple of the same card to be plugged in at the same time.
