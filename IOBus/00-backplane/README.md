@@ -28,3 +28,6 @@ via a DB-25 connector and a 25-wire ribbon cable.
 Schematics and PCB as well as a Gerber file for PCB production
 are in this directory. The project is also available on EasyEDA:
 https://oshwlab.com/hansel72/backplane
+
+The pinout of the DB-25 connector is shown here:
+![IOBus pinout](IOBusPinout.png)
