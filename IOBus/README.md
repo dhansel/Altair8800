@@ -79,7 +79,7 @@ So far there are four different types of cards that can be plugged
 into the I/O bus. Each is described in more detail in a sub-folder
 with corresponding name:
 
-- An [LED output register](https://github.com/dhansel/Altair8800/tree/master/IOBus/00-led-output-register) card that provides 8 LEDs at address 255,
+- An [LED output register](https://github.com/dhansel/Altair8800/tree/master/IOBus/01-led-output-register) card that provides 8 LEDs at address 255,
   equivalent to the 8-bit output register on the IMSAI-8080
 
 - A [serial port card](https://github.com/dhansel/Altair8800/tree/master/IOBus/02-serial-port) which is equivalent to "half" a 88-2SIO
