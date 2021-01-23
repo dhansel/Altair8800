@@ -30,4 +30,5 @@ are in this directory. The project is also available on EasyEDA:
 https://oshwlab.com/hansel72/backplane
 
 The pinout of the DB-25 connector is shown here:
+
 ![IOBus pinout](IOBusPinout.png)
