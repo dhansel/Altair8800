@@ -10,11 +10,10 @@ it in double-density mode to replicate the Minidisk system
 or in high-density mode to emulate an 8-inch system. Note
 that a 5.25-inch disk in high density mode can hold the 
 same amount of data as 8-inch single density disks.
-
-The card can also control a [Shugart SA-800 8-inch drive](https://github.com/dhansel/Altair8800/blob/master/IOBus/04-disk-controller/doc/Shugart_SA800_Brochure_Feb78.pdf).
-
 Since the interface for 3.5-inch drives is identical to the
 5.25-inch drives the card also works with 3.5-inch drives.
+
+The card can also control a [Shugart SA-800 8-inch drive](https://github.com/dhansel/Altair8800/blob/master/IOBus/04-disk-controller/doc/Shugart_SA800_Brochure_Feb78.pdf).
 
 When used as a 5.25" Minidisk system or with an 8" drive, the disk
 format used by the controller matches the original formats, allowing 
