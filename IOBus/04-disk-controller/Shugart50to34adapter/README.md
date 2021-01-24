@@ -1,1 +1,3 @@
-# Adapter to connect 34-pin floppy disk cable to a 50-pin Shugart drive connector
+## 34-pin Floppy Disk Cable to 50-pin Shugart drive adaper
+
+![Adapter](adapter.jpg)
