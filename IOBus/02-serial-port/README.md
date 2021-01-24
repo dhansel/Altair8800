@@ -18,5 +18,16 @@ but this card offers the possibility of adding more serial interfaces
 as well as supporting RTS/CTS flow control which can be helpfule when
 talking to slow peripherals such as printers.
 
+To keep the chip count down, the serial clock generator on this card is 
+implemented using a ATTiny85 microcontroller. Note that the controller is 
+driven by a 11.0592MHz crystal (as opposed to the usual 8Mhz or 16Mhz)
+which allows for precise serial rates. Program the ATTiny85 with the
+clockgen.hex file in this folder and make sure to use the following
+fuse settings: LOW=0xFF, HIGH=0x57, EXTENDED=0xFF
+
+Note that the baud rate is set by the DIP switches on the card itself,
+not by the software (same as it was with the original 88-2SIO card).
+Other parameters (parity/bits/stop bits) are set via software.
+
 Schematics and PCB as well as a Gerber file for PCB production are in this directory. 
 The project is also available on EasyEDA: https://oshwlab.com/hansel72/2sio_copy
