@@ -1,24 +1,30 @@
-## Disk Controller
+## Floppy Disk Controller
 
 This card replicates the function of the MITS 88-DCDD 8-inch 
-and 88-MDS (Minidisk) 5.25-inch disk controllers.
+and 88-MDS (Minidisk) 5.25-inch floppy disk controllers.
 
 ![Floppy Disk Controller Card](diskcontroller.jpg)
 
 It can be connected to a 5.25-inch disk drive and either use
 it in double-density mode to replicate the Minidisk system
-or in high-density mode to replicate the 8-inch system. Note
-that a 5.25-inch disk in high density mode can hold the exact
-same amount of data as the original 8-inch disks.
+or in high-density mode to emulate an 8-inch system. Note
+that a 5.25-inch disk in high density mode can hold the 
+same amount of data as 8-inch single density disks.
 
-The card can also be connected to a Shugart SA-800 8-inch
-disk drive.
+The card can also control a [Shugart SA-800 8-inch drive](https://github.com/dhansel/Altair8800/blob/master/IOBus/04-disk-controller/doc/Shugart_SA800_Brochure_Feb78.pdf).
 
 Since the interface for 3.5-inch drives is identical to the
 5.25-inch drives the card also works with 3.5-inch drives.
 
-To connect the card to one or two drives use a regular PC disk 
-drive cable (with the cable twist between the two drive connectors). 
+When used as a 5.25" Minidisk system or with an 8" drive, the disk
+format used by the controller matches the original formats, allowing 
+the Altair Simulator to read original Altair disks.
+
+The contoller supports up to two drives connected via a regular PC floppy
+disk drive cable (with the [twist](https://www.nostalgianerd.com/why-are-floppy-cables-twisted)). Both drives should be configured as drive "B" as was
+custom for PC drives. To connect the 34-pin floppy cable to the to a Shugart 
+drive with a 50-pin connector use the adapter from [this folder](https://github.com/dhansel/Altair8800/tree/master/IOBus/04-disk-controller/Shugart50to34adapter)
+and strap it as drive 0.
 
 The 4 DIP switches on the card have the following functions:
 
