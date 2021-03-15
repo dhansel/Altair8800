@@ -725,6 +725,7 @@ static const PROGMEM char help[] = {
 #if MAX_BREAKPOINTS>0
   "B : Add breakpoint"       "\t\t"     "V : Delete last breakpoint"    "\r\n"
 #endif
+  "F : Find"                 "\r\n"
 };
 
 void read_inputs_serial()
