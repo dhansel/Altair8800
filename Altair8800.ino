@@ -1044,6 +1044,32 @@ void read_inputs_serial()
     {
       cswitch = BIT(SW_STOP) | BIT(SW_AUX1UP);
     }
+  else if( data =='F' )
+    {
+      byte i, b, len, data[10];
+      Serial.print(F("\r\nNumber of bytes (10 max): "));
+      if( numsys_read_byte(&len) && len>0 )
+        {
+          Serial.print(F("\r\nData: "));
+          for(i=0; i<len; i++)
+            {
+              Serial.write(' ');
+              if( !numsys_read_byte(&b) ) break;
+              data[i] = b;
+            }
+
+          Serial.print(F("\r\nFound at: "));
+          if( i==len )
+            {
+              for(uint16_t a=0; a<MEMSIZE-len; a++)
+                {
+                  for(i=0; i<len && Mem[a+i]==data[i]; i++);
+                  if( i==len ) { numsys_print_word(a); Serial.print(' '); }
+                }
+            }
+          Serial.println(F(" --  done\n"));
+        }
+    }
 #if MAX_BREAKPOINTS>0
   else if( data == 'B' || data == 'V' )
     {
@@ -1520,6 +1546,14 @@ void altair_out(byte port, byte data)
   // When using the I/O bus we must put the output data
   // onto the data LED outputs so devices attached to
   // the bus can read it
+  host_set_data_leds(data);
+
+  // do this multiple more times to wait ~200ns for
+  // address/data signals on bus to settle (NOPs on
+  // ARM32 are not necessarily time consuming but this is)
+  host_set_data_leds(data);
+  host_set_data_leds(data);
+  host_set_data_leds(data);
   host_set_data_leds(data);
 #else
   // The S-100 bus on the real Altair has separate data
