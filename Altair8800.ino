@@ -55,6 +55,7 @@ volatile byte     altair_vi_level       = 0;
 volatile bool     altair_interrupts_enabled = false;
 static   bool     altair_rtc_available  = false;
 static   bool     altair_rtc_running    = false;
+volatile bool     sticky_slow           = false;
 
 word status_wait = false;
 bool have_ps2    = false;
@@ -481,7 +482,9 @@ void process_inputs()
 #endif
     }
 
-  if( cswitch & BIT(SW_RUN) )
+  if( (cswitch & BIT(SW_RUN)) && (cswitch & BIT(SW_SLOW)) )
+    sticky_slow = true;
+  else if( cswitch & BIT(SW_RUN) )
     {
       if( config_serial_debug_enabled() && config_serial_input_enabled() )
         Serial.print(F("\r\n\n--- RUNNING (press ESC twice to stop) ---\r\n\n"));
@@ -517,7 +520,7 @@ void read_inputs_panel()
   cswitch = host_read_function_switches_edge();
 
   // ...except for the SLOW switch which is active as long as it is held down
-  if( host_read_function_switch_debounced(SW_SLOW) ) cswitch |= BIT(SW_SLOW);
+  if( sticky_slow || host_read_function_switch_debounced(SW_SLOW) ) cswitch |= BIT(SW_SLOW);
 
 #if STANDALONE==0
   // address switches on Mega are connected to analog inputs which are free
@@ -1377,7 +1380,10 @@ void altair_interrupt(uint32_t i, bool set)
     }
   
   if( i & INT_SWITCH )
-    altair_interrupts |= (i & INT_SWITCH);
+    {
+      altair_interrupts |= (i & INT_SWITCH);
+      if( i & INT_SW_STOP ) sticky_slow = false;
+    }
 }
 
 
@@ -1436,6 +1442,7 @@ bool altair_isreset()
 void altair_hlt()
 {
   host_set_status_led_HLTA();
+  sticky_slow = false;
 
 #if STANDALONE>0
   // in standalone mode it is hard to interact with the panel so for a HLT
