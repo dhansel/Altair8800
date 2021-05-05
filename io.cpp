@@ -55,9 +55,6 @@ static byte io_unused_inp(byte port)
 #if USE_IO_BUS>0
   // The I/O bus uses the pins connected to the D0-7 LEDs for input
   // (they get switched to input mode when INP LED is turned on).
-  // Wait while WAIT signal is asserted by an external device 
-  // before reading the actual data
-  while( host_read_status_WAIT() );
   return host_read_data_bus();
 #else
   return 0xff;
@@ -67,11 +64,6 @@ static byte io_unused_inp(byte port)
 
 static void io_unused_out(byte port, byte data)
 {
-#if USE_IO_BUS>0
-  // Wait while WAIT signal is asserted by an external 
-  // device before continuing
-  while( host_read_status_WAIT() );
-#endif
 }
 
 #if !defined(__AVR_ATmega2560__)
@@ -87,6 +79,11 @@ static IOFUN_OUT portfun_out[256];
 
 byte io_inp(byte port)
 {
+#if USE_IO_BUS>0
+  // Wait while WAIT signal is asserted by an external device
+  // before reading the actual data
+  while( host_read_status_WAIT() );
+#endif
   return portfun_inp[port](port);
 }
 
@@ -94,6 +91,11 @@ byte io_inp(byte port)
 void io_out(byte port, byte data)
 {
   portfun_out[port](port, data);
+#if USE_IO_BUS>0
+  // Wait while WAIT signal is asserted by an external
+  // device before continuing
+  while( host_read_status_WAIT() );
+#endif
 }
 
 
