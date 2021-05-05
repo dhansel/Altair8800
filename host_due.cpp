@@ -1574,9 +1574,14 @@ uint16_t host_read_function_switches_edge()
 
 void host_reset_function_switch_state()
 {
-  for(int i=0; i<16; i++) debounceTime[i]=0;
   switches_debounced = 0;
   switches_pulse     = 0;
+
+  for(int i=0; i<16; i++)
+    {
+      debounceTime[i]=millis() + 50;
+      if( !digitalRead(function_switch_pin[i]) ) switches_debounced |= (1<<i);
+    }
 }
 
 
@@ -1626,6 +1631,7 @@ static void switch_interrupt_15() { switch_interrupt(15); }
 
 static void switches_setup()
 {
+  host_reset_function_switch_state();
   attachInterrupt(function_switch_pin[ 0], switch_interrupt_0,  CHANGE);
   attachInterrupt(function_switch_pin[ 1], switch_interrupt_1,  CHANGE);
   attachInterrupt(function_switch_pin[ 2], switch_interrupt_2,  CHANGE);
@@ -1644,9 +1650,6 @@ static void switches_setup()
   attachInterrupt(function_switch_pin[13], switch_interrupt_13, CHANGE);
   attachInterrupt(function_switch_pin[14], switch_interrupt_14, CHANGE);
   attachInterrupt(function_switch_pin[15], switch_interrupt_15, CHANGE);
-
-  delay(1);
-  host_reset_function_switch_state();
 }
 
 
