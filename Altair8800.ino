@@ -707,25 +707,25 @@ void empty_input_buffer()
 static const PROGMEM char help[] = {
   "\r\n"
 #if STANDALONE>0
-  "0-9, a-f : Toggle SW15-0" "\t"       "/ : Prompt for SW15-0"         "\r\n"
+  "0-9,a-f : Toggle SW15-0   / : Prompt for SW15-0"         "\r\n"
 #endif
-  "? : Show this help"       "\t\t"     "C : Configuration menu"        "\r\n"
-  "X : Examine"              "\t\t\t"   "x : Examine Next"              "\r\n"
-  "P : Deposit"              "\t\t\t"   "p : Deposit Next"              "\r\n"
-  "r : Run"                  "\t\t\t\t" "o : Stop"                      "\r\n"
-  "t : Step"                 "\t\t\t"   "> : Run from address"          "\r\n"
-  "R : Reset"                "\t\t\t"   "! : Hard Reset (Stop + Reset)" "\r\n"
-  "U : Aux1-up"              "\t\t\t"   "u : Aux1-down"                 "\r\n"
-  "s : Capture"              "\t\t\t"   "l : Play back"                 "\r\n"
-  "m : Mount"                "\t\t\t"   "n : Change numeric system"     "\r\n"
-  "Q : Protect"              "\t\t\t"   "q : Unprotect"                 "\r\n"
-  "D : Disassemble"          "\t\t\t"   "M : Dump memory"               "\r\n"
-  "H : Load Intel HEX"       "\t\t"     "h : Dump Intel HEX"            "\r\n"
-  "L : Load memory"          "\t\t\t"   "Y : Memory layout"             "\r\n"
+  "? : Show this help        C : Configuration menu"        "\r\n"
+  "X : Examine               x : Examine Next"              "\r\n"
+  "P : Deposit               p : Deposit Next"              "\r\n"
+  "r : Run                   o : Stop"                      "\r\n"
+  "t : Step                  > : Run from address"          "\r\n"
+  "R : Reset                 ! : Hard Reset (Stop + Reset)" "\r\n"
+  "U : Aux1-up               u : Aux1-down"                 "\r\n"
+  "s : Capture               l : Play back"                 "\r\n"
+  "m : Mount                 n : Change numeric system"     "\r\n"
+  "Q : Protect               q : Unprotect"                 "\r\n"
+  "D : Disassemble           M : Dump memory"               "\r\n"
+  "H : Load Intel HEX        h : Dump Intel HEX"            "\r\n"
+  "L : Load memory           Y : Memory layout"             "\r\n"
 #if MAX_BREAKPOINTS>0
-  "B : Add breakpoint"       "\t\t"     "V : Delete last breakpoint"    "\r\n"
+  "B : Add breakpoint        V : Delete last breakpoint"    "\r\n"
 #endif
-  "F : Find"                 "\r\n"
+  "F : Find"                                                "\r\n"
 };
 
 void read_inputs_serial()
