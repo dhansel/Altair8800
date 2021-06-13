@@ -7,7 +7,6 @@
 #define DAZZLER_H
 
 #include <Arduino.h>
-#include "mem.h"
 
 extern uint16_t dazzler_mem_start, dazzler_mem_end;
 
