@@ -11,13 +11,13 @@
 // 0 = use Intel 8080
 // 1 = use Zilog Z80  (uses 20 bytes more RAM than i8080)
 // 2 = allow switching between i8080 and z80 via configuration (uses more RAM and flash memory)
-#define USE_Z80 0
+#define USE_Z80 2
 
 
 // If this is set to 1 and the host provides a file system (i.e. an SD card is connected)
 // then store configurations and other data directly on the hosts' file system,
 // Otherwise those items are stored in a persistent memory block using our own mini-filesystem
-#define USE_HOST_FILESYS 0
+#define USE_HOST_FILESYS 1
 
 
 // Allowing breakpoints significantly reduces performance but is helpful
@@ -221,5 +221,10 @@ byte        config_printer_type();
 byte        config_printer_map_to_host_serial();
 inline byte config_printer_realtime() { return (config_flags & CF_PRINTER_RT)!=0; }
 byte        config_printer_generic_get_status(bool busy);
+
+bool config_b_mode();
+void set_b_mode(uint32_t Enabled);
+void toggle_b_mode();
+void print_b_mode();
 
 #endif

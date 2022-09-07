@@ -933,7 +933,6 @@ bool serial_acr_check_cload_timeout()
   return false;
 }  
 
-
 // ALTAIR Extended BASIC loading from tape via CLOAD
 static void acr_read_next_cload_byte()
 {
@@ -992,7 +991,6 @@ static void acr_read_next_cload_byte()
 
   acr_cload_timeout = timer_get_cycles();
 }
-
 
 // This is ALTAIR Extended BASIC saving to ACR via CSAVE
 static void acr_write_next_csave_byte(byte data)
