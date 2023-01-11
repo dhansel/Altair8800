@@ -2865,6 +2865,24 @@ void config_host_serial()
 }
 
 
+static void lamp_test(void)  
+{
+  uint32_t pin[]=
+#ifdef __SAM3X8E__
+    {2,3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 22, 25, 26, 27, 28, 29, 34, 35, 36, 37, 38, 39, 40, 41, 44, 45, 46, 47, 48, 49, 50, 51}; // DUE
+#else
+    {10, 11, 12, 13, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53};  // 2560 (untested)
+#endif
+  unsigned i;
+  for (i=0;i<sizeof(pin)/sizeof(pin[0]);i++)
+    digitalWrite(pin[i],HIGH);
+  delay(10000);    
+  for (i=0;i<sizeof(pin)/sizeof(pin[0]);i++)
+    digitalWrite(pin[i],LOW);
+
+}
+
+
 // --------------------------------------------------------------------------------
 
 
@@ -3102,6 +3120,7 @@ void config_edit()
           Serial.print(F("Pro(c)essor                 : ")); print_cpu(); Serial.println(); r_cpu = row++;
 #endif
           Serial.print(F("Aux1 shortcut program (u/U) : ")); print_aux1_program(); Serial.println(); r_aux1 = row++;
+          Serial.print(F("Lamp test (*)")); Serial.println(); row++; 
           Serial.print(F("Configure host (s)erial     : ")); 
 #if HOST_NUM_SERIAL_PORTS>1
           Serial.print(F("Primary: ")); 
@@ -3119,7 +3138,6 @@ void config_edit()
           row+=2;
           Serial.println(); 
           Serial.print(F("(E) Configure serial cards  : ")); print_mapped_serial_cards(); Serial.println(F(" mapped")); row++;
-          
 #if USE_PRINTER>0
           Serial.print(F("(P) Configure printer       : ")); 
           print_printer_type();
@@ -3171,6 +3189,9 @@ void config_edit()
       redraw = true;
       switch( c )
         {
+        case '*':
+        lamp_test();
+        break;
 #if USE_Z80==2
         case 'c': 
           config_flags2 = toggle_bits(config_flags2, 21, 1); 
