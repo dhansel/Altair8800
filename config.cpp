@@ -2865,21 +2865,38 @@ void config_host_serial()
 }
 
 
+static uint32_t lamppins[]=
+#ifdef __SAM3X8E__
+    { 12, 13, 9, 8, 7, 6, 5, 4, 3, 2, 11, 29, 15, 14, 28, 27, 26, 25, 10, 22, 44, 45, 46, 47, 48, 49, 50, 51, 41, 40, 39, 38, 37, 36, 35, 34 };  // DUE
+#else
+    { 38, 39, 13, 12, 11, 10, 50, 51, 52, 53, 42, 43, 44, 45, 46, 47, 48, 49, 40, 41, 30, 31, 32, 33, 34, 35, 36, 37, 29, 28, 27, 26, 25, 24, 23, 22 };  // 2560 (untested)
+#endif
+
+#define LAMPCT (sizeof(lamppins)/sizeof(lamppins[0]))
+
 static void lamp_test(void)  
 {
-  uint32_t pin[]=
-#ifdef __SAM3X8E__
-    {2,3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 22, 25, 26, 27, 28, 29, 34, 35, 36, 37, 38, 39, 40, 41, 44, 45, 46, 47, 48, 49, 50, 51}; // DUE
-#else
-    {10, 11, 12, 13, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53};  // 2560 (untested)
-#endif
-  unsigned i;
-  for (i=0;i<sizeof(pin)/sizeof(pin[0]);i++)
-    digitalWrite(pin[i],HIGH);
-  delay(10000);    
-  for (i=0;i<sizeof(pin)/sizeof(pin[0]);i++)
-    digitalWrite(pin[i],LOW);
-
+  unsigned i,j=0;
+  int lastpin=-1;
+  Serial.println();
+  Serial.println("Lamp test in progress...");
+  for (i=0;i<LAMPCT;i++)   // all on
+    digitalWrite(lamppins[i],HIGH);
+  delay(10000);     // 10s
+  for (i=0;i<LAMPCT;i++)  // all off
+    digitalWrite(lamppins[i],LOW);
+  for (i=0;i<LAMPCT*2;i++)  // go forward and backward
+  {
+    if (lastpin!=-1) digitalWrite(lamppins[lastpin],LOW);  // turn off last light
+    if (j==LAMPCT) j--;   // adjust for bounce at the end
+    digitalWrite(lamppins[j],HIGH);   // light it up
+    lastpin=j;   // remember which one to turn off next time
+    if (i>=LAMPCT) j--; else j++;  // left or right
+    delay(250);
+  }  
+  digitalWrite(lamppins[0],LOW);  // turn off the last one
+  // good place to stick one or more on for extended troubleshooting
+  //digitalWrite(44,HIGH);
 }
 
 
