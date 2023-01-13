@@ -3102,6 +3102,7 @@ void config_edit()
           Serial.print(F("Pro(c)essor                 : ")); print_cpu(); Serial.println(); r_cpu = row++;
 #endif
           Serial.print(F("Aux1 shortcut program (u/U) : ")); print_aux1_program(); Serial.println(); r_aux1 = row++;
+          Serial.print(F("Lamp test (*)")); Serial.println(); row++; 
           Serial.print(F("Configure host (s)erial     : ")); 
 #if HOST_NUM_SERIAL_PORTS>1
           Serial.print(F("Primary: ")); 
@@ -3119,7 +3120,6 @@ void config_edit()
           row+=2;
           Serial.println(); 
           Serial.print(F("(E) Configure serial cards  : ")); print_mapped_serial_cards(); Serial.println(F(" mapped")); row++;
-          
 #if USE_PRINTER>0
           Serial.print(F("(P) Configure printer       : ")); 
           print_printer_type();
@@ -3171,6 +3171,9 @@ void config_edit()
       redraw = true;
       switch( c )
         {
+        case '*':
+        host_lamp_test();
+        break;
 #if USE_Z80==2
         case 'c': 
           config_flags2 = toggle_bits(config_flags2, 21, 1); 

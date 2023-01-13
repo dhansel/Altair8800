@@ -1662,8 +1662,10 @@ void setup()
 
   // if EXAMINE switch is held up during powerup then show host system info
   if( host_read_function_switch(SW_EXAMINE) )
+    {
     host_system_info();
-
+    host_lamp_test();
+    }
   // emulator extra: holding down CLR at powerup will keep all registers
   // and memory content initialized with 0. Otherwise (as would be normal 
   // with the Altair), everything is random.
