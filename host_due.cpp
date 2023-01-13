@@ -759,7 +759,7 @@ const char *host_filesys_dir_nextfile(File &d)
         {
           if( entry.isFile() )
             {
-              entry.getSFN(buffer,sizeof(buffer));
+              entry.getSFN(buffer);
               entry.close();
               return buffer;
             }
