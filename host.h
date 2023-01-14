@@ -87,7 +87,7 @@ void host_storage_invalidate();
 // miscellaneous
 void host_copy_flash_to_ram(void *dst, const void *src, uint32_t len);
 uint32_t host_get_random();
-void host_lamp_test(void);
+int host_lamp_test(int);  // 0 for test if implemented (returns 1); 1 for test lamps (returns 0) ;
 void host_system_info();
 void host_setup();
 

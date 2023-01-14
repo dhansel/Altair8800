@@ -933,7 +933,7 @@ bool host_serial_port_has_configs(byte i)
   return false;
 }
 
-void host_lamp_test(void) {};
+int host_lamp_test(int cmd) { return 0; };
 
 
 // ----------------------------------------------------------------------------------------------------

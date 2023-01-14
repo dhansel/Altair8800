@@ -1757,10 +1757,11 @@ static uint32_t lamppins[]=
 
 #define LAMPCT (sizeof(lamppins)/sizeof(lamppins[0]))
 
-void host_lamp_test(void)  
+int host_lamp_test(int cmd)  
 {
   unsigned i,j=0;
   int lastpin=-1;
+  if (cmd==0) return 1;
   Serial.println();
   Serial.println("Lamp test in progress...");
   for (i=0;i<LAMPCT;i++)   // all on
@@ -1780,6 +1781,7 @@ void host_lamp_test(void)
   digitalWrite(lamppins[0],LOW);  // turn off the last one
   // good place to stick one or more on for extended troubleshooting
   //digitalWrite(44,HIGH);
+  return 0;
 }
 
 

@@ -501,7 +501,7 @@ bool host_filesys_ok()
   return use_sd;
 }
 
-void host_lamp_test(void) {};
+int host_lamp_test(int cmd) { return 0; };
 
 
 //------------------------------------------------------------------------------------------------------

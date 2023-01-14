@@ -371,7 +371,7 @@ void host_system_info()
   Serial.print(F("Free RAM         : ")); Serial.println(SP - heapend);
 }
 
-void host_lamp_test(void) {};
+int host_lamp_test(int cmd) { return 0; };
 
 void host_setup()
 {

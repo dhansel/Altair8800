@@ -3102,7 +3102,7 @@ void config_edit()
           Serial.print(F("Pro(c)essor                 : ")); print_cpu(); Serial.println(); r_cpu = row++;
 #endif
           Serial.print(F("Aux1 shortcut program (u/U) : ")); print_aux1_program(); Serial.println(); r_aux1 = row++;
-          Serial.print(F("Lamp test (*)")); Serial.println(); row++; 
+          if (host_lamp_test(0)) { Serial.print(F("Lamp test (*)")); Serial.println(); row++;  }
           Serial.print(F("Configure host (s)erial     : ")); 
 #if HOST_NUM_SERIAL_PORTS>1
           Serial.print(F("Primary: ")); 
@@ -3172,7 +3172,7 @@ void config_edit()
       switch( c )
         {
         case '*':
-        host_lamp_test();
+        host_lamp_test(1);
         break;
 #if USE_Z80==2
         case 'c': 
