@@ -24,6 +24,7 @@ Available disks images:
 10100) DISK14.DSK: CP/M 3.0 disk 2 (utilities)
 10101) DISK15.DSK: Felix animation system for Dazzler
 10110) DISK16.DSK: CP/M 2.2 MITS+Tarbell
+10111) DISK17.DSK: CP/M 2.2 FDC+ 8MB
 ---------------------------------------------
 
 All images except 10,11,12,15 were put together by 
