@@ -199,6 +199,7 @@ byte     config_aux1_program();
 uint32_t config_host_serial_baud_rate(byte iface);
 uint32_t config_host_serial_config(byte iface);
 byte     config_host_serial_primary();
+bool     config_host_serial_xonxoff(byte iface);
 
 #define  config_serial_map_sim_to_host(dev) config_serial_sim_to_host[dev]
 bool     config_serial_realtime(byte dev);

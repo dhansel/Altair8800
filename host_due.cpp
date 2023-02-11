@@ -954,6 +954,9 @@ inline int usb_available_for_write()
 //------------------------------------------------------------------------------------------------------
 
 
+static byte serial_xonxoff[HOST_NUM_SERIAL_PORTS];
+static bool serial_tx_enabled[HOST_NUM_SERIAL_PORTS];
+static uint32_t serial_xonxoff_disable_timeout[HOST_NUM_SERIAL_PORTS];
 host_serial_receive_callback_tp serial_receive_callback[HOST_NUM_SERIAL_PORTS];
 
 host_serial_receive_callback_tp host_serial_set_receive_callback(byte iface, host_serial_receive_callback_tp f)
@@ -970,6 +973,41 @@ host_serial_receive_callback_tp host_serial_set_receive_callback(byte iface, hos
 }
 
 
+static int serial_handle_xonxoff(byte i, byte d)
+{
+  int res = 0;
+  uint32_t t = serial_xonxoff_disable_timeout[i];
+
+  if( d!=0x18 )
+    {
+      if( d==0x13 && serial_xonxoff[i]==1 ) // XOFF
+        { res = -1; serial_tx_enabled[i] = false; }
+      else if( d==0x11 && serial_xonxoff[i]==1 ) // XON
+        { res = 1; serial_tx_enabled[i] = true; }
+
+      t = 0;
+    }
+  else if( serial_xonxoff_disable_timeout[i]==0 )
+    t = millis();
+  else
+    {
+      // temporarily toggle XON/XOFF support if we receive CTRL-X [1s pause] CTRL-X
+      if( millis()-t > 500 && millis()-t < 1500 )
+        {
+          if( serial_xonxoff[i]==1 )
+            { serial_xonxoff[i] = 2; res = -2; }
+          else if( serial_xonxoff[i]==2 )
+            { serial_xonxoff[i] = 1; res =  2; }
+        }
+
+      t = 0;
+    }
+
+  serial_xonxoff_disable_timeout[i] = t;
+  return res;
+}
+
+
 static void host_serial_receive_finished_interrupt_if0()
 {
   // a complete character should have been received on pin 0/1 (USB programming port)
@@ -978,7 +1016,15 @@ static void host_serial_receive_finished_interrupt_if0()
   static bool oneMore = false;
   if( Serial.available() )
     { 
-      serial_receive_callback[0](0, Serial.read()); 
+      byte d = Serial.read();
+      switch( serial_handle_xonxoff(0, d) )
+        {
+        case  0: serial_receive_callback[0](0, d); break;
+        case -1: UART->UART_CR = UART_CR_TXDIS; break;
+        case  1: UART->UART_CR = UART_CR_TXEN;  break;
+        case -2: Serial.write(7); Serial.write(7); break;
+        case  2: Serial.write(7); break;
+        }
       oneMore = true; 
     }
   else if( !oneMore )
@@ -1005,7 +1051,15 @@ static void host_serial_receive_finished_interrupt_if1()
   static bool oneMore = false;
   if( Serial1.available() )
     {
-      serial_receive_callback[1](1, Serial1.read());
+      byte d = Serial1.read();
+      switch( serial_handle_xonxoff(1, d) )
+        {
+        case  0: serial_receive_callback[1](1, d); break;
+        case -1: USART0->US_CR = UART_CR_TXDIS; break;
+        case  1: USART0->US_CR = UART_CR_TXEN;  break;
+        case -2: Serial1.write(7); Serial1.write(7); break;
+        case  2: Serial1.write(7); break;
+        }
       oneMore = true; 
     }
   else if( !oneMore )
@@ -1062,10 +1116,18 @@ void CAN1_Handler()
   // forward received data to the emulated serial card
   while( serial_tc5.available() )
     {
-      int d = serial_tc5.read();
-      if( d>=0 ) serial_receive_callback[3](3, d);
+      byte d = serial_tc5.read();
+      switch( serial_handle_xonxoff(3, d) )
+        {
+        case  0: serial_receive_callback[3](3, d); break;
+        case -1: serial_tc5.enable_tx(false); break;
+        case  1: serial_tc5.enable_tx(true); break;
+        case -2: serial_tc5.write((uint8_t) 7); serial_tc5.write((uint8_t) 7); break;
+        case  2: serial_tc5.write((uint8_t) 7); break;
+        }
     }
 }
+
 
 static void host_serial_receive_finished_interrupt_if3()
 {
@@ -1094,8 +1156,15 @@ void CAN0_Handler()
   // forward received data to the emulated serial card
   while( serial_tc4.available() )
     {
-      int d = serial_tc4.read();
-      if( d>=0 ) serial_receive_callback[HOST_NUM_SERIAL_PORTS-1](HOST_NUM_SERIAL_PORTS-1, d);
+      byte d = serial_tc4.read();
+      switch( serial_handle_xonxoff(HOST_NUM_SERIAL_PORTS-1, d) )
+        {
+        case  0: serial_receive_callback[HOST_NUM_SERIAL_PORTS-1](HOST_NUM_SERIAL_PORTS-1, d); break;
+        case -1: serial_tc4.enable_tx(false); break;
+        case  1: serial_tc4.enable_tx(true); break;
+        case -2: serial_tc4.write((uint8_t) 7); serial_tc4.write((uint8_t) 7); break;
+        case  2: serial_tc4.write((uint8_t) 7); break;
+        }
     }
 }
 
@@ -1114,6 +1183,41 @@ static void host_serial_receive_finished_interrupt_if4()
 }
 
 #endif
+
+
+static void serial_reset_xonxoff()
+{
+  for(byte i=0; i<HOST_NUM_SERIAL_PORTS; i++)
+    {
+      bool beep = false;
+      if( serial_xonxoff[i]==2 )
+        {
+          serial_xonxoff[i] = config_host_serial_xonxoff(i) ? 1 : 0;
+          beep = true;
+        }
+
+      if( serial_xonxoff[i]==1 && !serial_tx_enabled[i] )
+        {
+          serial_tx_enabled[i]=true;
+          switch( i )
+            {
+            case 0: UART->UART_CR = UART_CR_TXEN;  break;
+            case 1: USART0->US_CR = UART_CR_TXEN;  break;
+#if USE_SERIAL_ON_RXLTXL>0
+            case 3: serial_tc5.enable_tx(true); break;
+#endif
+#if USE_SERIAL_ON_A6A7>0
+            case (HOST_NUM_SERIAL_PORTS-1): serial_tc4.enable_tx(true); break;
+#endif
+            }
+
+          beep = true;
+        }
+
+      serial_xonxoff_disable_timeout[i] = 0;
+      if( beep ) host_serial_write(i, 7);
+    }
+}
 
 
 static byte num_bits(uint32_t config)
@@ -1154,6 +1258,10 @@ void host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_prim
 {
   byte rxPin, timer;
   void (*fnStarting)() = NULL, (*fnFinished)() = NULL;
+
+  serial_xonxoff[iface] = config_host_serial_xonxoff(iface) ? 1 : 0;
+  serial_tx_enabled[iface] = true;
+  serial_xonxoff_disable_timeout[iface] = 0;
 
   if( iface==0 )
     {
@@ -1335,18 +1443,29 @@ int host_serial_available(byte i)
  return 0;
 }
 
+
 int host_serial_available_for_write(byte i)
 {
+  // if transmitter is disabled (due to XOFF received) then don't accept more data
+  if( !serial_tx_enabled[i] ) return 0;
+
+  // if we are using XON/XOFF flow control then we are likely talking to a slow terminal
+  // => do not use transmit buffer, otherwise stopping output (e.g. stopping a LIST in BASIC)
+  //    will still print the whole buffer which can take a long time
   switch( i )
     {
-    case 0: return Serial.availableForWrite(); break;
-    case 1: return Serial1.availableForWrite(); break;
+    case 0: return serial_xonxoff[i]==1 ? ((UART->UART_SR  & UART_SR_TXRDY) ? 1 : 0) : Serial.availableForWrite();  break;
+    case 1: return serial_xonxoff[i]==1 ? ((USART0->US_CSR & UART_SR_TXRDY) ? 1 : 0) : Serial1.availableForWrite(); break;
     case 2: return usb_available_for_write(); break;
 #if USE_SERIAL_ON_A6A7>0
-    case 3: return serial_tc5.availableForWrite(); break;
+    case 3:
+      return serial_xonxoff[i]==1 ? (serial_tc5.availableForWrite() <  serial_tc5.get_tx_buffer_length() ? 0 : 1) : serial_tc5.availableForWrite();
+      break;
 #endif
 #if USE_SERIAL_ON_RXLTXL>0
-    case (HOST_NUM_SERIAL_PORTS-1): return serial_tc4.availableForWrite(); break;
+    case (HOST_NUM_SERIAL_PORTS-1):
+      return serial_xonxoff[i]==1 ? (serial_tc4.availableForWrite() <  serial_tc4.get_tx_buffer_length() ? 0 : 1) : serial_tc4.availableForWrite();
+      break;
 #endif
     }
 
@@ -1484,7 +1603,7 @@ bool host_serial_ok(byte i)
     }
 
   return false;
-  }
+}
 
 
 const char *host_serial_port_name(byte i)
@@ -1527,8 +1646,15 @@ bool host_serial_port_baud_limits(byte i, uint32_t *min, uint32_t *max)
 
 bool host_serial_port_has_configs(byte i)
 {
-  return i==1 || i==3 || i==4;
+  return i==1 || i==3 || i==(HOST_NUM_SERIAL_PORTS-1);
 }
+
+
+bool host_serial_port_support_xonxoff(byte i)
+{
+  return i==0 || i==1 || i==3 || i==(HOST_NUM_SERIAL_PORTS-1);
+}
+
 
 
 // --------------------------------------------------------------------------------------------------
@@ -1598,6 +1724,7 @@ static void switch_interrupt(int i)
         {
           switches_debounced |= bitval;
           switches_pulse |= bitval;
+          if( i==SW_CLR ) serial_reset_xonxoff();
           if( function_switch_irq[i]>0 ) altair_interrupt(function_switch_irq[i]<<24);
           debounceTime[i] = millis() + 50;
         }
@@ -1781,7 +1908,6 @@ void host_lamp_test(void)
   // good place to stick one or more on for extended troubleshooting
   //digitalWrite(44,HIGH);
 }
-
 
 #include <malloc.h>
 extern char _end;

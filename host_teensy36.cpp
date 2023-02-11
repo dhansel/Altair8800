@@ -520,7 +520,9 @@ void host_serial_setup(byte iface, uint32_t baud, uint32_t config, bool set_prim
     {
       if (set_primary_interface) {
         vga_sysmon = false;
-        uvga.println("\nMonitor disabled, terminal is primary");
+        uvga.clear();
+        uvga.moveCursor(0, 0);
+        //uvga.println("\nMonitor disabled, terminal is primary");
       }
     }
   if( iface==3 )
@@ -727,6 +729,11 @@ void host_serial_interrupts_pause()
 void host_serial_interrupts_resume()
 {
   return;
+}
+
+bool host_serial_port_support_xonxoff(byte i)
+{
+  return false;
 }
 
 // --------------------------------------------------------------------------------------------------
@@ -1230,21 +1237,21 @@ void host_setup()
   analogWriteResolution(12);
   analogWrite(A21,2048);
 
-  if (Serial) SwitchSerial.println("PRE Timer");
+  if (SwitchSerial) SwitchSerial.println("PRE Timer");
 
   //Start update timer
   updateTimer.begin(panelUpdate, 10000);
 
-  if (Serial) SwitchSerial.println("PRE Tape");
+  if (SwitchSerial) SwitchSerial.println("PRE Tape");
   //Start tape update timer
   tapeTimer.priority(32);
   tapeTimer.begin(tapeUpdate, 50);
 
-  if (Serial) SwitchSerial.println("PRE LED");
+  if (SwitchSerial) SwitchSerial.println("PRE LED");
   //Init non-blocking WS2812b lib
   leds.begin();
 
-  if (Serial) SwitchSerial.println("PRE SD");
+  if (SwitchSerial) SwitchSerial.println("PRE SD");
 #if NUM_DRIVES>0 || NUM_HDSK_UNITS>0 || USE_HOST_FILESYS>0
   // check if SD card available (send "chip select" signal to HLDA status light)
   HLDAGuard hlda;

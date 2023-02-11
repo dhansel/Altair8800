@@ -47,6 +47,8 @@ host_serial_receive_callback_tp host_serial_set_receive_callback(byte iface, hos
 const char *host_serial_port_name(byte i);
 bool        host_serial_port_baud_limits(byte i, uint32_t *min, uint32_t *max);
 bool        host_serial_port_has_configs(byte i);
+bool        host_serial_port_support_xonxoff(byte i);
+
 
 
 // if the host provides a filesystem that the simulator can use then it should define

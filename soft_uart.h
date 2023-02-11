@@ -33,6 +33,11 @@
  */
 
 /**
+ ** Modifications by David Hansel on 12/22/21:
+ ** - Added "enable_tx" function which can enable/disable the transmitter. This
+ **   is used to support XON/XOFF handshaking
+ ** - Added "get_tx_buffer_length" function
+ ** - Fixed return type of "available_for_write" function
  ** Modifications by David Hansel on 11/27/18:
  ** - Added "set_rx_handler" function which sets a call-back handler to be called
  **   after a byte of data has been received. Note that the call-back will be
@@ -394,6 +399,8 @@ namespace arduino_due
 
         void set_rx_handler(void (*h)(void)) { _ctx_.rx_handler = h; }
 
+        void enable_tx(bool enable) { _ctx_.enable_tx(enable); }
+
         timer_ids get_timer() { return TIMER; }
 
         size_t get_rx_buffer_length() { return RX_BUFFER_LENGTH; }
@@ -445,7 +452,7 @@ namespace arduino_due
         }
 
         // is TX buffer full?
-        bool available_for_write() 
+        int available_for_write()
         { 
           return (
             (
@@ -557,6 +564,8 @@ namespace arduino_due
           // NOTE: only the 5, 6, 7, 8  or 9 lowest significant bits
           // of data are send
           bool set_tx_data(uint32_t data);
+
+          void enable_tx(bool enabled);
 
           void flush()
           {
@@ -720,6 +729,7 @@ namespace arduino_due
           volatile uint32_t tx_bit_counter;
           volatile tx_status_codes tx_status;
           volatile uint32_t tx_interrupt_counter;
+          volatile bool tx_enabled;
         };
   
         static _uart_ctx_ _ctx_;
@@ -917,6 +927,10 @@ namespace arduino_due
           ); 
         }
 
+        void enable_tx(bool enable) { _tc_uart_.enable_tx(enable); }
+        size_t get_rx_buffer_length() { return _tc_uart_.get_rx_buffer_length(); }
+        size_t get_tx_buffer_length() { return _tc_uart_.get_tx_buffer_length(); }
+
         mode_codes get_mode() { return _tc_uart_.get_mode(); }
 
         bool set_rx_mode() { return _tc_uart_.set_rx_mode(); }
@@ -1036,6 +1050,7 @@ namespace arduino_due
       tx_status=tx_status_codes::IDLE;
       tx_buffer.reset();
       tx_interrupt_counter=0;
+      tx_enabled=true;
 
       // PMC settings
       pmc_set_writeprotect(0);
@@ -1111,7 +1126,7 @@ namespace arduino_due
             if(tx_bit_counter>=tx_frame_bits)
             {
               uint32_t data_to_send;
-              if(tx_buffer.pop(data_to_send)) 
+              if( tx_enabled && tx_buffer.pop(data_to_send) )
               { 
                 tx_data=data_to_send; tx_bit_counter=0; 
                 set_outgoing_bit(); tx_bit_counter++;
@@ -1274,23 +1289,52 @@ namespace arduino_due
 
       if(!not_full) return false;
 
-      if(tx_status==tx_status_codes::IDLE)
-      {
-        tx_buffer.pop(data_to_send); 
-        tx_data=data_to_send; tx_bit_counter=0; 
-        tx_interrupt_counter=0;
-      }
+      if( tx_enabled )
+        {
+          if(tx_status==tx_status_codes::IDLE)
+            {
+              tx_buffer.pop(data_to_send);
+              tx_data=data_to_send; tx_bit_counter=0;
+              tx_interrupt_counter=0;
+            }
 
-      if(
-        (rx_status==rx_status_codes::LISTENING)
-        && (tx_status==tx_status_codes::IDLE) 
-      ) start_tc_interrupts();
+          if(
+             (rx_status==rx_status_codes::LISTENING)
+             && (tx_status==tx_status_codes::IDLE)
+             ) start_tc_interrupts();
 
-      tx_status=tx_status_codes::SENDING;
+          tx_status=tx_status_codes::SENDING;
+        }
 
       return true;
     }
-  
+
+    template<
+      timer_ids TIMER,
+      size_t RX_BUFFER_LENGTH,
+      size_t TX_BUFFER_LENGTH
+    > void uart<
+      TIMER,
+      RX_BUFFER_LENGTH,
+      TX_BUFFER_LENGTH
+    >::_uart_ctx_::enable_tx(
+      bool enable
+    )
+    {
+      if( !tx_enabled && enable && tx_status==tx_status_codes::IDLE && !tx_buffer.is_empty() )
+        {
+          uint32_t data_to_send;
+          tx_enabled = enable;
+          tx_buffer.pop(data_to_send);
+          tx_data = data_to_send;
+          tx_bit_counter=0;
+          tx_interrupt_counter=0;
+          if( rx_status==rx_status_codes::LISTENING ) start_tc_interrupts();
+          tx_status=tx_status_codes::SENDING;
+        }
+      else
+        tx_enabled = enable;
+    }
   }
 
 }

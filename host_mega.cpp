@@ -349,6 +349,11 @@ bool host_serial_port_has_configs(byte i)
 #endif
 }
 
+bool host_serial_port_support_xonxoff(byte i)
+{
+  return false;
+}
+
 
 static void printHex(int i) { if( i<0x1000 ) Serial.print('0'); Serial.println(i, HEX); }
 void host_system_info()

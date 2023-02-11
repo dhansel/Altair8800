@@ -106,11 +106,12 @@ uint32_t config_serial_settings, new_config_serial_settings;
 
 
 // cofig_serial_settings2:
-// xxxxxxxB BPPSBBPP SBBPPSBB PPSBBPPS
+// xxFFFFFB BPPSBBPP SBBPPSBB PPSBBPPS
 // for all 5 host interfaces:
 // BB = number of bits (0=5, 1=6, 2=7, 3=8)
 // PP = parity         (0=none, 1=even, 2=odd)
 // S  = stop bits      (0=1, 1=2)
+// FFFFF = support XON/XOFF flow control when sending data (for all 5 host interfaces)
 uint32_t config_serial_settings2, new_config_serial_settings2;
 
 
@@ -410,6 +411,11 @@ byte config_host_serial_primary()
 uint32_t config_host_serial_baud_rate(uint32_t settings, byte iface)
 {
   return config_baud_rate(get_bits(settings, config_baud_rate_bits(iface), 4));
+}
+
+bool config_host_serial_xonxoff(byte iface)
+{
+  return host_serial_port_support_xonxoff(iface) && get_bits(config_serial_settings2,25+iface, 1)!=0;
 }
 
 uint32_t config_host_serial_config(uint32_t settings2, byte iface)
@@ -2673,12 +2679,13 @@ void config_serial_devices()
 void config_host_serial_details(byte iface)
 {
   bool go = true, redraw = true;
-  byte row, col, r_baud, r_bits, r_parity, r_stop, r_cmd;
+  byte row, col, r_baud, r_bits, r_parity, r_stop, r_flow, r_cmd;
 
   byte baud   = get_bits(new_config_serial_settings, config_baud_rate_bits(iface), 4);
   byte bits   = get_bits(new_config_serial_settings2, iface*5+3, 2) + 5;
   byte parity = get_bits(new_config_serial_settings2, iface*5+1, 2);
   byte stop   = get_bits(new_config_serial_settings2, iface*5  , 1) + 1;
+  byte xonxoff= get_bits(new_config_serial_settings2, 25+iface,  1);
 
   row = 4;
   col = 15;
@@ -2695,9 +2702,17 @@ void config_host_serial_details(byte iface)
           Serial.println(F("Configure host serial settings"));
 #endif
           Serial.print(F("\n(B)aud rate : ")); Serial.println(config_baud_rate(baud)); r_baud = row++;
-          Serial.print(F("(b)its      : ")); Serial.println(bits); r_bits = row++;
-          Serial.print(F("(P)arity    : ")); print_parity(parity); Serial.println(); r_parity = row++;
-          Serial.print(F("(S)top bits : ")); Serial.println(stop); r_stop = row++;
+          if(  host_serial_port_has_configs(iface) )
+            {
+              Serial.print(F("(b)its      : ")); Serial.println(bits); r_bits = row++;
+              Serial.print(F("(P)arity    : ")); print_parity(parity); Serial.println(); r_parity = row++;
+              Serial.print(F("(S)top bits : ")); Serial.println(stop); r_stop = row++;
+            }
+          if( host_serial_port_support_xonxoff(iface) )
+            {
+              Serial.print(F("(X)ON/XOFF  : ")); Serial.println(xonxoff ? F("yes") : F("no")); r_flow = row++;
+            }
+
           Serial.println(F("\nE(x)it to parent menu"));
           row += 2;
           
@@ -2747,6 +2762,14 @@ void config_host_serial_details(byte iface)
             break;
           }            
 
+        case 'X':
+          {
+            xonxoff = !xonxoff;
+            set_cursor(r_flow, col);
+            Serial.print(xonxoff ? F("yes") : F("no"));
+            break;
+          }
+
         case 27:
         case 'x': 
           {
@@ -2759,6 +2782,7 @@ void config_host_serial_details(byte iface)
   byte config = (bits-5) * 8 + (parity * 2) + (stop-1);
   new_config_serial_settings  = set_bits(new_config_serial_settings, config_baud_rate_bits(iface), 4, baud);
   new_config_serial_settings2 = set_bits(new_config_serial_settings2, iface*5, 5, config);
+  if( host_serial_port_support_xonxoff(iface) ) new_config_serial_settings2 = set_bits(new_config_serial_settings2, 25+iface, 1, xonxoff);
 }
 
 
@@ -2839,7 +2863,7 @@ void config_host_serial()
             i = c-'0';
             if( i>=0 && i<HOST_NUM_SERIAL_PORTS )
               {
-                if( host_serial_port_has_configs(i) )
+                if( host_serial_port_has_configs(i) || host_serial_port_support_xonxoff(i) )
                   {
                     config_host_serial_details(i);
                     redraw = true;

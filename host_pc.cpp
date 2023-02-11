@@ -935,6 +935,11 @@ bool host_serial_port_has_configs(byte i)
 
 void host_lamp_test(void) {};
 
+bool host_serial_port_support_xonxoff(byte i)
+{
+  return false;
+}
+
 
 // ----------------------------------------------------------------------------------------------------
 

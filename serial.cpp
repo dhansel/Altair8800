@@ -539,18 +539,23 @@ void serial_timer_interrupt_check_enable(byte dev)
 
 static void serial_timer_interrupt(byte dev)
 {
-  // write out data scheduled to write (if necessary)
-  if( serial_ctrl[dev] & (SSC_INTTX|SSC_REALTIME) )
+  if( host_serial_available_for_write(config_serial_map_sim_to_host(dev))>0 )
     {
-      // update status register (send buffer is empty now)
-      serial_status[dev] |= SST_TDRE;
+      // write out data scheduled to write (if necessary)
+      if( (serial_ctrl[dev] & (SSC_INTTX|SSC_REALTIME))!=0 )
+        {
+          // update status register (send buffer is empty now)
+          serial_status[dev] |= SST_TDRE;
+        }
+
+      // read serial playback data
+      serial_replay(dev);
+
+      // this schedules additional interrupts as necessary
+      set_serial_status(dev, serial_status[dev]);
     }
-
-  // read serial playback data
-  serial_replay(dev);
-
-  // this schedules additional interrupts as necessary
-  set_serial_status(dev, serial_status[dev]);
+  else
+    serial_timer_interrupt_check_enable(dev);
 }
 
 
