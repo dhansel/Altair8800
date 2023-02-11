@@ -101,6 +101,7 @@ inline void MEM_WRITE(uint16_t a, byte v)
 #define MEM_ROM_FLAG_TEMP      0x01
 #define MEM_ROM_FLAG_AUTOSTART 0x04
 #define MEM_ROM_FLAG_DISABLED  0x08
+#define MEM_ROM_FLAG_DSBL_FF   0x10
 
 bool mem_add_rom(uint16_t start, uint16_t length, const char *name = NULL, uint16_t flags = 0, uint32_t filepos = 0);
 void mem_set_rom_filepos(byte i, uint32_t pos);
@@ -114,6 +115,7 @@ uint16_t mem_get_rom_autostart_address();
 void mem_clear_roms();
 void mem_reset_roms();
 void mem_restore_roms();
+void mem_disable_inp_ff();
 byte mem_find_rom(const char *name);
 
 

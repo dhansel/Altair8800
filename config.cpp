@@ -2907,6 +2907,7 @@ void config_memory()
                       if( flags & MEM_ROM_FLAG_AUTOSTART ) { if( comma ) Serial.print(','); else comma=true; Serial.print(F("auto-start")); }
                       if( flags & MEM_ROM_FLAG_TEMP )      { if( comma ) Serial.print(','); else comma=true; Serial.print(F("temporary")); }
                       if( flags & MEM_ROM_FLAG_DISABLED )  { if( comma ) Serial.print(','); else comma=true; Serial.print(F("disabled")); }
+                      if( flags & MEM_ROM_FLAG_DSBL_FF )   { if( comma ) Serial.print(','); else comma=true; Serial.print(F("sense-disable")); }
                       Serial.print(')');
                     }
                   Serial.println();
@@ -2923,6 +2924,7 @@ void config_memory()
             { 
               Serial.println(F("(R)emove ROM")); row++; 
               Serial.println(F("(a)uto-start ROM")); row++;
+              Serial.println(F("(d)isable ROM after reading sense switches")); row++;
             }
 #endif          
           Serial.println(F("\nE(x)it to previous menu"));
@@ -3011,6 +3013,23 @@ void config_memory()
                       uint16_t flags;
                       mem_get_rom_info(j, NULL, NULL, NULL, &flags);
                       mem_set_rom_flags(j, j==(i-1) ? (flags | MEM_ROM_FLAG_AUTOSTART) : (flags & ~MEM_ROM_FLAG_AUTOSTART));
+                    }
+              }
+            break;
+          }
+
+        case 'd':
+          {
+            if( mem_get_num_roms()>0 )
+              {
+                byte i;
+                redraw = true;
+                Serial.print(F("Which ROM? "));
+                if( numsys_read_byte(&i) && i>=1 && i<= mem_get_num_roms()+1 )
+                    {
+                      uint16_t flags;
+                      mem_get_rom_info(i-1, NULL, NULL, NULL, &flags);
+                      mem_set_rom_flags(i-1, flags ^ MEM_ROM_FLAG_DSBL_FF);
                     }
               }
             break;

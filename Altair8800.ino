@@ -1517,6 +1517,7 @@ byte altair_read_sense_switches(byte port)
     data = debounceVal;
 #endif
 
+  mem_disable_inp_ff();
   return data;
 }
 

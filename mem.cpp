@@ -308,6 +308,7 @@ bool mem_get_rom_info(byte i, char *name, uint16_t *start, uint16_t *length, uin
 uint16_t mem_get_rom_autostart_address() { return 0xFFFF; }
 void mem_clear_roms() {}
 void mem_reset_roms() {}
+void mem_disable_inp_ff() {}
 
 #else
 
@@ -330,7 +331,7 @@ bool mem_remove_rom(byte i, bool clear)
       for(j=i+1; j<mem_roms_num; j++)
         {
           mem_roms_start[j-1] = mem_roms_start[j];
-         mem_roms_length[j-1] = mem_roms_length[j];
+          mem_roms_length[j-1] = mem_roms_length[j];
           mem_roms_flags[j-1] = mem_roms_flags[j];
           strcpy(mem_roms_name[j-1], mem_roms_name[j]);
         }
@@ -428,6 +429,14 @@ bool mem_add_rom(uint16_t start, uint16_t length, const char *nameOpt, uint16_t 
 void mem_set_rom_filepos(byte i, uint32_t pos)
 {
   if( i<mem_roms_num ) mem_roms_filepos[i] = pos;
+}
+
+
+void mem_disable_inp_ff()
+{
+  for(int i=0; i<mem_roms_num; i++)
+    if( mem_roms_flags[i] & MEM_ROM_FLAG_DSBL_FF )
+      mem_disable_rom(i);
 }
 
 
