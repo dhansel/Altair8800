@@ -512,7 +512,7 @@ static void cpu_exsp() /* ex (sp), hl */
   byte b;
   b = MEM_READ(regSP+1u); MEM_WRITE(regSP+1u, regH); regH = b;
   b = MEM_READ(regSP);    MEM_WRITE(regSP,    regL); regL = b;
-  TIMER_ADD_CYCLES(19);
+  TIMER_ADD_CYCLES(18);
 }
 
 static void cpu_exde() /* ex de, hl */
@@ -842,14 +842,14 @@ static void cpu_rra() /* rra */
   static void cpu_dad ## REG()                  \
   {                                             \
     regHL.HL = addw2(regHL.HL, reg ## REG.REG); \
-    TIMER_ADD_CYCLES(11);                       \
+    TIMER_ADD_CYCLES(10);                       \
   }
 
 
 static void cpu_dadSP() /* add hl, sp */
 {
   regHL.HL = addw2(regHL.HL, regSP);
-  TIMER_ADD_CYCLES(11);    
+  TIMER_ADD_CYCLES(10);
 }
 
 
@@ -1416,20 +1416,20 @@ static void cpu_nop() /* nop */
   static void cpu_psh ## REGH ## REGL()             \
   {                                                 \
     pushStack(reg ## REGH, reg ## REGL);            \
-    TIMER_ADD_CYCLES(10);                           \
+    TIMER_ADD_CYCLES(11);                           \
   }
 
 static void cpu_out() /* out NN */
 {
   altair_out(MEM_READ(regPC), regA);
-  TIMER_ADD_CYCLES(11);
+  TIMER_ADD_CYCLES(10);
   regPC++;
 }
 
 static void cpu_in() /* in NN */
 {
   regA = altair_in(MEM_READ(regPC));
-  TIMER_ADD_CYCLES(11);
+  TIMER_ADD_CYCLES(10);
   regPC++;
 }
 
