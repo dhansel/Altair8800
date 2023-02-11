@@ -412,7 +412,6 @@ uint32_t config_host_serial_baud_rate(uint32_t settings, byte iface)
   return config_baud_rate(get_bits(settings, config_baud_rate_bits(iface), 4));
 }
 
-
 uint32_t config_host_serial_config(uint32_t settings2, byte iface)
 {
   byte v = get_bits(settings2, iface * 5, 5);
@@ -1811,8 +1810,6 @@ void config_edit_printer()
   byte row, col, r_type, r_iface, r_force, r_cmd;
   bool go = true, redraw = true;
 
-  byte prev_type = config_printer_type();
-  byte prev_mapping = config_printer_map_to_host_serial();
   while( go )
     {
       if( redraw )
@@ -1881,8 +1878,6 @@ void config_edit_printer()
         case 'x': 
           {
             go = false; 
-            if( config_printer_type()!=prev_type || config_printer_map_to_host_serial() != prev_mapping )
-              printer_setup();
             break;
           }
         }
@@ -2139,7 +2134,7 @@ void config_edit_tdrives()
 
   //drive_set_realtime((config_flags & CF_DRIVE_RT)!=0);
   for(i=0; i<NUM_TDRIVES; i++) 
-    if( mounted[i] != drive_get_mounted_image(i) )
+    if( mounted[i] != tdrive_get_mounted_image(i) )
       tdrive_mount(i, mounted[i]);
 }
 #endif
@@ -2703,7 +2698,6 @@ void config_host_serial_details(byte iface)
           Serial.print(F("(b)its      : ")); Serial.println(bits); r_bits = row++;
           Serial.print(F("(P)arity    : ")); print_parity(parity); Serial.println(); r_parity = row++;
           Serial.print(F("(S)top bits : ")); Serial.println(stop); r_stop = row++;
-
           Serial.println(F("\nE(x)it to parent menu"));
           row += 2;
           
@@ -3072,6 +3066,8 @@ void config_edit()
 
   bool redraw = true;
 
+  byte printer_prev_type = config_printer_type();
+  byte printer_prev_mapping = config_printer_map_to_host_serial();
   config_mem_size = ((uint32_t) mem_get_ram_limit_usr())+1;
   byte row, col, r_cpu, r_profile, r_throttle, r_panel, r_debug, r_aux1, r_cmd, r_input, r_dazzler;
   while( true )
@@ -3102,7 +3098,6 @@ void config_edit()
           Serial.print(F("Pro(c)essor                 : ")); print_cpu(); Serial.println(); r_cpu = row++;
 #endif
           Serial.print(F("Aux1 shortcut program (u/U) : ")); print_aux1_program(); Serial.println(); r_aux1 = row++;
-          Serial.print(F("Lamp test (*)")); Serial.println(); row++; 
           Serial.print(F("Configure host (s)erial     : ")); 
 #if HOST_NUM_SERIAL_PORTS>1
           Serial.print(F("Primary: ")); 
@@ -3156,7 +3151,7 @@ void config_edit()
 #endif
           Serial.println(); row++;
           Serial.println(F("(S)ave configuration    (L)oad configuration"));
-          Serial.println(F("(R)eset to defaults     E(x)it"));
+          Serial.println(F("(R)eset to defaults     E(x)it  *=Lamp test"));
           row += 2;
 
           Serial.print(F("\nCommand: ")); r_cmd = row+1;
@@ -3172,8 +3167,8 @@ void config_edit()
       switch( c )
         {
         case '*':
-        host_lamp_test();
-        break;
+          host_lamp_test();
+          break;
 #if USE_Z80==2
         case 'c': 
           config_flags2 = toggle_bits(config_flags2, 21, 1); 
@@ -3270,7 +3265,7 @@ void config_edit()
                         Serial.print(F("Configuration #")); numsys_print_byte(i);
                         Serial.print(F(" exists. Overwrite (y/n)? "));
                         do { delay(50); c = serial_read(); } while( c!='y' && c!='n' );
-                        Serial.println(c);
+                        if( c>31 && c<127 ) Serial.println(c);
                         ok = (c=='y');
                       }
 
@@ -3321,7 +3316,7 @@ void config_edit()
                   {
                     Serial.print(F("\r\nApply new host serial settings (y/n/ESC)? "));
                     do { delay(50); c = serial_read(); } while( c!='y' && c!='n' && c!=27 );
-                    Serial.println(c);
+                    if( c>31 && c<127 ) Serial.println(c);
                     if( c=='n' || (c=='y' && apply_host_serial_settings()) )
                       exit = true;
                   }
@@ -3337,6 +3332,10 @@ void config_edit()
               {
                 mem_set_ram_limit_usr(config_mem_size-1);
                 serial_set_config();
+
+                if( config_printer_type()!=printer_prev_type || config_printer_map_to_host_serial() != printer_prev_mapping )
+                  printer_setup();
+
 #if USE_Z80==2
                 cpu_set_processor(config_use_z80() ? PROC_Z80 : PROC_I8080);
 #endif
