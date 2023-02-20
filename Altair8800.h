@@ -73,7 +73,8 @@ bool altair_interrupt_enabled();
 bool altair_isreset();
 void altair_wait_step();
 void altair_set_outputs(uint16_t a, byte v);
-bool altair_read_intel_hex(uint16_t *start = NULL, uint16_t *end = NULL);
+int  altair_read_intel_hex(uint16_t *start = NULL, uint16_t *end = NULL);
+void altair_print_intel_hex_status(int status);
 void altair_vi_register_ports();
 
 #endif

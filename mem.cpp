@@ -339,6 +339,12 @@ bool mem_remove_rom(byte i, bool clear)
 
       // remove write protection for area occupied by ROM
       mem_protect_flags_set(start, length, false);
+
+      // make sure other existing ROMs are still protected
+      for(byte i=0; i<mem_roms_num; i++ )
+        if( !(mem_roms_flags[i]&MEM_ROM_FLAG_DISABLED) && mem_roms_start[i]  )
+          mem_protect_flags_set(mem_roms_start[i], mem_roms_length[i], true);
+
       mem_protect_calc_limit();
 
       // initialize newly visible RAM 
@@ -451,7 +457,15 @@ void mem_disable_rom(byte i)
           uint16_t start  = mem_roms_start[i];
           uint16_t length = mem_roms_length[i];
           mem_roms_flags[i] |= MEM_ROM_FLAG_DISABLED;
+
+          // un-protect memory used by this ROM
           mem_protect_flags_set(start, length, false);
+
+          // make sure other existing ROMs are still protected
+          for(byte i=0; i<mem_roms_num; i++ )
+            if( !(mem_roms_flags[i]&MEM_ROM_FLAG_DISABLED) )
+              mem_protect_flags_set(mem_roms_start[i], mem_roms_length[i], true);
+
           mem_protect_calc_limit();
           // initialize newly visible RAM 
           mem_ram_init_section(start, start+length-1, config_clear_memory());

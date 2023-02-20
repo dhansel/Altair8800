@@ -217,10 +217,9 @@ void process_inputs()
       else if (dswitch & 0x40 )
         {
           Serial.println(F("\r\nReceiving Intel HEX data..."));
-          if( altair_read_intel_hex() )
-            Serial.println(F("Success."));
-          else
-            Serial.println(F("Error!"));
+          int status = altair_read_intel_hex();
+          Serial.println();
+          altair_print_intel_hex_status(status);
           
           // skip any remaining input
           empty_input_buffer();
@@ -597,8 +596,38 @@ void altair_dump_intel_hex(uint16_t start, uint16_t end)
 }
 
 
-bool altair_read_intel_hex(uint16_t *start, uint16_t *end)
+void altair_print_intel_hex_status(int status)
 {
+  switch( status )
+    {
+    case  0: Serial.println(F("Success")); break;
+    case -1: Serial.println(F("Error: Expected ':' at start of line")); break;
+    case -2: Serial.println(F("Error: incorrect checksum")); break;
+    case -3: Serial.println(F("Error: outside available address space")); break;
+    default:
+      {
+        char name[10];
+        uint16_t start, len;
+        if( status<-10 && mem_get_rom_info(-status-10, name, &start, &len) )
+          {
+            Serial.print(F("Error: Conflicts with ROM '"));
+            Serial.print(name); Serial.print(F("' at "));
+            numsys_print_word(start);
+            Serial.print('-');
+            numsys_print_word(start+len-1);
+          }
+        else
+          { Serial.print(F("Unknown error: ")); Serial.println(status); }
+
+        break;
+      }
+    }
+}
+
+
+int altair_read_intel_hex(uint16_t *start, uint16_t *end)
+{
+  int res = 0xFF;
   word aa = 0xffff;
   if( start!=NULL ) *start = 0xFFFF;
   if( end!=NULL   ) *end   = 0x0000;
@@ -607,8 +636,8 @@ bool altair_read_intel_hex(uint16_t *start, uint16_t *end)
     {
       // expect line to start with a colon
       int c = -1;
-      while( c<0 || c==10 || c==13 || c==' '|| c=='\t' ) c=serial_read();
-      if( c!=':' ) return false;
+      while( c<0 || isspace(c) ) c=serial_read();
+      if( c!=':' ) return -1;
 
       // initialize checksum
       byte cs = 0;
@@ -629,7 +658,6 @@ bool altair_read_intel_hex(uint16_t *start, uint16_t *end)
         case 0:
           {
             // data record
-
             if( a != aa && n>0 )
               { 
                 if( aa!=0xffff ) { numsys_print_word(aa-1); Serial.println(); }
@@ -639,11 +667,22 @@ bool altair_read_intel_hex(uint16_t *start, uint16_t *end)
             aa += n;
             Serial.print('.');
 
+            // make sure that the data record will fit in RAM and will not intersect with
+            // any active ROMs
+            if( (uint32_t)a+n > MEMSIZE ) return -3;
+            for(int i=0; i<mem_get_num_roms(); i++)
+              {
+                uint16_t rs, rl, rf;
+                mem_get_rom_info(i, NULL, &rs, &rl);
+                if( (rf & MEM_ROM_FLAG_DISABLED)==0 && rs<a+n && rs+rl>a )
+                  return -(10+i);
+              }
+
             if( n>0 && start!=NULL && a < *start ) *start = a;
             for(byte i=0; i<n; i++)
               {
                 d = numsys_read_hex_byte();
-                MWRITE(a, d);
+                Mem[a] = d;
                 cs -= d;
                 a++;
               }
@@ -663,16 +702,17 @@ bool altair_read_intel_hex(uint16_t *start, uint16_t *end)
       // test checksum
       byte csb = numsys_read_hex_byte();
       if( cs != csb )
-        return false; // checksum error
+        return -2; // checksum error
 
       // empty record means we're done
       if( n==0 ) 
         {
           numsys_print_word(aa-1); 
-          Serial.println(); 
-          return true;
+          return 0;
         }
     }
+
+  return res;
 }
 
 
@@ -1756,6 +1796,7 @@ void loop()
           else
             {
               // no interrupt => read opcode, put it on data bus LEDs and advance PC
+
 #if USE_REAL_MREAD_TIMING>0
               host_set_status_led_M1();
               opcode = MEM_READ(regPC);

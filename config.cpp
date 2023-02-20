@@ -2982,25 +2982,27 @@ void config_memory()
 #if MAX_NUM_ROMS>0
         case 'A': 
           {
-            bool ESC = false, ok = false;
+            int status = 0;
+            bool ESC = false;
             uint16_t start, end;
             char name[9];
             redraw = true;
 
             Serial.println(F("\r\nSend ROM content in Intel HEX format now...\n"));
-            ok = altair_read_intel_hex(&start, &end);
+            status = altair_read_intel_hex(&start, &end);
             while( true ) { if( serial_read()<0 ) { delay(15); if( serial_read()<0 ) { delay(150); if( serial_read()<0 ) break; } } }
 
-            if( ok )
+            Serial.println();
+            if( status==0 )
               {
                 Serial.print(F("\r\nName (max 8 characters): "));
                 if( config_read_string(name, 9) )
-                  ok = mem_add_rom(start, end-start+1, name);
+                  status = mem_add_rom(start, end-start+1, name) ? 0 : -1;
               }
             else
-              Serial.println(F("Error!"));
+              { Serial.println(); altair_print_intel_hex_status(status); }
 
-            if( !ok )
+            if( status!=0 )
               {
                 Serial.print(F("\n\nPress any key to continue..."));
                 while( !serial_available() ); 
