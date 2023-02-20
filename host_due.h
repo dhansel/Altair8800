@@ -126,6 +126,9 @@ uint16_t host_read_addr_switches();
 uint16_t host_read_status_leds();
 
 
+#define HOST_HAS_LAMP_TEST
+void host_lamp_test();
+
 // ----------------------------------------------------- address bus
 
 

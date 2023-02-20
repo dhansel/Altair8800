@@ -3196,7 +3196,11 @@ void config_edit()
 #endif
           Serial.println(); row++;
           Serial.println(F("(S)ave configuration    (L)oad configuration"));
-          Serial.println(F("(R)eset to defaults     E(x)it  *=Lamp test"));
+          Serial.print  (F("(R)eset to defaults     E(x)it"));
+#ifdef HOST_HAS_LAMP_TEST
+          Serial.print(F("   *=Lamp test"));
+#endif
+          Serial.println();
           row += 2;
 
           Serial.print(F("\nCommand: ")); r_cmd = row+1;
@@ -3211,9 +3215,12 @@ void config_edit()
       redraw = true;
       switch( c )
         {
+#ifdef HOST_HAS_LAMP_TEST
         case '*':
           host_lamp_test();
           break;
+#endif
+
 #if USE_Z80==2
         case 'c': 
           config_flags2 = toggle_bits(config_flags2, 21, 1); 
