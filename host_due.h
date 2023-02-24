@@ -19,14 +19,14 @@
 //          lines idle HIGH and the PROTECT switch will connect them to GND when pressed,
 //          creating a direct short and likely killing the A7 pin on the Arduino and/or 
 //          your connected serial device.
-#define USE_SERIAL_ON_A6A7 1
+#define USE_SERIAL_ON_A6A7 0
 
 
 // The pins driving the RX and TX LEDs located next to the Native USB port on the
 // Arduino Due can be controlled as digital I/O pins 72 and 73. They do not serve
 // any other purpose on the Due so we can use them for an additional serial port.
 // See the documentation for where exactly to solder the wires onto the Due.
-#define USE_SERIAL_ON_RXLTXL 1
+#define USE_SERIAL_ON_RXLTXL 0
 
 
 // Arduino Due provides a file system (via SD card)
