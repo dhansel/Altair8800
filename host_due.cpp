@@ -1203,10 +1203,10 @@ static void serial_reset_xonxoff()
             {
             case 0: UART->UART_CR = UART_CR_TXEN;  break;
             case 1: USART0->US_CR = UART_CR_TXEN;  break;
-#if USE_SERIAL_ON_RXLTXL>0
+#if USE_SERIAL_ON_A6A7>0
             case 3: serial_tc5.enable_tx(true); break;
 #endif
-#if USE_SERIAL_ON_A6A7>0
+#if USE_SERIAL_ON_RXLTXL>0
             case (HOST_NUM_SERIAL_PORTS-1): serial_tc4.enable_tx(true); break;
 #endif
             }
