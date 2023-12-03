@@ -36,6 +36,10 @@
 
 static SdFat SD;
 
+#if !defined(SD_FAT_VERSION) || ((SD_FAT_VERSION >= 20000) && (SD_FAT_VERSION <= 20004))
+#error "Must install SDFat library (by Bill Greiman) version 2.0.5 or later"
+#endif
+
 #define min(x, y) ((x)<(y) ? (x) : (y))
 #define max(x, y) ((x)>(y) ? (x) : (y))
 
@@ -759,7 +763,11 @@ const char *host_filesys_dir_nextfile(File &d)
         {
           if( entry.isFile() )
             {
+#if SD_FAT_VERSION < 20000
               entry.getSFN(buffer);
+#else
+              entry.getName(buffer, 15);
+#endif
               entry.close();
               return buffer;
             }
@@ -811,7 +819,10 @@ void host_serial_receive_start_interrupt_if2();
 #ifdef USE_NATIVE_USB_TX_OPTIMIZATION
 // USB transmit buffering enabled (see comment at #define on top of file)
 
-volatile size_t  fifo_size = 0, fifo_len = 0;
+// fifo_size must be >0 initially, otherwise calling usb_available_for_write() will
+// return 0 before the first call to usb_write(). This will cause applications that
+// check the SIO status register before writing to stall if using native USB
+volatile size_t  fifo_size = 1, fifo_len = 0;
 volatile uint8_t sofcount = 0;
 
 static void usb_isr()
@@ -820,7 +831,7 @@ static void usb_isr()
 
   if( Is_udd_reset() )
     {
-      fifo_size = 0;
+      fifo_size = 1;
       fifo_len  = 0;
     }
 
@@ -863,7 +874,7 @@ static size_t usb_write(const char *buf, size_t len)
 
   // determine packet size (can't do it on reset because it is not guaranteed
   // that we have registered our interrupt function at that point)
-  if( fifo_size==0 )
+  if( fifo_size==1 )
     fifo_size = ((UOTGHS->UOTGHS_SR & UOTGHS_SR_SPEED_Msk) == UOTGHS_SR_SPEED_HIGH_SPEED) ? 512 : 64;
   
   // copy data to FIFO
@@ -1938,7 +1949,18 @@ void host_system_info()
   SwitchSerial.print("SD card file system");
   HLDAGuard hlda;
   if( SD.card()->errorCode()==SD_CARD_ERROR_NONE )
-    { SwitchSerial.print(" ("); SwitchSerial.print(SD.card()->cardSize() / (2*1024)); SwitchSerial.println("M)"); }
+    {
+#if SD_FAT_VERSION < 20000
+      uint32_t numSectors = SD.card()->cardSize();
+#else
+      uint32_t numSectors = SD.card()->sectorCount();
+#endif
+      SwitchSerial.print(" (");
+      SwitchSerial.print(numSectors/(2*1024));
+      SwitchSerial.print("M, SDFat v");
+      SwitchSerial.print(SD_FAT_VERSION);
+      SwitchSerial.println(")");
+    }
   else
     { SwitchSerial.print(" (card error: 0x"); SwitchSerial.print(SD.card()->errorCode(), HEX); SwitchSerial.println(")"); }
 #else
