@@ -54,6 +54,7 @@ void drive_set_realtime(bool b) {}
 #define DRIVE_NUM_SECTORS_MD    16
 #define DRIVE_NUM_TRACKS        77
 #define DRIVE_NUM_TRACKS_MD     35
+#define DRIVE_NUM_TRACKS_8MB  2048
 
 #define DRIVE_STATUS_HAVEDISK    1
 #define DRIVE_STATUS_HEADLOAD    2
@@ -64,12 +65,12 @@ void drive_set_realtime(bool b) {}
 static byte drive_selected = 0xff;
 static byte drive_mounted_disk[NUM_DRIVES];
 static byte drive_status[NUM_DRIVES];
-static byte drive_current_track[NUM_DRIVES];
+static uint16_t drive_current_track[NUM_DRIVES];
 static byte drive_current_sector[NUM_DRIVES];
 static byte drive_current_byte[NUM_DRIVES];
 static byte drive_sector_buffer[NUM_DRIVES][DRIVE_SECTOR_LENGTH];
 static byte drive_num_sectors[NUM_DRIVES];
-static byte drive_num_tracks[NUM_DRIVES];
+static uint16_t drive_num_tracks[NUM_DRIVES];
 static HOST_FILESYS_FILE_TYPE drive_file[NUM_DRIVES];
 
 #define DRIVE_SECTOR_TRUE_DELAY       5170
@@ -211,6 +212,12 @@ bool drive_mount(byte drive_num, byte image_num)
               // minidisk
               drive_num_tracks[drive_num] = DRIVE_NUM_TRACKS_MD;
               drive_num_sectors[drive_num] = DRIVE_NUM_SECTORS_MD;
+            }
+          else if ( size>8900000 )
+            {
+              // FDC+ 8MB disk
+              drive_num_tracks[drive_num] = DRIVE_NUM_TRACKS_8MB;
+              drive_num_sectors[drive_num] = DRIVE_NUM_SECTORS;
             }
           else
             {
