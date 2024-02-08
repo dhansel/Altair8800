@@ -747,6 +747,29 @@ void empty_input_buffer()
     { if( serial_read()<0 ) { delay(15); if( serial_read()<0 ) { delay(150); if( serial_read()<0 ) break; } } }
 }
 
+static const PROGMEM char help[] = {
+  "\r\n"
+#if STANDALONE>0
+  "0-9,a-f : Toggle SW15-0   / : Prompt for SW15-0"         "\r\n"
+#endif
+  "? : Show this help        C : Configuration menu"        "\r\n"
+  "X : Examine               x : Examine Next"              "\r\n"
+  "P : Deposit               p : Deposit Next"              "\r\n"
+  "r : Run                   o : Stop"                      "\r\n"
+  "t : Step                  > : Run from address"          "\r\n"
+  "R : Reset                 ! : Hard Reset (Stop + Reset)" "\r\n"
+  "U : Aux1-up               u : Aux1-down"                 "\r\n"
+  "s : Capture               l : Play back"                 "\r\n"
+  "m : Mount                 n : Change numeric system"     "\r\n"
+  "Q : Protect               q : Unprotect"                 "\r\n"
+  "D : Disassemble           M : Dump memory"               "\r\n"
+  "H : Load Intel HEX        h : Dump Intel HEX"            "\r\n"
+  "L : Load memory           Y : Memory layout"             "\r\n"
+#if MAX_BREAKPOINTS>0
+  "B : Add breakpoint        V : Delete last breakpoint"    "\r\n"
+#endif
+  "F : Find"                                                "\r\n"
+};
 
 void read_inputs_serial()
 {
@@ -756,6 +779,8 @@ void read_inputs_serial()
   int data = serial_read();
   if( data<0 )
     return;
+  else if( data == '?' )
+    Serial.print(F(help));
 #if STANDALONE>0
   else if( data >= '0' && data <= '9' )
     dswitch = dswitch ^ (1 << (data - '0'));
