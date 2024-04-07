@@ -96,7 +96,7 @@ uint16_t host_read_addr_switches();
 #if USE_IO_BUS>0
 // switch WAIT and DATA LEDs to inputs and turn on INP LED
 #define host_set_status_led_INP()   { REG_PIOD_ODR = 0xFF; REG_PIOC_ODR = 1<<29; REG_PIOC_SODR = 1<<22; }
-#define host_clr_status_led_INP()   { REG_PIOC_CODR = 1<<22; REG_PIOC_OER = 1<<29; REG_PIOD_OER = 0xFF; }
+#define host_clr_status_led_INP()   { REG_PIOC_OER = 1<<29; REG_PIOD_OER = 0xFF; REG_PIOC_CODR = 1<<22; }
 // switch WAIT LED to input and turn on OUT LED
 #define host_set_status_led_OUT()   { REG_PIOC_ODR  = 1<<29; REG_PIOC_SODR = 1<<24; }
 #define host_clr_status_led_OUT()   { REG_PIOC_CODR = 1<<24; REG_PIOC_OER  = 1<<29; }
