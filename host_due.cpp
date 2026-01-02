@@ -36,6 +36,14 @@
 
 static SdFat SD;
 
+#if defined(__OPTIMIZE__) && defined(__OPTIMIZE_SIZE__)
+#if USE_IO_BUS>0
+#error "Must set speed optimization (-O3) instead of size (-Os) in C:\Users\[user]\AppData\Local\Arduino15\packages\arduino\hardware\sam\1.6.x\platform.txt when USE_IO_BUS is enabled"
+#else
+#warning "Setting speed optimization (-O3) instead of size (-Os) in C:\Users\[user]\AppData\Local\Arduino15\packages\arduino\hardware\sam\1.6.x\platform.txt is recommended"
+#endif
+#endif
+
 #if !defined(SD_FAT_VERSION) || ((SD_FAT_VERSION >= 20000) && (SD_FAT_VERSION <= 20004))
 #error "Must install SDFat library (by Bill Greiman) version 2.0.5 or later"
 #endif
