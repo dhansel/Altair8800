@@ -674,7 +674,11 @@ bool host_filesys_file_seek(File &f, uint32_t pos)
 {
   HLDAGuard hlda;
 
-  f.seek(pos);
+  // seek to the given position, if not possible because
+  // the file is too small then seek to the end of the file
+  if( !f.seek(pos) && f.size()<pos )
+    f.seekEnd();
+
   if( f.position()<pos && !f.isReadOnly() )
     {
       // if we are seeking past the end of a writable
